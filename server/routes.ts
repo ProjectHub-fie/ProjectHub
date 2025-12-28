@@ -195,15 +195,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Discord OAuth routes - enabled when Discord credentials are available
-  if (process.env.DISCORD_CLIENT_ID && process.env.DISCORD_CLIENT_SECRET) {
-    app.get('/api/auth/discord', passport.authenticate('discord'));
-    app.get('/api/auth/discord/callback',
-      passport.authenticate('discord', { failureRedirect: '/login?error=discord_failed' }),
-      (req, res) => {
-        res.redirect('/request-project?login=success');
-      }
-    );
-  }
+  app.get('/api/auth/discord', (req, res, next) => {
+    console.log('Initiating Discord authentication...');
+    passport.authenticate('discord')(req, res, next);
+  });
+
+  app.get('/api/auth/discord/callback', (req, res, next) => {
+    console.log('Discord callback received');
+    passport.authenticate('discord', { 
+      failureRedirect: '/login?error=discord_failed',
+      successRedirect: '/request-project?login=success'
+    })(req, res, next);
+  });
 
   // Get current user
   app.get('/api/auth/me', (req, res) => {
