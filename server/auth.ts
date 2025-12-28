@@ -38,18 +38,11 @@ passport.use(new LocalStrategy({
 }));
 
 
-// Discord OAuth strategy - hardcoded credentials
-const DISCORD_CLIENT_ID = "1410900086463926308";
-const DISCORD_CLIENT_SECRET = "z7Hf45mm7_rzVrNpKUbnY9gaLZ714nle";
-
-const getCallbackURL = () => {
-  return "https://projecthub-fie.vercel.app/api/auth/discord/callback";
-};
-
+// Discord Strategy
 passport.use(new DiscordStrategy({
-  clientID: DISCORD_CLIENT_ID,
-  clientSecret: DISCORD_CLIENT_SECRET,
-  callbackURL: getCallbackURL(),
+  clientID: process.env.DISCORD_CLIENT_ID!,
+  clientSecret: process.env.DISCORD_CLIENT_SECRET!,
+  callbackURL: process.env.DISCORD_CALLBACK_URL || "/api/auth/discord/callback",
   scope: ['identify', 'email']
 }, async (accessToken, refreshToken, profile, done) => {
   try {
@@ -57,11 +50,9 @@ passport.use(new DiscordStrategy({
 
     if (!user) {
       user = await storage.upsertUser({
-        id: profile.id,
         discordId: profile.id,
         email: profile.email || null,
         firstName: profile.username || null,
-        lastName: null,
         profileImageUrl: profile.avatar ? `https://cdn.discordapp.com/avatars/${profile.id}/${profile.avatar}.png` : null,
       });
     }
