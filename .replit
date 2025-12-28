@@ -1,15 +1,15 @@
-modules = ["nodejs-20", "web", "postgresql-16"]
+modules = ["nodejs-20", "web"]
 run = "npm run dev"
 hidden = [".config", ".git", "generated-icon.png", "node_modules", "dist"]
 
 [nix]
 channel = "stable-25_05"
-packages = ["mysql80", "firebase-tools"]
+packages = ["mysql80", "firebase-tools", "nix-output-monitor"]
 
 [deployment]
 deploymentTarget = "autoscale"
 build = ["npm", "run", "build"]
-run = ["npm", "start"]
+run = ["node", "./dist/index.cjs"]
 
 [[ports]]
 localPort = 3000
@@ -18,10 +18,6 @@ externalPort = 3001
 [[ports]]
 localPort = 5000
 externalPort = 80
-
-[[ports]]
-localPort = 9005
-externalPort = 3000
 
 [env]
 PORT = "5000"
@@ -47,7 +43,7 @@ outputType = "webview"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "npx tsx server/index.ts"
+args = "npm run dev"
 waitForPort = 5000
 
 [[workflows.workflow]]
