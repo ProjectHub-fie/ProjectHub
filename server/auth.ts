@@ -40,11 +40,14 @@ passport.use(new LocalStrategy({
 
 // Discord Strategy
 passport.use(new DiscordStrategy({
-  clientID: process.env.DISCORD_CLIENT_ID!,
-  clientSecret: process.env.DISCORD_CLIENT_SECRET!,
+  clientID: process.env.DISCORD_CLIENT_ID || "placeholder",
+  clientSecret: process.env.DISCORD_CLIENT_SECRET || "placeholder",
   callbackURL: process.env.DISCORD_CALLBACK_URL || "/api/auth/discord/callback",
   scope: ['identify', 'email']
 }, async (accessToken, refreshToken, profile, done) => {
+  if (process.env.DISCORD_CLIENT_ID === "placeholder") {
+    return done(new Error("Discord Client ID is missing"));
+  }
   try {
     let user = await storage.getUserBySocialId('discord', profile.id);
 
