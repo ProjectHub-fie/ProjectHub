@@ -18,9 +18,14 @@ passport.use(new LocalStrategy({
     }
 
     const user = await storage.getUserByEmail(email);
-    if (!user || !user.password) {
-      console.log('User not found or no password:', email);
+    if (!user) {
+      console.log('User not found:', email);
       return done(null, false, { message: 'Invalid email or password' });
+    }
+
+    if (!user.password) {
+      console.log('User has no password (social login?):', email);
+      return done(null, false, { message: 'Please login using your social account' });
     }
 
     const isValidPassword = await bcrypt.compare(password, user.password);
