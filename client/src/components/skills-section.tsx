@@ -88,7 +88,7 @@ export default function SkillsSection() {
   };
 
   return (
-    <section id="skills" className="py-20 bg-slate-900">
+    <section id="skills" className="py-20 bg-background">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-16">
           <h2 className="text-4xl md:text-5xl font-bold mb-6">
@@ -96,7 +96,7 @@ export default function SkillsSection() {
               Skills & Technologies
             </span>
           </h2>
-          <p className="text-xl text-slate-300 max-w-2xl mx-auto">
+          <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
             My technical expertise spans across modern web technologies and development tools
           </p>
         </div>
@@ -106,17 +106,17 @@ export default function SkillsSection() {
           {skillCategories.map((category, index) => (
             <div
               key={category.title}
-              className="bg-slate-800/50 p-8 rounded-2xl border border-slate-700 hover:border-blue-500/50 transition-all duration-300 hover:-translate-y-2"
+              className="bg-card p-8 rounded-2xl border border-border hover:border-primary/50 transition-all duration-300 hover:-translate-y-2"
               data-testid={`skill-category-${index}`}
             >
               <div className={`${category.color} mb-4`}>
                 {category.icon}
               </div>
-              <h3 className="text-xl font-bold text-white mb-4">{category.title}</h3>
+              <h3 className="text-xl font-bold text-foreground mb-4">{category.title}</h3>
               <div className="space-y-3">
                 {category.skills.map((skill) => (
                   <div key={skill.name} className="flex items-center justify-between">
-                    <span className="text-slate-300">{skill.name}</span>
+                    <span className="text-muted-foreground">{skill.name}</span>
                     {renderSkillDots(skill.level)}
                   </div>
                 ))}
@@ -126,8 +126,8 @@ export default function SkillsSection() {
         </div>
 
         {/* Tech Stack Logos */}
-        <div className="mt-16 border-t border-slate-700 pt-16">
-          <h3 className="text-2xl font-bold text-center text-slate-300 mb-12">
+        <div className="mt-16 border-t border-border pt-16">
+          <h3 className="text-2xl font-bold text-center text-muted-foreground mb-12">
             Technologies I Work With
           </h3>
           <div className="flex flex-wrap justify-center items-center gap-8 opacity-60 hover:opacity-100 transition-opacity duration-500">

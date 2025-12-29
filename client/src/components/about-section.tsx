@@ -10,7 +10,7 @@ export default function AboutSection() {
   ];
 
   return (
-    <section id="about" className="py-20 bg-slate-800/50">
+    <section id="about" className="py-20 bg-muted/50">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="max-w-4xl mx-auto">
           
@@ -22,7 +22,7 @@ export default function AboutSection() {
               </span>
             </h2>
             
-            <div className="space-y-6 text-slate-300 leading-relaxed">
+            <div className="space-y-6 text-muted-foreground leading-relaxed">
               <p className="text-lg">
                 Hello all, welcome to ProjectHub. ProjectHub is where developers go to turn ideas 
                 into real, working code. Designed for programmers with some experience under their
@@ -49,7 +49,7 @@ export default function AboutSection() {
                   <div className={`text-3xl font-bold ${stat.color} mb-2`}>
                     {stat.value}
                   </div>
-                  <div className="text-slate-400 text-sm">{stat.label}</div>
+                  <div className="text-muted-foreground text-sm">{stat.label}</div>
                 </div>
               ))}
             </div>

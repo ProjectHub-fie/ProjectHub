@@ -112,7 +112,7 @@ export default function ProjectsSection() {
   };
 
   return (
-    <section id="projects" className="py-20 bg-slate-800/50">
+    <section id="projects" className="py-20 bg-muted/50">
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8">
         <div className="text-center mb-16">
           <h2 className="text-4xl md:text-5xl font-bold mb-6">
@@ -120,7 +120,7 @@ export default function ProjectsSection() {
               Featured Projects
             </span>
           </h2>
-          <p className="text-xl text-slate-300 max-w-2xl mx-auto">
+          <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
             Explore my latest work in web development, automation, and developer tools
           </p>
         </div>
@@ -138,8 +138,8 @@ export default function ProjectsSection() {
               onClick={() => setActiveFilter(filter.key)}
               className={`px-6 py-3 rounded-xl font-medium transition-all duration-300 ${
                 activeFilter === filter.key
-                  ? "bg-blue-500 text-white hover:bg-blue-600"
-                  : "bg-slate-700 text-slate-300 hover:bg-slate-600"
+                  ? "bg-primary text-primary-foreground hover:bg-primary/90"
+                  : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
               }`}
               data-testid={`filter-${filter.key}`}
             >
@@ -153,7 +153,7 @@ export default function ProjectsSection() {
           {filteredProjects.map((project) => (
             <div
               key={project.id}
-              className="group bg-slate-800 rounded-2xl overflow-hidden border border-slate-700 hover:border-blue-500/50 transition-all duration-300 hover:-translate-y-2 hover:shadow-2xl hover:shadow-blue-500/10"
+              className="group bg-card rounded-2xl overflow-hidden border border-border hover:border-primary/50 transition-all duration-300 hover:-translate-y-2 hover:shadow-2xl"
               data-testid={`project-card-${project.id}`}
             >
               <div className="relative overflow-hidden">
@@ -162,17 +162,17 @@ export default function ProjectsSection() {
                   alt={project.title}
                   className="w-full h-48 object-cover group-hover:scale-110 transition-transform duration-500"
                 />
-                <div className="absolute inset-0 bg-gradient-to-t from-slate-900/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                <div className="absolute inset-0 bg-gradient-to-t from-background/80 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
                 <div className={`absolute top-4 right-4 ${project.statusColor} text-white px-3 py-1 rounded-full text-sm font-medium`}>
                   {project.status}
                 </div>
               </div>
 
               <div className="p-6">
-                <h3 className="text-xl font-bold text-white mb-3 group-hover:text-blue-400 transition-colors duration-300">
+                <h3 className="text-xl font-bold text-foreground mb-3 group-hover:text-primary transition-colors duration-300">
                   {project.title}
                 </h3>
-                <p className="text-slate-300 mb-4 text-sm leading-relaxed">
+                <p className="text-muted-foreground mb-4 text-sm leading-relaxed">
                   {project.description}
                 </p>
 
@@ -182,7 +182,7 @@ export default function ProjectsSection() {
                     <Badge
                       key={tech}
                       variant="outline"
-                      className="bg-blue-500/20 text-blue-400 border-blue-500/30 px-3 py-1 rounded-full text-xs font-medium"
+                      className="bg-primary/20 text-primary border-primary/30 px-3 py-1 rounded-full text-xs font-medium"
                     >
                       {tech}
                     </Badge>
@@ -192,7 +192,7 @@ export default function ProjectsSection() {
                 {/* Action Buttons */}
                 <div className="flex gap-4">
                   <Button
-                    className="flex-1 bg-blue-500 hover:bg-blue-600 text-white py-2 rounded-lg font-medium transition-colors duration-200"
+                    className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground py-2 rounded-lg font-medium transition-colors duration-200"
                     onClick={() => project.liveUrl && window.open(project.liveUrl, '_blank')}
                     data-testid={`button-demo-${project.id}`}
                   >
@@ -202,7 +202,7 @@ export default function ProjectsSection() {
                   {project.githubUrl && (
                     <Button
                       variant="outline"
-                      className="flex-1 border border-slate-600 hover:border-blue-500 hover:text-blue-400 text-slate-300 py-2 rounded-lg font-medium transition-all duration-200 bg-transparent"
+                      className="flex-1 border border-border hover:border-primary hover:text-primary text-foreground py-2 rounded-lg font-medium transition-all duration-200 bg-transparent"
                       onClick={() => project.githubUrl && window.open(project.githubUrl, '_blank')}
                       data-testid={`button-code-${project.id}`}
                     >
