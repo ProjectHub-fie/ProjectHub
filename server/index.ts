@@ -1,8 +1,9 @@
 import express, { type Request, Response, NextFunction } from "express";
 import path from "path";
+import { sql } from "drizzle-orm";
 import { registerRoutes } from "./routes";
 import { setupVite, serveStatic, log } from "./vite";
-import { connection } from "./db";
+import { db } from "./db";
 
 const app = express();
 app.use(express.json());
@@ -41,7 +42,8 @@ app.use((req, res, next) => {
 // Test database connection
 async function testDatabaseConnection() {
   try {
-    const [rows] = await connection.execute('SELECT 1 as test');
+    // For postgres-js, we can just run a simple query
+    await db.execute(sql`SELECT 1 as test`);
     console.log("✅ Database connected successfully");
   } catch (error) {
     console.error("❌ Database connection failed:", (error as Error).message);
