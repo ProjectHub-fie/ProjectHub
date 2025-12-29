@@ -190,17 +190,17 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-900 px-4">
-      <Card className="w-full max-w-md bg-slate-800 border-slate-700">
+    <div className="min-h-screen flex items-center justify-center bg-background px-4">
+      <Card className="w-full max-w-md bg-card border-border">
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl font-bold text-white">Welcome Back</CardTitle>
-          <p className="text-slate-400">Sign in to request your project</p>
+          <CardTitle className="text-2xl font-bold text-foreground">Welcome Back</CardTitle>
+          <p className="text-muted-foreground">Sign in to request your project</p>
         </CardHeader>
         <CardContent>
           <Tabs value={activeTab} onValueChange={setActiveTab}>
-            <TabsList className="grid w-full grid-cols-2 bg-slate-700">
-              <TabsTrigger value="login" className="data-[state=active]:bg-blue-600">Login</TabsTrigger>
-              <TabsTrigger value="register" className="data-[state=active]:bg-blue-600">Register</TabsTrigger>
+            <TabsList className="grid w-full grid-cols-2 bg-muted">
+              <TabsTrigger value="login" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Login</TabsTrigger>
+              <TabsTrigger value="register" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Register</TabsTrigger>
             </TabsList>
 
             <TabsContent value="login" className="space-y-4">
@@ -211,12 +211,12 @@ export default function LoginPage() {
                     name="email"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="text-slate-300">Email</FormLabel>
+                        <FormLabel className="text-foreground">Email</FormLabel>
                         <FormControl>
                           <Input
                             {...field}
                             type="email"
-                            className="bg-slate-700 border-slate-600 text-white"
+                            className="bg-background border-input text-foreground"
                             placeholder="your@email.com"
                             data-testid="input-login-email"
                           />
@@ -230,12 +230,12 @@ export default function LoginPage() {
                     name="password"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="text-slate-300">Password</FormLabel>
+                        <FormLabel className="text-foreground">Password</FormLabel>
                         <FormControl>
                           <Input
                             {...field}
                             type="password"
-                            className="bg-slate-700 border-slate-600 text-white"
+                            className="bg-background border-input text-foreground"
                             placeholder="Enter your password"
                             data-testid="input-login-password"
                           />
@@ -246,7 +246,7 @@ export default function LoginPage() {
                   />
                   <Button
                     type="submit"
-                    className="w-full bg-blue-600 hover:bg-blue-700"
+                    className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
                     disabled={isLoggingIn}
                     data-testid="button-login-submit"
                   >
@@ -258,15 +258,15 @@ export default function LoginPage() {
                       <DialogTrigger asChild>
                         <Button
                           variant="link"
-                          className="text-sm text-slate-400 hover:text-white"
+                          className="text-sm text-muted-foreground hover:text-foreground"
                           data-testid="button-forgot-password"
                         >
                           Forgot your password?
                         </Button>
                       </DialogTrigger>
-                      <DialogContent className="bg-slate-800 border-slate-700">
+                      <DialogContent className="bg-card border-border">
                         <DialogHeader>
-                          <DialogTitle className="text-white">Reset Your Password</DialogTitle>
+                          <DialogTitle className="text-foreground">Reset Your Password</DialogTitle>
                         </DialogHeader>
                         <Form {...forgotPasswordForm}>
                           <form onSubmit={forgotPasswordForm.handleSubmit(onForgotPassword)} className="space-y-4">
@@ -275,12 +275,12 @@ export default function LoginPage() {
                               name="email"
                               render={({ field }) => (
                                 <FormItem>
-                                  <FormLabel className="text-slate-300">Email Address</FormLabel>
+                                  <FormLabel className="text-foreground">Email Address</FormLabel>
                                   <FormControl>
                                     <Input
                                       {...field}
                                       type="email"
-                                      className="bg-slate-700 border-slate-600 text-white"
+                                      className="bg-background border-input text-foreground"
                                       placeholder="Enter your email address"
                                       data-testid="input-forgot-email"
                                     />
@@ -291,7 +291,7 @@ export default function LoginPage() {
                             />
                             <Button
                               type="submit"
-                              className="w-full bg-blue-600 hover:bg-blue-700"
+                              className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
                               disabled={isSendingReset}
                               data-testid="button-send-reset"
                             >
@@ -308,15 +308,15 @@ export default function LoginPage() {
                       <DialogTrigger asChild>
                         <Button
                           variant="link"
-                          className="text-sm text-slate-400 hover:text-white"
+                          className="text-sm text-muted-foreground hover:text-foreground"
                           data-testid="button-have-reset-token"
                         >
                           Have a reset token?
                         </Button>
                       </DialogTrigger>
-                      <DialogContent className="bg-slate-800 border-slate-700">
+                      <DialogContent className="bg-card border-border">
                         <DialogHeader>
-                          <DialogTitle className="text-white">Enter New Password</DialogTitle>
+                          <DialogTitle className="text-foreground">Enter New Password</DialogTitle>
                         </DialogHeader>
                         <Form {...resetPasswordForm}>
                           <form onSubmit={resetPasswordForm.handleSubmit(onResetPassword)} className="space-y-4">
@@ -325,11 +325,11 @@ export default function LoginPage() {
                               name="token"
                               render={({ field }) => (
                                 <FormItem>
-                                  <FormLabel className="text-slate-300">Reset Token</FormLabel>
+                                  <FormLabel className="text-foreground">Reset Token</FormLabel>
                                   <FormControl>
                                     <Input
                                       {...field}
-                                      className="bg-slate-700 border-slate-600 text-white"
+                                      className="bg-background border-input text-foreground"
                                       placeholder="Enter the token from your email"
                                       data-testid="input-reset-token"
                                     />
@@ -343,12 +343,12 @@ export default function LoginPage() {
                               name="newPassword"
                               render={({ field }) => (
                                 <FormItem>
-                                  <FormLabel className="text-slate-300">New Password</FormLabel>
+                                  <FormLabel className="text-foreground">New Password</FormLabel>
                                   <FormControl>
                                     <Input
                                       {...field}
                                       type="password"
-                                      className="bg-slate-700 border-slate-600 text-white"
+                                      className="bg-background border-input text-foreground"
                                       placeholder="Enter your new password"
                                       data-testid="input-new-password"
                                     />
@@ -362,12 +362,12 @@ export default function LoginPage() {
                               name="confirmPassword"
                               render={({ field }) => (
                                 <FormItem>
-                                  <FormLabel className="text-slate-300">Confirm Password</FormLabel>
+                                  <FormLabel className="text-foreground">Confirm Password</FormLabel>
                                   <FormControl>
                                     <Input
                                       {...field}
                                       type="password"
-                                      className="bg-slate-700 border-slate-600 text-white"
+                                      className="bg-background border-input text-foreground"
                                       placeholder="Confirm your new password"
                                       data-testid="input-confirm-password"
                                     />
@@ -378,7 +378,7 @@ export default function LoginPage() {
                             />
                             <Button
                               type="submit"
-                              className="w-full bg-emerald-600 hover:bg-emerald-700"
+                              className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
                               disabled={isResettingPassword}
                               data-testid="button-reset-password"
                             >
@@ -402,11 +402,11 @@ export default function LoginPage() {
                       name="firstName"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel className="text-slate-300">First Name</FormLabel>
+                          <FormLabel className="text-foreground">First Name</FormLabel>
                           <FormControl>
                             <Input
                               {...field}
-                              className="bg-slate-700 border-slate-600 text-white"
+                              className="bg-background border-input text-foreground"
                               placeholder="John"
                               data-testid="input-register-firstname"
                             />
@@ -420,11 +420,11 @@ export default function LoginPage() {
                       name="lastName"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel className="text-slate-300">Last Name</FormLabel>
+                          <FormLabel className="text-foreground">Last Name</FormLabel>
                           <FormControl>
                             <Input
                               {...field}
-                              className="bg-slate-700 border-slate-600 text-white"
+                              className="bg-background border-input text-foreground"
                               placeholder="Doe"
                               data-testid="input-register-lastname"
                             />
@@ -439,12 +439,12 @@ export default function LoginPage() {
                     name="email"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="text-slate-300">Email</FormLabel>
+                        <FormLabel className="text-foreground">Email</FormLabel>
                         <FormControl>
                           <Input
                             {...field}
                             type="email"
-                            className="bg-slate-700 border-slate-600 text-white"
+                            className="bg-background border-input text-foreground"
                             placeholder="your@email.com"
                             data-testid="input-register-email"
                           />
@@ -458,12 +458,12 @@ export default function LoginPage() {
                     name="password"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel className="text-slate-300">Password</FormLabel>
+                        <FormLabel className="text-foreground">Password</FormLabel>
                         <FormControl>
                           <Input
                             {...field}
                             type="password"
-                            className="bg-slate-700 border-slate-600 text-white"
+                            className="bg-background border-input text-foreground"
                             placeholder="Create a password"
                             data-testid="input-register-password"
                           />
@@ -474,7 +474,7 @@ export default function LoginPage() {
                   />
                   <Button
                     type="submit"
-                    className="w-full bg-emerald-600 hover:bg-emerald-700"
+                    className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
                     disabled={isRegistering}
                     data-testid="button-register-submit"
                   >
@@ -486,12 +486,12 @@ export default function LoginPage() {
           </Tabs>
 
           <div className="mt-6">
-            <Separator className="bg-slate-600" />
-            <p className="text-center text-sm text-slate-400 my-4">Or continue with</p>
+            <Separator className="bg-border" />
+            <p className="text-center text-sm text-muted-foreground my-4">Or continue with</p>
 
             <Button
               variant="outline"
-              className="w-full bg-slate-700 border-slate-600 hover:bg-slate-600 flex items-center justify-center gap-2"
+              className="w-full bg-background border-input hover:bg-accent hover:text-accent-foreground flex items-center justify-center gap-2"
               onClick={() => window.location.href = "/api/auth/discord"}
               data-testid="button-discord-login"
             >
