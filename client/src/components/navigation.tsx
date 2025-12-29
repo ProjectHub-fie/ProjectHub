@@ -59,7 +59,10 @@ export default function Navigation() {
             <Button
               variant="outline"
               size="icon"
-              onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+              onClick={() => {
+                const nextTheme = theme === "dark" ? "light" : "dark";
+                setTheme(nextTheme);
+              }}
               className="hidden md:flex bg-secondary hover:bg-secondary/80 border-border"
               data-testid="theme-toggle"
             >
