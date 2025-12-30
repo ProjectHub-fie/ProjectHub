@@ -129,15 +129,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const transporter = nodemailer.createTransport({
         service: 'gmail',
         auth: {
-          user: 'dev.projecthub.fie@gmail.com',
-          pass: 'exkf ymlg buup cwrh'
+          user: process.env.EMAIL_USER || 'dev.projecthub.fie@gmail.com',
+          pass: process.env.EMAIL_PASS || 'exkf ymlg buup cwrh'
         }
       });
 
       const resetUrl = `${req.protocol}://${req.get('host')}/reset-password?token=${resetToken}`;
       
       const mailOptions = {
-        from: `"ProjectHub" <dev.projecthub.fie@gmail.com>`,
+        from: `"ProjectHub" <${process.env.EMAIL_USER || 'dev.projecthub.fie@gmail.com'}>`,
         to: email,
         subject: 'Password Reset Request',
         html: `
@@ -150,7 +150,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           <hr>
           <p><em>ProjectHub Security Team</em></p>
         `,
-        replyTo: 'dev.projecthub.fie@gmail.com'
+        replyTo: process.env.EMAIL_USER || 'dev.projecthub.fie@gmail.com'
       };
 
       await transporter.sendMail(mailOptions);
@@ -230,15 +230,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const transporter = nodemailer.createTransport({
         service: 'gmail',
         auth: {
-          user: 'dev.projecthub.fie@gmail.com',
-          pass: 'exkf ymlg buup cwrh' // App password, not regular password
+          user: process.env.EMAIL_USER || 'dev.projecthub.fie@gmail.com',
+          pass: process.env.EMAIL_PASS || 'exkf ymlg buup cwrh' // App password, not regular password
         }
       });
 
       // Email content
       const mailOptions = {
-        from: `"Contact Form" <dev.projecthub.fie@gmail.com>`,
-        to: 'dev.projecthub.fie@gmail.com',
+        from: `"Contact Form" <${process.env.EMAIL_USER || 'dev.projecthub.fie@gmail.com'}>`,
+        to: process.env.EMAIL_USER || 'dev.projecthub.fie@gmail.com',
         subject: `New Contact Form: ${subject}`,
         html: `
           <h2>New Contact Form Submission</h2>
