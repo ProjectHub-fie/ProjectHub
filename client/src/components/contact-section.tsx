@@ -37,7 +37,7 @@ export default function ContactSection() {
       if (response.ok) {
         toast({
           title: "Message Sent!",
-          description: "Thank you for your message. I'll get back to you soon!",
+          description: "Thank you for your message. We will get back to you soon!",
         });
         setFormData({ name: "", email: "", subject: "", message: "" });
       } else {
@@ -55,12 +55,12 @@ export default function ContactSection() {
   };
 
   const contactInfo = [
-    {
+    /*{
       icon: <Mail className="text-blue-400" />,
       label: "Email",
       value: "dev.projecthub.fie@gmail.com",
       color: "bg-blue-500/20"
-    },
+    },*/
     {
       icon: <Phone className="text-emerald-400" />,
       label: "Phone",
@@ -99,7 +99,7 @@ export default function ContactSection() {
           
           {/* Contact Form */}
           <div className="bg-card p-8 rounded-2xl border border-border">
-            <h3 className="text-2xl font-bold text-foreground mb-6">Send Me a Message</h3>
+            <h3 className="text-2xl font-bold text-foreground mb-6">Send us a Message</h3>
             
             <form onSubmit={handleSubmit} className="space-y-6">
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">

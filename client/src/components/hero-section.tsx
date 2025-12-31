@@ -13,14 +13,14 @@ export default function HeroSection() {
   const isMobile = useIsMobile();
 
   const typingTexts = isMobile ? [
-    "Building the future...",
+    "Building the future one line of code at a time.",
     "React & automation specialist...",
     "Efficient solutions...",
     "Clean code advocate..."
   ] : [
-    "Building the future, one line of code at a time...",
-    "Specializing in React applications and automation...",
     "Creating efficient solutions for complex problems...",
+    "Building the future one line of code at a time...",
+    "Specializing in React applications and automation...",
     "Passionate about clean code and user experience..."
   ];
 
@@ -88,7 +88,7 @@ export default function HeroSection() {
           <span className="text-blue-500 font-medium">Web Applications</span>, 
           <span className="text-violet-500 font-medium"> Automation Bots</span>, and{" "}
           <span className="text-emerald-500 font-medium">Developer Utilities</span>
-        </p>
+        </p> 
 
         {/* Typing Effect */}
         <div className="mb-8 md:mb-12 h-6 md:h-8 px-2">
@@ -102,15 +102,17 @@ export default function HeroSection() {
         </div>
 
         {/* CTA Buttons */}
-        <div className="flex flex-col sm:flex-row gap-3 md:gap-4 justify-center items-center mb-8 md:mb-12 px-4">
+        <div className="flex flex-col sm:flex-row gap-3 md:gap-4 justify-center items-center mb-8 md:mb-12 px-4"> &nbsp;
           <Button
-            size="lg"
-            className="bg-primary text-primary-foreground hover:bg-primary/90 text-lg px-8 py-6 mr-4"
+            variant="outline"
+           
+            className="w-full sm:w-auto bg-secondary text-secondary-foreground px-6 md:px-8 py-3 md:py-4 rounded-xl font-medium hover:shadow-lg transition-all duration-300 hover:-translate-y-1 text-sm md:text-base min-h-[48px]"
             onClick={() => setLocation("/request-project")}
           >
             Request Your Project
           </Button>
           <Button
+            variant="outline"
             onClick={() => handleScroll("projects")}
             className="w-full sm:w-auto bg-secondary text-secondary-foreground px-6 md:px-8 py-3 md:py-4 rounded-xl font-medium hover:shadow-lg transition-all duration-300 hover:-translate-y-1 text-sm md:text-base min-h-[48px]"
             data-testid="button-view-work"
@@ -120,7 +122,7 @@ export default function HeroSection() {
           <Button
             variant="outline"
             onClick={() => handleScroll("contact")}
-            className="w-full sm:w-auto border-2 border-border text-foreground px-6 md:px-8 py-3 md:py-4 rounded-xl font-medium hover:border-primary hover:text-primary transition-all duration-300 hover:-translate-y-1 bg-transparent text-sm md:text-base min-h-[48px]"
+            className="w-full sm:w-auto bg-secondary text-secondary-foreground px-6 md:px-8 py-3 md:py-4 rounded-xl font-medium hover:shadow-lg transition-all duration-300 hover:-translate-y-1 text-sm md:text-base min-h-[48px]"
             data-testid="button-contact"
           >
             Get In Touch
