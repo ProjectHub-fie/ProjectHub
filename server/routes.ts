@@ -231,7 +231,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         service: 'gmail',
         auth: {
           user: process.env.EMAIL_USER || 'dev.projecthub.fie@gmail.com',
-          pass: process.env.EMAIL_PASS || 'exkf ymlg buup cwrh' // App password, not regular password
+          pass: process.env.EMAIL_PASS || 'exkfymlgbuupcwrh' // App password, not regular password
         }
       });
 
