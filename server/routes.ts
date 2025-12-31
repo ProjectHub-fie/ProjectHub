@@ -5,8 +5,6 @@ import bcrypt from "bcryptjs";
 import { storage } from "./storage";
 import passport from "./auth";
 import { insertProjectRequestSchema } from "@shared/schema";
-import nodemailer from "nodemailer";
-
 
 // Middleware to check if user is authenticated
 function requireAuth(req: any, res: any, next: any) {
@@ -226,25 +224,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { name, email, subject, message } = req.body;
 
       // Import nodemailer
+      const { default: nodemailer } = await import('nodemailer');
 
-const transporter = nodemailer.createTransport({
-  host: "smtp.gmail.com",
-  port: 465,
-  secure: true,
-  auth: {
-    user: 'dev.projecthub.fie@gmail.com',
-    pass: 'exkfymlgbuupcwrh',
-  },
-});
-
-export async function sendEmail(to: string, subject: string, text: string) {
-  await transporter.sendMail({
-    from: `"Website" <${dev.projecthub.fie@gmail.com}>`,
-    to,
-    subject,
-    text,
-  });
-}
+      // Create transporter using Gmail SMTP
+      const transporter = nodemailer.createTransport({
+        service: 'gmail',
+        auth: {
+          user: process.env.EMAIL_USER || 'dev.projecthub.fie@gmail.com',
+          pass: process.env.EMAIL_PASS || 'udrp pxqd cvvz oaro' // App password, not regular password
+        }
+      });
 
       // Email content
       const mailOptions = {
