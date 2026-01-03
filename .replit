@@ -64,5 +64,4 @@ expertMode = true
 
 [userenv]
 
-[userenv.shared]
-RESEND_API_KEY = "re_GRhwPUfC_AYraNAciZ4Q7Vv72AboUNwBA"
+[userenv.shared]"
