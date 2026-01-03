@@ -1,36 +1,4 @@
-
-export default async function handler(req, res) {
-  // Configure CORS
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
-
-  if (req.method === 'OPTIONS') {
-    res.status(200).end();
-    return;
-  }
-
-  if (req.method === 'POST') {
-    try {
-      const { name, email, subject, message } = req.body;
-
-      if (!name || !email || !subject || !message) {
-        return res.status(400).json({ message: "All fields are required" });
-      }
-
-      // Import nodemailer
-      const nodemailer = await import('nodemailer');
-
-      // Create transporter using Gmail SMTP
-      const transporter = nodemailer.default.createTransporter({
-        service: 'gmail',
-        auth: {
-          user: 'dev.projecthub.fie@gmail.com',
-          pass: 'exkf ymlg buup cwrh'
-        }
-      });
-
-      // Email content
+const nodemailer = await import('nodemailer');      // Email content
       const mailOptions = {
         from: `"Contact Form" <dev.projecthub.fie@gmail.com>`,
         to: 'dev.projecthub.fie@gmail.com',
@@ -49,14 +17,33 @@ export default async function handler(req, res) {
       };
 
       // Send email
-      await transporter.sendMail(mailOptions);
 
-      res.json({ message: "Contact form submitted successfully" });
-    } catch (error) {
-      console.error('Contact form error:', error);
-      res.status(500).json({ message: "Failed to submit contact form" });
-    }
-  } else {
-    res.status(405).json({ message: "Method not allowed" });
+
+export default async function handler(req, res) {
+  if (req.method !== "POST") {
+    return res.status(405).json({ message: "Method not allowed" });
   }
+
+  const { name, email, message } = req.body;
+
+  const transporter = nodemailer.createTransport({
+    host: "smtp.gmail.com",
+    port: 465,
+    secure: true,
+    auth: {
+      user: process.env.GMAIL_USER,
+      pass: process.env.GMAIL_APP_PASSWORD,
+    },
+  });
+
+  await transporter.sendMail({
+    from: `"Contact Form" <${process.env.GMAIL_USER}>`,
+    to: process.env.GMAIL_USER,
+    replyTo: email,
+    subject: "New Contact Message",
+    text: `Name: ${name}\nEmail: ${email}\nMessage: ${message}`,
+  });
+
+  res.status(200).json({ success: true });
 }
+
