@@ -15,7 +15,8 @@ export default async function handler(req, res) {
       to: ["dev.projecthub.fie@gmail.com"],
       replyTo: email,
       subject: "New Contact Message",
-      text: `Name: ${name}\nEmail: ${email}\nMessage: ${message}`,
+      text: `Name: ${name}\nEmail: ${email}\nMessage: ${message}\n sent from ProjectHub contact form.`,
+      
     });
 
     return res.status(200).json({ success: true });

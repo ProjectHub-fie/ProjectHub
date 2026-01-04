@@ -166,10 +166,10 @@ export default function ContactSection() {
               <Button
                 type="submit"
                 disabled={isSubmitting}
-                className="w-full bg-primary text-primary-foreground py-4 rounded-lg font-medium hover:shadow-lg transition-all duration-300 hover:-translate-y-1 disabled:opacity-50"
+                className="w-full bg-blue-200 text-primary-foreground py-4 rounded-lg font-medium hover:shadow-lg transition-all duration-300 hover:-translate-y-1 disabled:opacity-50"
                 data-testid="button-submit-form"
               >
-                <Send className="w-4 h-4 mr-2" />
+                <Send className="w-4 h-4 mr-2 " />
                 {isSubmitting ? "Sending..." : "Send Message"}
               </Button>
             </form>
