@@ -19,7 +19,7 @@ export default function Navigation() {
   const NavLink = ({ href, children }: { href: string; children: React.ReactNode }) => (
     <button
       onClick={() => handleScroll(href)}
-      className="text-muted-foreground hover:text-primary transition-colors duration-200"
+      className="text-muted-foreground hover bg-white-500:text-primary transition-colors duration-200"
       data-testid={`nav-link-${href}`}
     >
       {children}
@@ -43,12 +43,11 @@ export default function Navigation() {
           <div className="hidden md:flex space-x-8">
             <NavLink href="home">Home</NavLink>
             <NavLink href="/request-project">Projects</NavLink>
-            <Button
-              className="bg-primary text-primary-foreground hover:bg-primary/90 mr-3"
+            <NavLink
               onClick={() => window.location.href = "/request-project"}
             >
               Request Project
-            </Button>
+          </NavLink>
             <NavLink href="skills">Skills</NavLink>
             <NavLink href="about">About</NavLink>
             <NavLink href="contact">Contact</NavLink>
@@ -79,7 +78,7 @@ export default function Navigation() {
                 <Button
                   variant="outline"
                   size="icon"
-                  className="md:hidden bg-secondary hover:bg-secondary/80 border-border"
+                  className="md:hidden bg-secondary hover:bg-white/80 border-border"
                   data-testid="mobile-menu-trigger"
                 >
                   <Menu className="h-4 w-4 text-foreground" />

@@ -48,7 +48,7 @@ const projects: Project[] = [
     category: "bots",
     tech: ["Discord.js"],
     liveUrl: null,
-    githubUrl: null,
+    
     status: "Active",
     statusColor: "bg-green-500"
   },
@@ -136,10 +136,10 @@ export default function ProjectsSection() {
             <Button
               key={filter.key}
               onClick={() => setActiveFilter(filter.key)}
-              className={`px-6 py-3 rounded-xl font-medium transition-all duration-300 ${
+              className={`px-6 py-3 rounded-xl font-medium transition-all duration-300 bg-blue-300 ${
                 activeFilter === filter.key
-                  ? "bg-primary text-primary-foreground hover:bg-primary/90"
-                  : "bg-secondary text-secondary-foreground hover:bg-secondary/80"
+                  ? "bg-primary text-primary-foreground hover:bg-blue-500"
+                  : "bg-secondary text-secondary-foreground hover:bg-blue-600"
               }`}
               data-testid={`filter-${filter.key}`}
             >
