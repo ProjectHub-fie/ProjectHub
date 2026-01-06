@@ -21,37 +21,23 @@ export default function ContactSection() {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setIsSubmitting(true);
 
-    try {
-      const response = await fetch('/api/contact', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(formData)
-      });
+    const emailTo = "dev.projecthub.fie@gmail.com";
+    const body = `Name: ${formData.name}\nEmail: ${formData.email}\n\nMessage:\n${formData.message}`;
+    const mailtoUrl = `mailto:${emailTo}?subject=${encodeURIComponent(formData.subject)}&body=${encodeURIComponent(body)}`;
 
-      if (response.ok) {
-        toast({
-          title: "Message Sent!",
-          description: "Thank you for your message. We will get back to you soon!",
-        });
-        setFormData({ name: "", email: "", subject: "", message: "" });
-      } else {
-        throw new Error('Failed to send message');
-      }
-    } catch (error) {
-      toast({
-        title: "Error",
-        description: "Failed to send message. Please try again.",
-        variant: "destructive",
-      });
-    } finally {
-      setIsSubmitting(false);
-    }
+    window.location.href = mailtoUrl;
+
+    toast({
+      title: "Opening Email Client",
+      description: "Redirecting to your default email application.",
+    });
+
+    setFormData({ name: "", email: "", subject: "", message: "" });
+    setIsSubmitting(false);
   };
 
   const contactInfo = [
