@@ -42,12 +42,14 @@ export default function Navigation() {
           {/* Desktop Navigation */}
           <div className="hidden md:flex space-x-8">
             <NavLink href="home">Home</NavLink>
-            <NavLink href="/request-project">Projects</NavLink>
-            <NavLink
+            <NavLink href="projects">Projects</NavLink>
+            <button
               onClick={() => window.location.href = "/request-project"}
+              className="text-muted-foreground hover:text-primary transition-colors duration-200"
+              data-testid="nav-link-request-project"
             >
               Request Project
-          </NavLink>
+            </button>
             <NavLink href="skills">Skills</NavLink>
             <NavLink href="about">About</NavLink>
             <NavLink href="contact">Contact</NavLink>
