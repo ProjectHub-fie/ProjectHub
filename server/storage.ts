@@ -83,11 +83,13 @@ export class DatabaseStorage implements IStorage {
       .where(eq(users.id, id));
   }
 
-  async upsertUser(userData: UpsertUser): Promise<User> {
-    // Check if user exists by ID
+  async upsertUser(userData: any): Promise<User> {
+    // Check if user exists by email if ID is not provided
     let existingUser: User | undefined;
     if (userData.id) {
       existingUser = await this.getUser(userData.id);
+    } else if (userData.email) {
+      existingUser = await this.getUserByEmail(userData.email);
     }
     
     if (existingUser) {
@@ -98,27 +100,20 @@ export class DatabaseStorage implements IStorage {
           ...userData,
           updatedAt: new Date(),
         })
-        .where(eq(users.id, userData.id!));
+        .where(eq(users.id, existingUser.id));
       
-      // Return updated user
-      const updatedUser = await this.getUser(userData.id!);
-      return updatedUser!;
+      return existingUser;
     } else {
       // Generate ID if not provided
-      const { randomUUID } = await import("crypto");
-      const userId = userData.id || randomUUID();
+      const userId = userData.id || (await import("crypto")).randomUUID();
       
       const userWithId = {
         ...userData,
         id: userId
       };
       
-      // Insert new user
-      await db.insert(users).values(userWithId);
-      
-      // Return inserted user
-      const newUser = await this.getUser(userId);
-      return newUser!;
+      const [newUser] = await db.insert(users).values(userWithId).returning();
+      return newUser;
     }
   }
 

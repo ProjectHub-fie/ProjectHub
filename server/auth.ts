@@ -78,7 +78,7 @@ passport.serializeUser((user: any, done) => {
 });
 
 // Deserialize user from session
-passport.deserializeUser(async (id: string, done) => {
+passport.deserializeUser(async (id: any, done) => {
   try {
     const user = await storage.getUser(id);
     done(null, user || false);
