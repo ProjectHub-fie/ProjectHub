@@ -22,20 +22,13 @@ export default async function handler(req, res) {
       const crypto = await import('crypto');
       const resetToken = crypto.randomBytes(32).toString('hex');
 
-      // Send reset email using nodemailer
-      const nodemailer = await import('nodemailer');
-      
-      const transporter = nodemailer.default.createTransporter({
-        service: 'gmail',
-        auth: {
-          user: 'dev.projecthub.fie@gmail.com',
-          pass: 'exkf ymlg buup cwrh'
-        }
-      });
+      // Send reset email using Resend
+      const { Resend } = await import('resend');
+      const resendClient = new Resend(process.env.RESEND_API_KEY);
 
-      const mailOptions = {
-        from: `"ProjectHub" <dev.projecthub.fie@gmail.com>`,
-        to: email,
+      const { data, error } = await resendClient.emails.send({
+        from: 'ProjectHub <onboarding@resend.dev>',
+        to: [email],
         subject: 'Password Reset Request',
         html: `
           <h2>Password Reset Request</h2>
@@ -47,10 +40,12 @@ export default async function handler(req, res) {
           <hr>
           <p><em>ProjectHub Security Team</em></p>
         `,
-        replyTo: 'dev.projecthub.fie@gmail.com'
-      };
+      });
 
-      await transporter.sendMail(mailOptions);
+      if (error) {
+        console.error('Resend error:', error);
+        throw new Error('Failed to send email via Resend');
+      }
 
       // Store the token temporarily (in production, use a database)
       // For demo purposes, we'll just return success
