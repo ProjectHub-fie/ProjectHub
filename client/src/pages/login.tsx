@@ -199,8 +199,8 @@ export default function LoginPage() {
         <CardContent>
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList className="grid w-full grid-cols-2 bg-muted">
-              <TabsTrigger value="login" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Login</TabsTrigger>
-              <TabsTrigger value="register" className="data-[state=active]:bg-primary data-[state=active]:text-primary-foreground">Register</TabsTrigger>
+              <TabsTrigger value="login" className="data-[state=active]:bg-green-600 data-[state=active]:text-primary-foreground data-[state=inactive]:bg-blue-600">Login</TabsTrigger>
+              <TabsTrigger value="register" className="w-full data-[state=active]:bg-green-600 data-[state=active]:text-primary-foreground data-[state=inactive]:bg-blue-600">Register</TabsTrigger>
             </TabsList>
 
             <TabsContent value="login" className="space-y-4">
@@ -246,7 +246,7 @@ export default function LoginPage() {
                   />
                   <Button
                     type="submit"
-                    className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
+                    className="w-full bg- bg-green-500 text-primary-foreground"
                     disabled={isLoggingIn}
                     data-testid="button-login-submit"
                   >
@@ -491,11 +491,11 @@ export default function LoginPage() {
 
             <Button
               variant="outline"
-              className="w-full bg-background border-input hover:bg-accent hover:text-accent-foreground flex items-center justify-center gap-2"
+              className="w-full bg-blue-600 border-input hover:bg-accent hover:text-accent-foreground flex items-center justify-center gap-2"
               onClick={() => window.location.href = "/api/auth/discord"}
               data-testid="button-discord-login"
             >
-              <FaDiscord className="h-4 w-4" />
+              <FaDiscord className="h-4 w-4 " />
               Continue with Discord
             </Button>
           </div>
