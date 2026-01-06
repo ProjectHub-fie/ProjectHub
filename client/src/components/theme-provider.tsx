@@ -42,12 +42,15 @@ export function ThemeProvider({
         : "light";
 
       root.classList.add(systemTheme);
+      root.style.colorScheme = systemTheme;
       
       // Listen for system theme changes
       const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
       const handleChange = (e: MediaQueryListEvent) => {
         root.classList.remove("light", "dark");
-        root.classList.add(e.matches ? "dark" : "light");
+        const newSystemTheme = e.matches ? "dark" : "light";
+        root.classList.add(newSystemTheme);
+        root.style.colorScheme = newSystemTheme;
       };
       
       mediaQuery.addEventListener("change", handleChange);
@@ -55,6 +58,7 @@ export function ThemeProvider({
     }
 
     root.classList.add(theme);
+    root.style.colorScheme = theme;
   }, [theme]);
 
   const value = {

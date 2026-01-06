@@ -65,11 +65,9 @@ export default function Navigation() {
               className="hidden md:flex bg-secondary hover:bg-secondary/80 border-border"
               data-testid="theme-toggle"
             >
-              {theme === "dark" ? (
-                <Sun className="h-4 w-4 text-yellow-500" />
-              ) : (
-                <Moon className="h-4 w-4 text-primary" />
-              )}
+              <Sun className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0 text-yellow-500" />
+              <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100 text-primary" />
+              <span className="sr-only">Toggle theme</span>
             </Button>
 
             {/* Mobile Menu */}
