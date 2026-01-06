@@ -15,14 +15,17 @@ function requireAuth(req: any, res: any, next: any) {
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Session configuration with memory store (for now)
+  // Session configuration with memory store
+  const MemoryStore = (await import("memorystore")).default(session);
   app.use(session({
-    store: undefined, // Use memory store for now
+    store: new MemoryStore({
+      checkPeriod: 86400000 // prune expired entries every 24h
+    }),
     secret: process.env.SESSION_SECRET || 'fallback-secret-key',
     resave: false,
     saveUninitialized: false,
     cookie: {
-      secure: process.env.NODE_ENV === 'production', // HTTPS in production
+      secure: process.env.NODE_ENV === 'production',
       maxAge: 24 * 60 * 60 * 1000 // 24 hours
     }
   }));
