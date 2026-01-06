@@ -84,7 +84,7 @@ export default function Navigation() {
                   <Menu className="h-4 w-4 text-foreground" />
                 </Button>
               </SheetTrigger>
-              <SheetContent side="right" className="bg-background border-border">
+              <SheetContent side="right" className="bg-background border-border shadow-xl">
                 <div className="flex flex-col space-y-6 mt-8">
                   <NavLink href="home">Home</NavLink>
                   <NavLink href="projects">Projects</NavLink>
