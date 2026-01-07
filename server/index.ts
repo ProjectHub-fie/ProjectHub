@@ -1,9 +1,9 @@
 import express, { type Request, Response, NextFunction } from "express";
 import path from "path";
 import { sql } from "drizzle-orm";
-import { registerRoutes } from "./routes";
-import { setupVite, serveStatic, log } from "./vite";
-import { db } from "./db";
+import { registerRoutes } from "./routes.js";
+import { setupVite, serveStatic, log } from "./vite.js";
+import { db } from "./db.js";
 
 const app = express();
 app.use(express.json());
