@@ -4,7 +4,7 @@ import session from "express-session";
 import bcrypt from "bcryptjs";
 import { storage } from "./storage";
 import passport from "./auth";
-import { insertProjectRequestSchema } from "../shared/schema";
+import { insertProjectRequestSchema } from "../shared/schema.js";
 
 // Middleware to check if user is authenticated
 function requireAuth(req: any, res: any, next: any) {
