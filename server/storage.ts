@@ -6,8 +6,9 @@ import {
   type InsertProjectRequest,
   type ProjectRequest,
 } from "./../shared/schema";
-import { db } from "./db";
+import { db } from "./db.js";
 import { eq } from "drizzle-orm";
+
 
 export interface IStorage {
   // User operations
