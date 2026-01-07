@@ -9,6 +9,7 @@ import Home from "@/pages/home";
 import Login from "@/pages/login";
 import ProjectRequest from "@/pages/project-request";
 import ProjectPage from "@/pages/project";
+import ErrorPage from "@/pages/error";
 import NotFound from "@/pages/not-found";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
@@ -39,6 +40,7 @@ function Router() {
       <Route path="/login" component={Login} />
       <Route path="/request-project" component={ProjectRequest} />
       <Route path="/project/:id" component={ProjectPage} />
+      <Route path="/error" component={ErrorPage} />
       <Route component={NotFound} />
     </Switch>
   );
