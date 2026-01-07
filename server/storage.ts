@@ -5,7 +5,7 @@ import {
   type UpsertUser,
   type InsertProjectRequest,
   type ProjectRequest,
-} from "../shared/schema.js";
+} from "@shared/schema";
 import { db } from "./db";
 import { eq } from "drizzle-orm";
 
