@@ -125,36 +125,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Save reset token to user
       await storage.updateUserResetToken(user.id, resetToken, resetTokenExpiry);
 
-      // Send reset email
-      const { default: nodemailer } = await import('nodemailer');
-      const transporter = nodemailer.createTransport({
-        service: 'gmail',
-        auth: {
-          user: process.env.EMAIL_USER || 'dev.projecthub.fie@gmail.com',
-          pass: process.env.EMAIL_PASS || 'exkf ymlg buup cwrh'
-        }
-      });
+      // Send reset email using Mailjet
+      const Mailjet = (await import('node-mailjet')).default;
+      const mailjet = Mailjet.apiConnect(
+        process.env.MAILJET_API_KEY || '',
+        process.env.MAILJET_API_SECRET || ''
+      );
 
       const resetUrl = `${req.protocol}://${req.get('host')}/reset-password?token=${resetToken}`;
       
-      const mailOptions = {
-        from: `"ProjectHub" <${process.env.EMAIL_USER || 'dev.projecthub.fie@gmail.com'}>`,
-        to: email,
-        subject: 'Password Reset Request',
-        html: `
-          <h2>Password Reset Request</h2>
-          <p>Hello ${user.firstName},</p>
-          <p>You requested to reset your password. Use the token below to reset your password:</p>
-          <p><strong>Reset Token:</strong> <code>${resetToken}</code></p>
-          <p>This token will expire in 1 hour.</p>
-          <p>If you didn't request this, please ignore this email.</p>
-          <hr>
-          <p><em>ProjectHub Security Team</em></p>
-        `,
-        replyTo: process.env.EMAIL_USER || 'dev.projecthub.fie@gmail.com'
-      };
-
-      await transporter.sendMail(mailOptions);
+      await mailjet
+        .post("send", { version: 'v3.1' })
+        .request({
+          Messages: [
+            {
+              From: {
+                Email: process.env.EMAIL_USER || 'dev.projecthub.fie@gmail.com',
+                Name: "ProjectHub"
+              },
+              To: [
+                {
+                  Email: email,
+                  Name: user.firstName || ''
+                }
+              ],
+              Subject: "Password Reset Request",
+              HTMLPart: `
+                <h2>Password Reset Request</h2>
+                <p>Hello ${user.firstName},</p>
+                <p>You requested to reset your password. Use the token below to reset your password:</p>
+                <p><strong>Reset Token:</strong> <code>${resetToken}</code></p>
+                <p>This token will expire in 1 hour.</p>
+                <p>If you didn't request this, please ignore this email.</p>
+                <hr>
+                <p><em>ProjectHub Security Team</em></p>
+              `
+            }
+          ]
+        });
 
       res.json({ message: "If an account with that email exists, you will receive a reset email" });
     } catch (error) {
