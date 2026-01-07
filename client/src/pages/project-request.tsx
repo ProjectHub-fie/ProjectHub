@@ -80,8 +80,8 @@ export default function ProjectRequestPage() {
 
   if (isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-background">
-        <div className="h-12 w-12 border-4 border-primary border-t-transparent rounded-full animate-spin" />
+      <div className="min-h-screen flex items-center justify-center bg-slate-900">
+        <div className="text-white text-xl">Loading...</div>
       </div>
     );
   }
@@ -91,21 +91,36 @@ export default function ProjectRequestPage() {
   }
 
   return (
-    <div className="min-h-screen bg-background py-8 px-4">
+    <div className="min-h-screen bg-slate-900 py-8 px-4">
       <div className="max-w-4xl mx-auto">
         {/* Header */}
         <div className="flex justify-between items-center mb-8">
           <div>
-            <h1 className="text-3xl font-bold text-foreground mb-2">Request Your Project</h1>
-            <p className="text-muted-foreground">Tell us about your dream project and we'll bring it to life!</p>
+            <h1 className="text-3xl font-bold text-white mb-2">Request Your Project</h1>
+            <p className="text-slate-400">Tell us about your dream project and we'll bring it to life!</p>
+          </div>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 text-slate-300">
+              <User className="h-4 w-4" />
+              <span>{user?.firstName} {user?.lastName}</span>
+            </div>
+            <Button
+              variant="outline"
+              onClick={() => logout()}
+              className="bg-slate-800 border-slate-600 hover:bg-slate-700"
+              data-testid="button-logout"
+            >
+              <LogOut className="h-4 w-4 mr-2" />
+              Logout
+            </Button>
           </div>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Project Request Form */}
-          <Card className="lg:col-span-2 border-border bg-card">
+          <Card className="lg:col-span-2 bg-slate-800 border-slate-700">
             <CardHeader>
-              <CardTitle className="text-foreground flex items-center gap-2">
+              <CardTitle className="text-white flex items-center gap-2">
                 <Plus className="h-5 w-5" />
                 New Project Request
               </CardTitle>
@@ -118,10 +133,11 @@ export default function ProjectRequestPage() {
                     name="title"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Project Title</FormLabel>
+                        <FormLabel className="text-slate-300">Project Title</FormLabel>
                         <FormControl>
                           <Input
                             {...field}
+                            className="bg-slate-700 border-slate-600 text-white"
                             placeholder="e.g., E-commerce website, Mobile app, etc."
                             data-testid="input-project-title"
                           />
@@ -136,16 +152,16 @@ export default function ProjectRequestPage() {
                     name="description"
                     render={({ field }) => (
                       <FormItem>
-                        <FormLabel>Project Description</FormLabel>
+                        <FormLabel className="text-slate-300">Project Description</FormLabel>
                         <FormControl>
                           <Textarea
                             {...field}
-                            className="min-h-32"
+                            className="bg-slate-700 border-slate-600 text-white min-h-32"
                             placeholder="Describe your project in detail. What features do you need? What problem does it solve?"
                             data-testid="textarea-project-description"
                           />
                         </FormControl>
-                        <FormDescription>
+                        <FormDescription className="text-slate-400">
                           The more details you provide, the better we can understand your needs.
                         </FormDescription>
                         <FormMessage />
@@ -159,14 +175,14 @@ export default function ProjectRequestPage() {
                       name="budget"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Budget Range</FormLabel>
+                          <FormLabel className="text-slate-300">Budget Range</FormLabel>
                           <Select onValueChange={field.onChange} value={field.value}>
                             <FormControl>
-                              <SelectTrigger data-testid="select-budget">
+                              <SelectTrigger className="bg-slate-700 border-slate-600 text-white" data-testid="select-budget">
                                 <SelectValue placeholder="Select budget range" />
                               </SelectTrigger>
                             </FormControl>
-                            <SelectContent>
+                            <SelectContent className="bg-slate-700 border-slate-600">
                               <SelectItem value="under-1k">Under $1,000</SelectItem>
                               <SelectItem value="1k-5k">$1,000 - $5,000</SelectItem>
                               <SelectItem value="5k-10k">$5,000 - $10,000</SelectItem>
@@ -185,14 +201,14 @@ export default function ProjectRequestPage() {
                       name="timeline"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Timeline</FormLabel>
+                          <FormLabel className="text-slate-300">Timeline</FormLabel>
                           <Select onValueChange={field.onChange} value={field.value}>
                             <FormControl>
-                              <SelectTrigger data-testid="select-timeline">
+                              <SelectTrigger className="bg-slate-700 border-slate-600 text-white" data-testid="select-timeline">
                                 <SelectValue placeholder="Select timeline" />
                               </SelectTrigger>
                             </FormControl>
-                            <SelectContent>
+                            <SelectContent className="bg-slate-700 border-slate-600">
                               <SelectItem value="asap">ASAP</SelectItem>
                               <SelectItem value="1-2-weeks">1-2 weeks</SelectItem>
                               <SelectItem value="1-month">1 month</SelectItem>
@@ -209,7 +225,7 @@ export default function ProjectRequestPage() {
 
                   <Button
                     type="submit"
-                    className="w-full hover-elevate active-elevate-2"
+                    className="w-full bg-gradient-to-r from-emerald-500 to-teal-500 text-white hover:from-emerald-600 hover:to-teal-600"
                     disabled={createRequestMutation.isPending}
                     data-testid="button-submit-request"
                   >
@@ -221,9 +237,9 @@ export default function ProjectRequestPage() {
           </Card>
 
           {/* Previous Requests */}
-          <Card className="border-border bg-card">
+          <Card className="bg-slate-800 border-slate-700">
             <CardHeader>
-              <CardTitle className="text-foreground flex items-center gap-2">
+              <CardTitle className="text-white flex items-center gap-2">
                 <Clock className="h-5 w-5" />
                 Your Requests
               </CardTitle>
@@ -232,9 +248,9 @@ export default function ProjectRequestPage() {
               {userRequests && Array.isArray(userRequests) && userRequests.length > 0 ? (
                 <div className="space-y-4">
                   {userRequests.map((request: any) => (
-                    <div key={request.id} className="p-4 bg-secondary/30 rounded-lg border border-border">
-                      <h4 className="font-medium text-foreground mb-2" data-testid={`request-title-${request.id}`}>{request.title}</h4>
-                      <p className="text-sm text-muted-foreground mb-2 line-clamp-2" data-testid={`request-description-${request.id}`}>
+                    <div key={request.id} className="p-4 bg-slate-700 rounded-lg">
+                      <h4 className="font-medium text-white mb-2" data-testid={`request-title-${request.id}`}>{request.title}</h4>
+                      <p className="text-sm text-slate-400 mb-2 line-clamp-2" data-testid={`request-description-${request.id}`}>
                         {request.description}
                       </p>
                       <div className="flex items-center justify-between">
@@ -245,7 +261,7 @@ export default function ProjectRequestPage() {
                         >
                           {request.status}
                         </Badge>
-                        <span className="text-xs text-muted-foreground">
+                        <span className="text-xs text-slate-500">
                           {new Date(request.createdAt).toLocaleDateString()}
                         </span>
                       </div>
@@ -253,7 +269,7 @@ export default function ProjectRequestPage() {
                   ))}
                 </div>
               ) : (
-                <div className="text-center text-muted-foreground py-8">
+                <div className="text-center text-slate-400 py-8">
                   <Plus className="h-12 w-12 mx-auto mb-4 opacity-50" />
                   <p>No project requests yet.</p>
                   <p className="text-sm">Submit your first request!</p>
