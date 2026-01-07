@@ -61,6 +61,10 @@ export const queryClient = new QueryClient({
     },
     mutations: {
       retry: false,
+      onError: (error) => {
+        console.error('Mutation error:', error);
+        window.location.href = '/error';
+      }
     },
   },
 });
