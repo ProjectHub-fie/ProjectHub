@@ -14,6 +14,8 @@ export function useAuth() {
   const { data: user, isLoading } = useQuery({
     queryKey: ["/api/auth/me"],
     retry: false,
+    staleTime: 0, // Ensure we always check with the server
+    gcTime: 0,    // Don't cache the auth status
   });
 
   const loginMutation = useMutation({
