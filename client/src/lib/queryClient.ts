@@ -61,9 +61,16 @@ export const queryClient = new QueryClient({
     },
     mutations: {
       retry: false,
-      onError: (error) => {
-        console.error('Mutation error:', error);
-        window.location.href = '/error';
+      onError: (error: Error) => {
+        // Don't redirect for common auth/validation errors
+        const isAuthError = error.message.includes('401') || 
+                           error.message.includes('Invalid') || 
+                           error.message.includes('password');
+                           
+        if (!isAuthError) {
+          console.error('Mutation error:', error);
+          window.location.href = '/error';
+        }
       }
     },
   },
