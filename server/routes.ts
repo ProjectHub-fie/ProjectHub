@@ -227,7 +227,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     console.log('Discord callback received');
     passport.authenticate('discord', { 
       failureRedirect: '/login?error=discord_failed',
-      successRedirect: '/request-project?login=success'
+      successRedirect: '/dashboard?login=success'
     })(req, res, next);
   });
 

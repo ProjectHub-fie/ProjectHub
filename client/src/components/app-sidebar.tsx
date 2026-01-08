@@ -24,8 +24,8 @@ const items = [
     icon: LogIn,
   },
   {
-    title: "Request Project",
-    url: "/request-project",
+    title: "Dashboard",
+    url: "/dashboard",
     icon: FileText,
   },
 ];

@@ -86,7 +86,7 @@ export default function LoginPage() {
   // Redirect if already authenticated
   useEffect(() => {
     if (isAuthenticated) {
-      setLocation("/request-project");
+      setLocation("/dashboard");
     }
   }, [isAuthenticated, setLocation]);
 
@@ -97,7 +97,7 @@ export default function LoginPage() {
         title: "Success!",
         description: "You've been logged in successfully.",
       });
-      setLocation("/request-project");
+      setLocation("/dashboard");
     } catch (error: any) {
       toast({
         title: "Login Failed",
@@ -114,7 +114,7 @@ export default function LoginPage() {
         title: "Welcome!",
         description: "Your account has been created successfully.",
       });
-      setLocation("/request-project");
+      setLocation("/dashboard");
     } catch (error: any) {
       toast({
         title: "Registration Failed",
