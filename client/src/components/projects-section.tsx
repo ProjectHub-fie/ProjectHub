@@ -3,84 +3,16 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ExternalLink, Github, Download, Bot, BarChart3, Terminal } from "lucide-react";
 import { useLocation } from "wouter";
-
-interface Project {
-  id: string;
-  title: string;
-  description: string;
-  image: string;
-  category: "websites" | "bots" | "utilities";
-  tech: string[];
-  liveUrl?: string;
-  githubUrl?: string;
-  status: string;
-  statusColor: string;
-}
-
-const projects: Project[] = [
-  {
-    id: "PrimeBot",
-    title: "PrimeBot",
-    description: "PrimeBot is a sleek, multipurpose Discord bot built to supercharge your server with essential tools. It features a dynamic giveaway system with customizable entries, interactive polls for instant feedback, and a ticket system for seamless support handling. With fun gaming commands to keep your community entertained, powerful utility tools for moderation and server management, and a full emoji management suite to upload, delete, and organize emojis effortlessly, PrimeBot packs everything you need into one reliable package—lightweight, fast, and always ready.",
-    image: "/primebot.gif",
-    category: "bots",
-    tech: ["discord.js", "C"," mySQL"],
-    liveUrl: "https://discord.com/oauth2/authorize?client_id=1356575287151951943&permissions=8&integration_type=0&scope=bot%20applications.commands",
-    status: " Active",
-    statusColor: "bg-green-500"
-  },
-  {
-    id: "pbo",
-    title: "PrimeBot",
-    description: "Interactive and dynamic website with dashboard of PrimeBot discord bot (Dashboard will come soon)",
-    image: "/primebot.gif",
-    category: "websites",
-    tech: ["Typescript React", "Node.js", "PostgreSQL"],
-    liveUrl: "https://primebot-online.vercel.app",
-    status: "In development",
-    statusColor: "bg-red-500"
-  },
-  {
-    id: "Sky",
-    title: "Sky",
-    description: "Collaborative task management application with real-time updates, team collaboration features, and project tracking capabilities.",
-    image: "/api/placeholder/400/300",
-    category: "bots",
-    tech: ["Discord.js"],
-    liveUrl: "",
-    
-    status: "Active",
-    statusColor: "bg-green-500"
-  },
-  {
-    id: "db",
-    title: "Database Dashboard",
-    description: "Online based database dashboard for your PostgreeSQL.",
-    image: "/api/placeholder/400/300",
-    category: "websites",
-    tech: ["Typescript","React"],
-    liveUrl: "",
-    githubUrl: "https://github.com/rajroy1313/Database-web.git",
-    status: "Developing",
-    statusColor: "bg-red-500"
-  },
-  {
-    id: "wh",
-    title: "Hosting ",
-    description: "Discord bot hosting",
-    image: "/api/placeholder/400/300",
-    category: "websites",
-    tech: ["React", "Typescript", "PostgreSQL"],
-    liveUrl: "",
-    githubUrl: "https://github.com/rajroy1313/Webhost.git",
-    status: "In development",
-    statusColor: "bg-red-500"
-  }
-];
+import { useQuery } from "@tanstack/react-query";
+import { Project } from "@shared/schema";
 
 export default function ProjectsSection() {
   const [, setLocation] = useLocation();
   const [activeFilter, setActiveFilter] = useState<string>("all");
+
+  const { data: projects = [], isLoading } = useQuery<Project[]>({
+    queryKey: ["/api/projects"],
+  });
 
   const filteredProjects = activeFilter === "all"
     ? projects
