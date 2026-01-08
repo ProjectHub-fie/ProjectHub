@@ -47,7 +47,7 @@ const projects: Project[] = [
     image: "/api/placeholder/400/300",
     category: "bots",
     tech: ["Discord.js"],
-    liveUrl: null,
+    liveUrl: "",
     
     status: "Active",
     statusColor: "bg-green-500"
@@ -59,7 +59,7 @@ const projects: Project[] = [
     image: "/api/placeholder/400/300",
     category: "websites",
     tech: ["Typescript","React"],
-    liveUrl: null,
+    liveUrl: "",
     githubUrl: "https://github.com/rajroy1313/Database-web.git",
     status: "Developing",
     statusColor: "bg-red-500"
@@ -71,7 +71,7 @@ const projects: Project[] = [
     image: "/api/placeholder/400/300",
     category: "websites",
     tech: ["React", "Typescript", "PostgreSQL"],
-    liveUrl: null,
+    liveUrl: "",
     githubUrl: "https://github.com/rajroy1313/Webhost.git",
     status: "In development",
     statusColor: "bg-red-500"
@@ -79,6 +79,7 @@ const projects: Project[] = [
 ];
 
 export default function ProjectsSection() {
+  const [, setLocation] = useLocation();
   const [activeFilter, setActiveFilter] = useState<string>("all");
 
   const filteredProjects = activeFilter === "all"
@@ -220,7 +221,7 @@ export default function ProjectsSection() {
         <div className="text-center mt-12 space-y-4">
           <Button
             className="bg-gradient-to-r from-blue-500 to-violet-500 text-white px-10 py-6 rounded-xl font-bold text-lg hover:shadow-xl hover:shadow-blue-500/25 transition-all duration-300 hover:-translate-y-1"
-            onClick={() => useLocation()[1]("/projects")}
+            onClick={() => setLocation("/projects")}
             data-testid="button-view-all-projects"
           >
             View All Projects
