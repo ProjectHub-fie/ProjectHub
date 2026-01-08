@@ -48,7 +48,7 @@ export default function Navigation() {
               className="text-muted-foreground hover:text-primary transition-colors duration-200"
               data-testid="nav-link-request-project"
             >
-              Dash
+       
       Dashboard  </button>
             <NavLink href="skills">Skills</NavLink>
             <NavLink href="about">About</NavLink>
@@ -93,10 +93,10 @@ export default function Navigation() {
                       window.location.href = "/request-project";
                       setIsOpen(false);
                     }}
-                    className="text-muted-foreground hover:text-primary transition-colors duration-200 text-left"
+                    className="text-muted-foreground hover:text-primary transition-colors duration-200 text-center"
                     data-testid="mobile-nav-link-request-project"
                   >
-                    Request Project
+                    Dashboard
                   </button>
                   <NavLink href="skills">Skills</NavLink>
                   <NavLink href="about">About</NavLink>
