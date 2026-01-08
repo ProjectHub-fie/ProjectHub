@@ -15,17 +15,28 @@ function requireAuth(req: any, res: any, next: any) {
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
-  // Session configuration with memory store
-  const MemoryStore = (await import("memorystore")).default(session);
+  // Session configuration with PostgreSQL store
+  const pgSession = (await import("connect-pg-simple")).default(session);
+  const pg = (await import("pg")).default;
+  const pool = new pg.Pool({
+    connectionString: process.env.DATABASE_URL,
+    ssl: { rejectUnauthorized: false }
+  });
+  
   app.use(session({
-    store: new MemoryStore({
-      checkPeriod: 86400000 // prune expired entries every 24h
+    store: new pgSession({
+      pool,
+      tableName: 'session',
+      createTableIfMissing: true
     }),
     secret: process.env.SESSION_SECRET || 'fallback-secret-key',
     resave: false,
     saveUninitialized: false,
+    proxy: true, // Required for Vercel
     cookie: {
-      secure: process.env.NODE_ENV === 'production',
+      secure: true,
+      sameSite: 'none',
+      httpOnly: true,
       maxAge: 24 * 60 * 60 * 1000 // 24 hours
     }
   }));
