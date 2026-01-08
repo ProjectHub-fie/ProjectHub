@@ -11,12 +11,14 @@ interface User {
 export function useAuth() {
   const queryClient = useQueryClient();
 
-  const { data: user, isLoading } = useQuery({
+  const { data: authData, isLoading } = useQuery({
     queryKey: ["/api/auth/me"],
     retry: false,
-    staleTime: 0, // Ensure we always check with the server
-    gcTime: 0,    // Don't cache the auth status
+    staleTime: 0,
+    gcTime: 0,
   });
+
+  const user = (authData as any)?.user;
 
   const loginMutation = useMutation({
     mutationFn: async (credentials: { email: string; password: string }) => {
@@ -35,7 +37,6 @@ export function useAuth() {
       return response.json();
     },
     onSuccess: (data) => {
-      // Immediately set the user data to avoid timing issues
       queryClient.setQueryData(["/api/auth/me"], data);
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
     },
@@ -63,7 +64,6 @@ export function useAuth() {
       return response.json();
     },
     onSuccess: (data) => {
-      // Immediately set the user data to avoid timing issues
       queryClient.setQueryData(["/api/auth/me"], data);
       queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
     },
@@ -80,9 +80,9 @@ export function useAuth() {
   });
 
   return {
-    user: (user as any)?.user,
+    user,
     isLoading,
-    isAuthenticated: !!(user as any)?.user,
+    isAuthenticated: !!user,
     login: loginMutation.mutateAsync,
     register: registerMutation.mutateAsync,
     logout: logoutMutation.mutateAsync,

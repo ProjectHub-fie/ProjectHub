@@ -233,7 +233,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Get current user
   app.get('/api/auth/me', (req, res) => {
-    // Set cache control headers to prevent 304/caching issues on Vercel
+    // Set cache control headers to prevent 304/caching issues
     res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
     res.setHeader('Pragma', 'no-cache');
     res.setHeader('Expires', '0');
@@ -243,7 +243,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const user = req.user as any;
       res.json({ user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName } });
     } else {
-      res.status(401).json({ message: "Not authenticated" });
+      res.json({ user: null });
     }
   });
 
