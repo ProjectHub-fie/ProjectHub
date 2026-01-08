@@ -48,8 +48,8 @@ export default function Navigation() {
               className="text-muted-foreground hover:text-primary transition-colors duration-200"
               data-testid="nav-link-request-project"
             >
-              Request Project
-            </button>
+              Dash
+      Dashboard  </button>
             <NavLink href="skills">Skills</NavLink>
             <NavLink href="about">About</NavLink>
             <NavLink href="contact">Contact</NavLink>

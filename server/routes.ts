@@ -33,7 +33,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       createTableIfMissing: true
     }),
     secret: process.env.SESSION_SECRET || 'fallback-secret-key',
-    resave: false,
+    resave: true, // Force session saving to ensure cookie is set
     saveUninitialized: false,
     proxy: true, // Required for Vercel
     cookie: {
