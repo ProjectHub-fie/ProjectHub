@@ -14,7 +14,9 @@ function requireAuth(req: any, res: any, next: any) {
   res.status(401).json({ message: "Authentication required" });
 }
 
-export async function registerRoutes(app: Express): Promise<Server> {
+  // Trust proxy for Vercel
+  app.set('trust proxy', 1);
+
   // Session configuration with PostgreSQL store
   const pgSession = (await import("connect-pg-simple")).default(session);
   const pg = (await import("pg")).default;
