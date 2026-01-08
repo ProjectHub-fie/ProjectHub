@@ -127,10 +127,11 @@ export default function ProjectsSection() {
                   <Button
                     className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground py-2 rounded-lg font-medium transition-colors duration-200"
                     onClick={() => project.liveUrl && window.open(project.liveUrl, '_blank')}
+                    disabled={!project.liveUrl}
                     data-testid={`button-demo-${project.id}`}
                   >
-                    {getActionIcon(project.category)}
-                    {getActionText(project.category)}
+                    {getActionIcon(project.category as any)}
+                    {getActionText(project.category as any)}
                   </Button>
                   {project.githubUrl && (
                     <Button

@@ -50,5 +50,17 @@ export default function ProjectPage() {
     return <div>Project not found</div>;
   }
 
-  return <ProjectDetail project={project} />;
+  const typedProject = {
+    ...project,
+    category: project.category as "websites" | "bots" | "utilities",
+    longDescription: project.longDescription || project.description,
+    features: project.features || [],
+    highlights: project.highlights || [],
+    liveUrl: project.liveUrl || undefined,
+    githubUrl: project.githubUrl || undefined,
+    teamSize: project.teamSize || undefined,
+    userCount: project.userCount || undefined,
+  };
+
+  return <ProjectDetail project={typedProject} />;
 }

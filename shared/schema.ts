@@ -49,8 +49,8 @@ export const projectRequests = pgTable("project_requests", {
 });
 
 // Projects table
-export const projects = mysqlTable("projects", {
-  id: varchar("id", { length: 36 }).primaryKey().default(sql`(UUID())`),
+export const projects = pgTable("projects", {
+  id: uuid("id").primaryKey().defaultRandom(),
   title: text("title").notNull(),
   description: text("description").notNull(),
   longDescription: text("long_description"),
@@ -67,7 +67,7 @@ export const projects = mysqlTable("projects", {
   teamSize: varchar("team_size", { length: 100 }),
   userCount: varchar("user_count", { length: 100 }),
   createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
 });
 
 // Schemas for validation
@@ -102,6 +102,10 @@ export const insertProjectSchema = createInsertSchema(projects).omit({
   id: true,
   createdAt: true,
   updatedAt: true,
+}).extend({
+  tech: z.array(z.string()),
+  features: z.array(z.string()).optional().nullable(),
+  highlights: z.array(z.string()).optional().nullable(),
 });
 
 export type InsertUser = z.infer<typeof insertUserSchema>;

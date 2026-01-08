@@ -16,7 +16,7 @@ export default function ProjectsPage() {
 
   const filteredProjects = activeFilter === "all"
     ? projects
-    : projects.filter(project => project.category === activeFilter as any);
+    : projects.filter(project => project.category === activeFilter);
 
   const getActionIcon = (category: Project["category"]) => {
     switch (category) {
@@ -114,8 +114,8 @@ export default function ProjectsPage() {
                     onClick={() => project.liveUrl && window.open(project.liveUrl, '_blank')}
                     disabled={!project.liveUrl}
                   >
-                    {getActionIcon(project.category)}
-                    {getActionText(project.category)}
+                    {getActionIcon(project.category as any)}
+                    {getActionText(project.category as any)}
                   </Button>
                   {project.githubUrl && (
                     <Button

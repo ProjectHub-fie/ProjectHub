@@ -1,6 +1,7 @@
 import {
   users,
   projectRequests,
+  projects,
   type User,
   type UpsertUser,
   type InsertProjectRequest,
@@ -179,11 +180,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async createProject(projectData: InsertProject): Promise<Project> {
-    const { randomUUID } = await import("crypto");
-    const projectId = randomUUID();
-    const projectWithId = { ...projectData, id: projectId };
-    await db.insert(projects).values(projectWithId);
-    const [createdProject] = await db.select().from(projects).where(eq(projects.id, projectId));
+    const [createdProject] = await db.insert(projects).values(projectData).returning();
     return createdProject;
   }
 }
