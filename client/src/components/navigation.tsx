@@ -44,12 +44,12 @@ export default function Navigation() {
             <NavLink href="home">Home</NavLink>
             <NavLink href="projects">Projects</NavLink>
             <button
-              onClick={() => window.location.href = "/request-project"}
+              onClick={() => window.location.href = "/dashboard"}
               className="text-muted-foreground hover:text-primary transition-colors duration-200"
-              data-testid="nav-link-request-project"
+              data-testid="nav-link-dashboard"
             >
-       
-      Dashboard  </button>
+              Dashboard
+            </button>
             <NavLink href="skills">Skills</NavLink>
             <NavLink href="about">About</NavLink>
             <NavLink href="contact">Contact</NavLink>
@@ -90,11 +90,11 @@ export default function Navigation() {
                   <NavLink href="projects">Projects</NavLink>
                   <button
                     onClick={() => {
-                      window.location.href = "/request-project";
+                      window.location.href = "/dashboard";
                       setIsOpen(false);
                     }}
                     className="text-muted-foreground hover:text-primary transition-colors duration-200 text-center"
-                    data-testid="mobile-nav-link-request-project"
+                    data-testid="mobile-nav-link-dashboard"
                   >
                     Dashboard
                   </button>

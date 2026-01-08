@@ -108,9 +108,9 @@ export default function HeroSection() {
            
             className="w-full sm:w-auto bg-green-600 text-white px-6 md:px-8 py-3 md:py-4 rounded-xl font-medium hover:bg-green-700 hover:shadow-lg transition-all duration-300 hover:-translate-y-1 text-sm md:text-base min-h-[48px]"
 
-            onClick={() => setLocation("/request-project")}
+            onClick={() => setLocation("/dashboard")}
           >
-            Request Your Project
+            Dashboard
           </Button>
           <Button
             variant="outline"
