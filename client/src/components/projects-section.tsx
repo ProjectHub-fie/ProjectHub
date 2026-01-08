@@ -216,15 +216,25 @@ export default function ProjectsSection() {
           ))}
         </div>
 
-        {/* Load More Button */}
-        <div className="text-center mt-12">
+        {/* View All Projects Button */}
+        <div className="text-center mt-12 space-y-4">
           <Button
-            className="bg-gradient-to-r from-blue-500 to-violet-500 text-white px-8 py-4 rounded-xl font-medium hover:shadow-lg hover:shadow-blue-500/25 transition-all duration-300 hover:-translate-y-1"
-            onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
-            data-testid="button-load-more"
+            className="bg-gradient-to-r from-blue-500 to-violet-500 text-white px-10 py-6 rounded-xl font-bold text-lg hover:shadow-xl hover:shadow-blue-500/25 transition-all duration-300 hover:-translate-y-1"
+            onClick={() => useLocation()[1]("/projects")}
+            data-testid="button-view-all-projects"
           >
-            Back to Top
+            View All Projects
           </Button>
+          <div>
+            <Button
+              variant="ghost"
+              className="text-muted-foreground hover:text-primary"
+              onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}
+              data-testid="button-load-more"
+            >
+              Back to Top
+            </Button>
+          </div>
         </div>
       </div>
     </section>

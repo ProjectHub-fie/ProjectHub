@@ -7,6 +7,7 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/theme-provider";
 import Home from "@/pages/home";
 import Login from "@/pages/login";
+import Projects from "@/pages/projects";
 import ProjectRequest from "@/pages/project-request";
 import ProjectPage from "@/pages/project";
 import ErrorPage from "@/pages/error";
@@ -38,6 +39,7 @@ function Router() {
     <Switch>
       <Route path="/" component={Home} />
       <Route path="/login" component={Login} />
+      <Route path="/projects" component={Projects} />
       <Route path="/dashboard" component={ProjectRequest} />
       <Route path="/project/:id" component={ProjectPage} />
       <Route path="/error" component={ErrorPage} />

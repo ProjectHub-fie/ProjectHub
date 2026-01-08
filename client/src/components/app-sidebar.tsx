@@ -24,6 +24,11 @@ const items = [
     icon: LogIn,
   },
   {
+    title: "Projects",
+    url: "/projects",
+    icon: Briefcase,
+  },
+  {
     title: "Dashboard",
     url: "/dashboard",
     icon: FileText,
