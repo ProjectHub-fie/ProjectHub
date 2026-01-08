@@ -1,5 +1,37 @@
+import { useState, useEffect } from "react";
 import { useRoute } from "wouter";
 import ProjectDetail from "@/components/project-detail";
+import { Skeleton } from "@/components/ui/skeleton";
+
+function ProjectSkeleton() {
+  return (
+    <div className="min-h-screen bg-background">
+      <div className="max-w-6xl mx-auto px-4 py-12 space-y-12">
+        <div className="flex flex-col md:flex-row gap-8">
+          <div className="w-full md:w-1/2">
+            <Skeleton className="aspect-video w-full rounded-2xl" />
+          </div>
+          <div className="w-full md:w-1/2 space-y-6">
+            <div className="space-y-2">
+              <Skeleton className="h-10 w-3/4" />
+              <Skeleton className="h-4 w-1/4" />
+            </div>
+            <Skeleton className="h-24 w-full" />
+            <div className="flex gap-2">
+              <Skeleton className="h-6 w-20" />
+              <Skeleton className="h-6 w-20" />
+              <Skeleton className="h-6 w-20" />
+            </div>
+          </div>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+          <Skeleton className="h-64 w-full" />
+          <Skeleton className="h-64 w-full" />
+        </div>
+      </div>
+    </div>
+  );
+}
 
 interface Project {
   id: string;
@@ -228,7 +260,17 @@ const projects: Project[] = [
 
 export default function ProjectPage() {
   const [match, params] = useRoute("/project/:id");
-  
+  const [isLoading, setIsLoading] = useState(true);
+
+  useEffect(() => {
+    const timer = setTimeout(() => setIsLoading(false), 800);
+    return () => clearTimeout(timer);
+  }, []);
+
+  if (isLoading) {
+    return <ProjectSkeleton />;
+  }
+
   if (!match || !params?.id) {
     return <div>Project not found</div>;
   }
