@@ -52,6 +52,9 @@ async function testDatabaseConnection() {
 }
 
 (async () => {
+  // Trust proxy for Vercel
+  app.set('trust proxy', 1);
+
   await testDatabaseConnection();
   const server = await registerRoutes(app);
 
