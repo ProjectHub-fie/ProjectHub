@@ -11,5 +11,9 @@ const connectionString = process.env.DATABASE_URL.includes('sslmode=')
   ? process.env.DATABASE_URL 
   : `${process.env.DATABASE_URL}${process.env.DATABASE_URL.includes('?') ? '&' : '?'}sslmode=require`;
 
-export const client = postgres(connectionString);
+console.log('Attempting to connect to database...');
+export const client = postgres(connectionString, {
+  ssl: 'require',
+  connect_timeout: 10,
+});
 export const db = drizzle(client, { schema });
