@@ -48,28 +48,6 @@ export const projectRequests = pgTable("project_requests", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
-// Projects table
-export const projects = pgTable("projects", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  title: text("title").notNull(),
-  description: text("description").notNull(),
-  longDescription: text("long_description"),
-  image: varchar("image", { length: 500 }).notNull(),
-  category: varchar("category", { length: 50 }).notNull(), // websites, bots, utilities
-  tech: json("tech").$type<string[]>().notNull(),
-  features: json("features").$type<string[]>(),
-  highlights: json("highlights").$type<string[]>(),
-  liveUrl: varchar("live_url", { length: 500 }),
-  githubUrl: varchar("github_url", { length: 500 }),
-  status: varchar("status", { length: 50 }).notNull(),
-  statusColor: varchar("status_color", { length: 50 }).notNull(),
-  timeline: varchar("timeline", { length: 100 }),
-  teamSize: varchar("team_size", { length: 100 }),
-  userCount: varchar("user_count", { length: 100 }),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
-});
-
 // Schemas for validation
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
@@ -98,20 +76,8 @@ export const insertProjectRequestSchema = createInsertSchema(projectRequests).om
   technologies: z.array(z.string()).optional(),
 });
 
-export const insertProjectSchema = createInsertSchema(projects).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-}).extend({
-  tech: z.array(z.string()),
-  features: z.array(z.string()).optional().nullable(),
-  highlights: z.array(z.string()).optional().nullable(),
-});
-
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type UpsertUser = z.infer<typeof upsertUserSchema>;
 export type User = typeof users.$inferSelect;
 export type InsertProjectRequest = z.infer<typeof insertProjectRequestSchema>;
 export type ProjectRequest = typeof projectRequests.$inferSelect;
-export type InsertProject = z.infer<typeof insertProjectSchema>;
-export type Project = typeof projects.$inferSelect;
