@@ -154,7 +154,8 @@ export default function ProjectsSection() {
           {filteredProjects.map((project) => (
             <div
               key={project.id}
-              className="group bg-card rounded-2xl overflow-hidden border border-border hover:border-primary/50 transition-all duration-300 hover:-translate-y-2 hover:shadow-2xl"
+              className="group bg-card rounded-2xl overflow-hidden border border-border hover:border-primary/50 transition-all duration-300 hover:-translate-y-2 hover:shadow-2xl cursor-pointer"
+              onClick={() => setLocation(`/project/${project.id}`)}
               data-testid={`project-card-${project.id}`}
             >
               <div className="relative overflow-hidden">
@@ -194,7 +195,10 @@ export default function ProjectsSection() {
                 <div className="flex gap-4">
                   <Button
                     className="flex-1 bg-primary hover:bg-primary/90 text-primary-foreground py-2 rounded-lg font-medium transition-colors duration-200"
-                    onClick={() => project.liveUrl && window.open(project.liveUrl, '_blank')}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (project.liveUrl) window.open(project.liveUrl, '_blank');
+                    }}
                     data-testid={`button-demo-${project.id}`}
                   >
                     {getActionIcon(project.category)}
@@ -204,7 +208,10 @@ export default function ProjectsSection() {
                     <Button
                       variant="outline"
                       className="flex-1 border border-border hover:border-primary hover:text-primary text-foreground py-2 rounded-lg font-medium transition-all duration-200 bg-transparent"
-                      onClick={() => project.githubUrl && window.open(project.githubUrl, '_blank')}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (project.githubUrl) window.open(project.githubUrl, '_blank');
+                      }}
                       data-testid={`button-code-${project.id}`}
                     >
                       <Github className="w-4 h-4 mr-2" />

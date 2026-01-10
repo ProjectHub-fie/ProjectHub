@@ -257,7 +257,57 @@ const projects: Project[] = [
     timeline: "7 months development",
     teamSize: "4 developers",
     userCount: "10,000+ fitness enthusiasts"
-  }
+  },
+  {
+    id: "db",
+    title: "Database Dashboard",
+    description: "Online based database dashboard for your PostgreSQL.",
+    longDescription: "A comprehensive web-based management tool for PostgreSQL databases. It features real-time query execution, table schema visualization, and data export capabilities designed for developers who need quick access to their data.",
+    image: "/api/placeholder/400/300",
+    category: "websites",
+    tech: ["TypeScript", "React", "Node.js", "PostgreSQL"],
+    features: [
+      "Real-time SQL query editor with syntax highlighting",
+      "Interactive schema explorer and table designer",
+      "Data export in multiple formats (CSV, JSON, SQL)",
+      "Performance monitoring and query optimization tools"
+    ],
+    highlights: [
+      "Supports large-scale PostgreSQL instances",
+      "Optimized for high-concurrency database operations",
+      "Secure connection management with encryption"
+    ],
+    githubUrl: "https://github.com/rajroy1313/Database-web.git",
+    status: "Developing",
+    statusColor: "bg-red-500",
+    timeline: "Ongoing",
+    teamSize: "Solo project"
+  },
+  {
+    id: "wh",
+    title: "Discord Bot Hosting",
+    description: "Professional hosting solution for Discord bots.",
+    longDescription: "A dedicated hosting platform optimized for Discord bots, providing 24/7 uptime, automated deployments, and comprehensive monitoring tools to ensure your bot stays online and responsive.",
+    image: "/api/placeholder/400/300",
+    category: "websites",
+    tech: ["React", "TypeScript", "PostgreSQL", "Docker"],
+    features: [
+      "Automated bot deployment from GitHub repositories",
+      "Real-time console logs and performance metrics",
+      "DDoS protection and high-availability infrastructure",
+      "Easy scaling with one-click resource allocation"
+    ],
+    highlights: [
+      "99.9% uptime guaranteed for hosted bots",
+      "Low-latency global infrastructure",
+      "Integrated monitoring and alerting system"
+    ],
+    githubUrl: "https://github.com/rajroy1313/Webhost.git",
+    status: "In development",
+    statusColor: "bg-red-500",
+    timeline: "In development",
+    teamSize: "Solo project"
+  },
 ];
 
 export default function ProjectPage() {
