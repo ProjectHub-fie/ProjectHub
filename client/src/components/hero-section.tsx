@@ -110,7 +110,7 @@ export default function HeroSection() {
 
             onClick={() => setLocation("/dashboard")}
           >
-            Dashboard
+            Request your project
           </Button>
           <Button
             variant="outline"
