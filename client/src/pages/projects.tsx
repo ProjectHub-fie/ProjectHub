@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ExternalLink, Bot, Download, ArrowLeft, Github } from "lucide-react";
+import { ExternalLink, Bot, Download, ArrowLeft, Github, Network, User } from "lucide-react";
 
 interface Project {
   id: string;
@@ -15,6 +15,11 @@ interface Project {
   githubUrl?: string;
   status: string;
   statusColor: string;
+  architecture?: string;
+  author?: {
+    name: string;
+    avatar?: string;
+  };
 }
 
 const projects: Project[] = [
@@ -27,7 +32,9 @@ const projects: Project[] = [
     tech: ["discord.js", "C"," mySQL"],
     liveUrl: "https://discord.com/oauth2/authorize?client_id=1356575287151951943&permissions=8&integration_type=0&scope=bot%20applications.commands",
     status: " Active",
-    statusColor: "bg-green-500"
+    statusColor: "bg-green-500",
+    author: { name: "Raj Roy" },
+    architecture: "Multi-sharded microservices architecture with a centralized command handler and persistent MySQL storage for cross-server data consistency."
   },
   {
     id: "pbo",
@@ -38,7 +45,8 @@ const projects: Project[] = [
     tech: ["Typescript React", "Node.js", "PostgreSQL"],
     liveUrl: "https://primebot-online.vercel.app",
     status: "In development",
-    statusColor: "bg-red-500"
+    statusColor: "bg-red-500",
+    author: { name: "Raj Roy" }
   },
   {
     id: "Sky",
@@ -49,7 +57,8 @@ const projects: Project[] = [
     tech: ["Discord.js"],
     liveUrl: "",
     status: "Active",
-    statusColor: "bg-green-500"
+    statusColor: "bg-green-500",
+    author: { name: "Raj Roy" }
   },
   {
     id: "db",
@@ -61,7 +70,9 @@ const projects: Project[] = [
     liveUrl: "",
     githubUrl: "https://github.com/rajroy1313/Database-web.git",
     status: "Developing",
-    statusColor: "bg-red-500"
+    statusColor: "bg-red-500",
+    author: { name: "Raj Roy" },
+    architecture: "Client-server architecture utilizing direct PostgreSQL connection protocols via secured tunneling for real-time data visualization."
   },
   {
     id: "wh",
@@ -73,7 +84,8 @@ const projects: Project[] = [
     liveUrl: "",
     githubUrl: "https://github.com/rajroy1313/Webhost.git",
     status: "In development",
-    statusColor: "bg-red-500"
+    statusColor: "bg-red-500",
+    author: { name: "Raj Roy" }
   }
 ];
 
@@ -162,10 +174,30 @@ export default function ProjectsPage() {
               </div>
 
               <div className="p-6">
-                <h3 className="text-xl font-bold mb-2">{project.title}</h3>
+                <div className="flex justify-between items-start mb-2">
+                  <h3 className="text-xl font-bold">{project.title}</h3>
+                  {project.author && (
+                    <div className="flex items-center gap-2 bg-secondary/50 px-2 py-1 rounded-lg text-[10px] text-muted-foreground">
+                      <User className="w-3 h-3" />
+                      <span>{project.author.name}</span>
+                    </div>
+                  )}
+                </div>
                 <p className="text-muted-foreground text-sm mb-4 line-clamp-3">
                   {project.description}
                 </p>
+
+                {project.architecture && (
+                  <div className="mb-4 p-3 bg-blue-500/5 border border-blue-500/10 rounded-xl">
+                    <div className="flex items-center gap-2 text-blue-400 font-semibold text-xs mb-1">
+                      <Network className="w-3 h-3" />
+                      Architecture
+                    </div>
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      {project.architecture}
+                    </p>
+                  </div>
+                )}
 
                 <div className="flex flex-wrap gap-2 mb-6">
                   {project.tech.map((tech) => (
