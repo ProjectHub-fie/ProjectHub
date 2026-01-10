@@ -56,13 +56,13 @@ export default function ProjectDetail({ project }: ProjectDetailProps) {
   };
 
   return (
-    <div className="min-h-screen bg-slate-900 py-8">
+    <div className="min-h-screen bg-background py-8">
       <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8">
         {/* Back Button */}
         <Button
           variant="ghost"
           onClick={() => setLocation("/")}
-          className="mb-8 text-slate-400 hover:text-white"
+          className="mb-8 hover-elevate"
           data-testid="button-back-to-projects"
         >
           <ArrowLeft className="w-4 h-4 mr-2" />
@@ -70,35 +70,36 @@ export default function ProjectDetail({ project }: ProjectDetailProps) {
         </Button>
 
         {/* Project Header */}
-        <div className="mb-8">
-          <div className="flex items-center gap-4 mb-4">
-            <h1 className="text-4xl md:text-5xl font-bold text-white">
+        <div className="mb-12">
+          <div className="flex flex-wrap items-center gap-4 mb-6">
+            <h1 className="text-4xl md:text-5xl font-bold tracking-tight">
               {project.title}
             </h1>
-            <div className={`${project.statusColor} text-white px-4 py-2 rounded-full text-sm font-medium`}>
+            <Badge className={`${project.statusColor} text-white px-4 py-1.5 rounded-full text-sm font-semibold uppercase tracking-wider border-0 shadow-sm`}>
               {project.status}
-            </div>
+            </Badge>
           </div>
-          <p className="text-xl text-slate-300 leading-relaxed">
+          <p className="text-xl text-muted-foreground leading-relaxed max-w-3xl">
             {project.longDescription}
           </p>
         </div>
 
         {/* Project Image */}
-        <div className="relative mb-8 rounded-2xl overflow-hidden">
+        <div className="relative mb-12 rounded-2xl overflow-hidden shadow-2xl border bg-card">
           <img 
             src={project.image}
             alt={project.title}
-            className="w-full h-64 md:h-96 object-cover"
+            className="w-full h-64 md:h-[450px] object-cover transition-transform duration-500 hover:scale-[1.02]"
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-slate-900/60 to-transparent"></div>
+          <div className="absolute inset-0 bg-gradient-to-t from-background/40 to-transparent"></div>
         </div>
 
         {/* Action Buttons */}
-        <div className="flex flex-wrap gap-4 mb-8">
+        <div className="flex flex-wrap gap-4 mb-12">
           {project.liveUrl && (
             <Button
-              className="bg-blue-500 hover:bg-blue-600 text-white px-6 py-3 rounded-lg font-medium"
+              size="lg"
+              className="hover-elevate px-8"
               onClick={() => window.open(project.liveUrl, '_blank')}
               data-testid="button-live-demo"
             >
@@ -108,8 +109,9 @@ export default function ProjectDetail({ project }: ProjectDetailProps) {
           )}
           {project.githubUrl && (
             <Button
+              size="lg"
               variant="outline"
-              className="border-slate-600 hover:border-blue-500 hover:text-blue-400 text-slate-300 px-6 py-3 rounded-lg font-medium"
+              className="hover-elevate px-8"
               onClick={() => window.open(project.githubUrl, '_blank')}
               data-testid="button-view-code"
             >
@@ -119,52 +121,59 @@ export default function ProjectDetail({ project }: ProjectDetailProps) {
           )}
         </div>
 
-        <div className="grid md:grid-cols-2 gap-8">
+        <div className="grid md:grid-cols-2 gap-10">
           {/* Project Details */}
-          <Card className="bg-slate-800 border-slate-700">
-            <CardContent className="p-6">
-              <h3 className="text-xl font-bold text-white mb-4">Project Details</h3>
+          <Card className="hover-elevate border-muted/40 shadow-sm">
+            <CardContent className="p-8">
+              <h3 className="text-2xl font-bold mb-6">Project Overview</h3>
               
-              <div className="space-y-4">
-                <div className="flex items-center gap-3">
-                  <Calendar className="w-5 h-5 text-blue-400" />
+              <div className="space-y-6">
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                    <Calendar className="w-5 h-5 text-primary" />
+                  </div>
                   <div>
-                    <p className="text-slate-400 text-sm">Timeline</p>
-                    <p className="text-white">{project.timeline}</p>
+                    <p className="text-muted-foreground text-xs uppercase font-bold tracking-widest">Timeline</p>
+                    <p className="font-semibold">{project.timeline}</p>
                   </div>
                 </div>
                 
                 {project.teamSize && (
-                  <div className="flex items-center gap-3">
-                    <Users className="w-5 h-5 text-blue-400" />
+                  <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                      <Users className="w-5 h-5 text-primary" />
+                    </div>
                     <div>
-                      <p className="text-slate-400 text-sm">Team Size</p>
-                      <p className="text-white">{project.teamSize}</p>
+                      <p className="text-muted-foreground text-xs uppercase font-bold tracking-widest">Team Size</p>
+                      <p className="font-semibold">{project.teamSize}</p>
                     </div>
                   </div>
                 )}
                 
                 {project.userCount && (
-                  <div className="flex items-center gap-3">
-                    <Star className="w-5 h-5 text-blue-400" />
+                  <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center">
+                      <Star className="w-5 h-5 text-primary" />
+                    </div>
                     <div>
-                      <p className="text-slate-400 text-sm">Users</p>
-                      <p className="text-white">{project.userCount}</p>
+                      <p className="text-muted-foreground text-xs uppercase font-bold tracking-widest">Users</p>
+                      <p className="font-semibold">{project.userCount}</p>
                     </div>
                   </div>
                 )}
               </div>
 
-              <Separator className="my-6 bg-slate-600" />
+              <Separator className="my-8" />
 
               {/* Tech Stack */}
               <div>
-                <h4 className="text-lg font-semibold text-white mb-3">Technology Stack</h4>
+                <h4 className="text-lg font-bold mb-4">Technology Stack</h4>
                 <div className="flex flex-wrap gap-2">
                   {project.tech.map((tech) => (
                     <Badge
                       key={tech}
-                      className="bg-blue-500/20 text-blue-400 border-blue-500/30 px-3 py-1 rounded-full"
+                      variant="secondary"
+                      className="no-default-hover-elevate px-4 py-1"
                     >
                       {tech}
                     </Badge>
@@ -175,14 +184,16 @@ export default function ProjectDetail({ project }: ProjectDetailProps) {
           </Card>
 
           {/* Features */}
-          <Card className="bg-slate-800 border-slate-700">
-            <CardContent className="p-6">
-              <h3 className="text-xl font-bold text-white mb-4">Key Features</h3>
-              <div className="space-y-3">
+          <Card className="hover-elevate border-muted/40 shadow-sm">
+            <CardContent className="p-8">
+              <h3 className="text-2xl font-bold mb-6">Key Features</h3>
+              <div className="space-y-4">
                 {project.features.map((feature, index) => (
-                  <div key={index} className="flex items-start gap-3">
-                    <CheckCircle2 className="w-5 h-5 text-green-400 mt-0.5 flex-shrink-0" />
-                    <p className="text-slate-300">{feature}</p>
+                  <div key={index} className="flex items-start gap-4">
+                    <div className="mt-1">
+                      <CheckCircle2 className="w-5 h-5 text-green-500" />
+                    </div>
+                    <p className="text-foreground/90 font-medium leading-tight">{feature}</p>
                   </div>
                 ))}
               </div>
@@ -192,14 +203,14 @@ export default function ProjectDetail({ project }: ProjectDetailProps) {
 
         {/* Project Highlights */}
         {project.highlights.length > 0 && (
-          <Card className="bg-slate-800 border-slate-700 mt-8">
-            <CardContent className="p-6">
-              <h3 className="text-xl font-bold text-white mb-4">Project Highlights</h3>
-              <div className="grid md:grid-cols-2 gap-4">
+          <Card className="hover-elevate border-muted/40 shadow-sm mt-10">
+            <CardContent className="p-8">
+              <h3 className="text-2xl font-bold mb-6 text-center">Project Success Metrics</h3>
+              <div className="grid md:grid-cols-2 gap-6">
                 {project.highlights.map((highlight, index) => (
-                  <div key={index} className="flex items-start gap-3">
-                    <Star className="w-5 h-5 text-yellow-400 mt-0.5 flex-shrink-0" />
-                    <p className="text-slate-300">{highlight}</p>
+                  <div key={index} className="flex items-start gap-4 p-4 rounded-xl bg-primary/5 border border-primary/10">
+                    <Star className="w-6 h-6 text-yellow-500 mt-0.5 flex-shrink-0" />
+                    <p className="font-semibold leading-snug">{highlight}</p>
                   </div>
                 ))}
               </div>
