@@ -34,7 +34,7 @@ const projects: Project[] = [
     status: " Active",
     statusColor: "bg-green-500",
     author: { name: "Raj Roy" },
-    architecture: "Multi-sharded microservices architecture with a centralized command handler and persistent MySQL storage for cross-server data consistency."
+    architecture: "Multi-sharded microservices architecture with a centralized command handler and persistent MySQL storage."
   },
   {
     id: "pbo",
@@ -46,7 +46,8 @@ const projects: Project[] = [
     liveUrl: "https://primebot-online.vercel.app",
     status: "In development",
     statusColor: "bg-red-500",
-    author: { name: "Raj Roy" }
+    author: { name: "Raj Roy" },
+    architecture: "React-based frontend with a Node.js backend using a micro-frontend approach for dashboard modules."
   },
   {
     id: "Sky",
