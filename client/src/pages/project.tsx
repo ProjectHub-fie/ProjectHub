@@ -57,10 +57,10 @@ const projects: Project[] = [
     id: "PrimeBot",
     title: "PrimeBot",
     description: "PrimeBot is a sleek, multipurpose Discord bot built to supercharge your server with essential tools.",
-    longDescription: "PrimeBot is a comprehensive Discord bot designed to enhance server functionality with a complete suite of moderation, entertainment, and utility features. Built with performance and reliability in mind, it serves thousands of Discord servers with 99.9% uptime.",
+    longDescription: "PrimeBot is a comprehensive Discord bot designed to enhance server functionality with a complete suite of moderation, entertainment, and utility features. Built with performance and reliability in mind, it serves thousands of Discord servers with 99.9% uptime. It features a robust architecture that handles high concurrent users and provides a seamless management experience through its companion dashboard.",
     image: "/primebot.gif",
     category: "bots",
-    tech: ["Discord.js", "Node.js", "MySQL", "Docker", "Redis"],
+    tech: ["Discord.js", "Node.js", "MySQL", "Docker", "Redis", "TypeScript", "Express"],
     features: [
       "Dynamic giveaway system with customizable entry requirements",
       "Interactive polls with real-time voting and analytics",
@@ -77,9 +77,11 @@ const projects: Project[] = [
       "Serving 500+ Discord servers with 50K+ active users",
       "99.9% uptime with distributed hosting infrastructure",
       "Processed over 1M+ commands successfully",
-      "Featured in Discord Bot Lists with 4.8/5 star rating"
+      "Featured in Discord Bot Lists with 4.8/5 star rating",
+      "Optimized for low latency and high performance"
     ],
     liveUrl: "https://discord.com/oauth2/authorize?client_id=1352315703830773863&permissions=8&integration_type=0&scope=bot",
+    githubUrl: "https://github.com/yuborajroy/primebot",
     status: "Active",
     statusColor: "bg-green-500",
     timeline: "6 months development",
