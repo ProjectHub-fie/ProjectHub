@@ -4,6 +4,19 @@
 
 This is a modern full-stack portfolio web application built with React and Node.js. The frontend features a responsive, single-page portfolio showcasing projects, skills, about information, and contact details with smooth scrolling navigation. The backend provides a REST API foundation with user management capabilities and uses PostgreSQL for data persistence through Drizzle ORM.
 
+## Featured Projects
+
+Our latest showcase includes high-impact projects with sophisticated architectures:
+
+- **PrimeBot**: A multi-sharded microservices Discord bot with a centralized command handler and persistent MySQL storage.
+- **PrimeBot Dashboard**: A React-based management interface utilizing a micro-frontend approach for modular dashboard features.
+- **Database Dashboard**: A client-server architecture utilizing direct PostgreSQL connection protocols for real-time visualization.
+- **Sky Bot & Hosting Platform**: Advanced automation and infrastructure tools for the Discord ecosystem.
+
+## Authors
+
+- **Raj Roy**: Lead Developer and Architect.
+
 ## System Architecture
 
 ### Frontend Architecture
