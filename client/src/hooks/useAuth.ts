@@ -14,8 +14,9 @@ export function useAuth() {
   const { data: authData, isLoading } = useQuery({
     queryKey: ["/api/auth/me"],
     retry: false,
-    staleTime: 0,
-    gcTime: 0,
+    staleTime: Infinity,
+    gcTime: Infinity,
+    enabled: !!localStorage.getItem("auth_session_active"),
   });
 
   const user = (authData as any)?.user;
@@ -34,6 +35,7 @@ export function useAuth() {
         throw new Error(error.message || "Login failed");
       }
       
+      localStorage.setItem("auth_session_active", "true");
       return response.json();
     },
     onSuccess: (data) => {
@@ -61,6 +63,7 @@ export function useAuth() {
         throw new Error(error.message || "Registration failed");
       }
       
+      localStorage.setItem("auth_session_active", "true");
       return response.json();
     },
     onSuccess: (data) => {
@@ -72,6 +75,7 @@ export function useAuth() {
   const logoutMutation = useMutation({
     mutationFn: async () => {
       await apiRequest("/api/auth/logout", "POST");
+      localStorage.removeItem("auth_session_active");
     },
     onSuccess: () => {
       queryClient.clear();
