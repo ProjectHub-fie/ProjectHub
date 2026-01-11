@@ -50,7 +50,7 @@ export default function ProjectRequestPage() {
 
   const { data: userRequests } = useQuery({
     queryKey: ["/api/project-requests"],
-    enabled: isAuthenticated,
+    enabled: isAuthenticated && !!user,
   });
 
   const createRequestMutation = useMutation({
@@ -102,7 +102,7 @@ export default function ProjectRequestPage() {
           <div className="flex items-center gap-4">
             <div className="flex items-center gap-2 text-slate-300">
               <User className="h-4 w-4" />
-              <span>{user?.firstName} {user?.lastName}</span>
+              <span>{(user as any)?.firstName} {(user as any)?.lastName}</span>
             </div>
             <Button
               variant="outline"
@@ -247,7 +247,7 @@ export default function ProjectRequestPage() {
             <CardContent>
               {userRequests && Array.isArray(userRequests) && userRequests.length > 0 ? (
                 <div className="space-y-4">
-                  {userRequests.map((request: any) => (
+                  {Array.isArray(userRequests) && userRequests.map((request: any) => (
                     <div key={request.id} className="p-4 bg-slate-700 rounded-lg">
                       <h4 className="font-medium text-white mb-2" data-testid={`request-title-${request.id}`}>{request.title}</h4>
                       <p className="text-sm text-slate-400 mb-2 line-clamp-2" data-testid={`request-description-${request.id}`}>
