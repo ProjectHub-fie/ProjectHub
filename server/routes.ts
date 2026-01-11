@@ -231,9 +231,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
     })(req, res, next);
   });
 
-  // No-op for removed /api/auth/me
   app.get('/api/auth/me', (req, res) => {
-    res.status(410).json({ message: "Endpoint removed" });
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Not authenticated" });
+    }
+    res.json(req.user);
   });
 
   // Contact form endpoint

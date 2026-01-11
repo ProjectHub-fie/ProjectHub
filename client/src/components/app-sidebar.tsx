@@ -40,7 +40,7 @@ export function AppSidebar() {
     },
   ];
 
-  if (user?.isAdmin) {
+  if (user && 'isAdmin' in user && user.isAdmin) {
     navItems.push({
       title: "Admin",
       url: "/admin",
