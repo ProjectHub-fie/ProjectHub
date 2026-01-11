@@ -29,11 +29,11 @@ const projects: Project[] = [
     description: "PrimeBot is a sleek, multipurpose Discord bot built to supercharge your server with essential tools. It features a dynamic giveaway system with customizable entries, interactive polls for instant feedback, and a ticket system for seamless support handling.",
     image: "/primebot.gif",
     category: "bots",
-    tech: ["discord.js", "C"," mySQL"],
+    tech: ["discord.js", "C"," PostgreeSQL"],
     liveUrl: "https://discord.com/oauth2/authorize?client_id=1356575287151951943&permissions=8&integration_type=0&scope=bot%20applications.commands",
     status: " Active",
     statusColor: "bg-green-500",
-    author: { name: "Raj Roy" },
+    author: { name: "Team ProjectHub" },
     architecture: "Multi-sharded microservices architecture with a centralized command handler and persistent MySQL storage."
   },
   {
@@ -46,7 +46,7 @@ const projects: Project[] = [
     liveUrl: "https://primebot-online.vercel.app",
     status: "In development",
     statusColor: "bg-red-500",
-    author: { name: "Raj Roy" },
+    author: { name: "Team ProjectHub" },
     architecture: "React-based frontend with a Node.js backend using a micro-frontend approach for dashboard modules."
   },
   {

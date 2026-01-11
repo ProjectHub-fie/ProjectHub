@@ -81,12 +81,12 @@ const projects: Project[] = [
       "Optimized for low latency and high performance"
     ],
     liveUrl: "https://discord.com/oauth2/authorize?client_id=1352315703830773863&permissions=8&integration_type=0&scope=bot",
-    githubUrl: "https://github.com/yuborajroy/primebot",
+    //githubUrl: "https://github.com/yuborajroy/primebot",
     status: "Active",
     statusColor: "bg-green-500",
     timeline: "6 months development",
-    teamSize: "Solo project",
-    userCount: "50,000+ active users"
+    teamSize: "Team ProjectHub",
+    userCount: "500+ active users"
   },
   {
     id: "pbo",
@@ -115,12 +115,12 @@ const projects: Project[] = [
       "Comprehensive admin tools for server management"
     ],
     liveUrl: "https://primebot-online.vercel.app",
-    githubUrl: "https://github.com/yourusername/primebot-dashboard",
-    status: "Development",
-    statusColor: "bg-yellow-500",
-    timeline: "3 months development",
-    teamSize: "Solo project",
-    userCount: "1,000+ dashboard users"
+    //githubUrl: "https://github.com/yourusername/primebot-dashboard",
+    status: "Developing",
+    statusColor: "bg-red-500",
+    timeline: "In development",
+    teamSize: "Team ProjectHub",
+    userCount: "....."
   },
   {
     id: "Sky",

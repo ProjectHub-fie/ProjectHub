@@ -32,7 +32,7 @@ const projects: Project[] = [
     liveUrl: "https://discord.com/oauth2/authorize?client_id=1356575287151951943&permissions=8&integration_type=0&scope=bot%20applications.commands",
     status: " Active",
     statusColor: "bg-green-500",
-    author: { name: "Raj Roy" },
+    author: { name: "Team ProjectHub" },
     architecture: "Multi-sharded microservices architecture with a centralized command handler."
   },
   {
@@ -45,7 +45,7 @@ const projects: Project[] = [
     liveUrl: "https://primebot-online.vercel.app",
     status: "In development",
     statusColor: "bg-red-500",
-    author: { name: "Raj Roy" },
+    author: { name: "Team ProjectHub" },
     architecture: "React-based frontend with a Node.js backend using a micro-frontend approach."
   },
   {
@@ -133,7 +133,7 @@ export default function ProjectsSection() {
             </span>
           </h2>
           <p className="text-xl text-muted-foreground max-w-2xl mx-auto">
-            Explore my latest work in web development, automation, and developer tools
+            Explore our latest work in web development, automation, and developer tools
           </p>
         </div>
 
