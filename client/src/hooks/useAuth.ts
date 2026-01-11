@@ -11,15 +11,10 @@ interface User {
 export function useAuth() {
   const queryClient = useQueryClient();
 
-  const { data: authData, isLoading } = useQuery({
-    queryKey: ["/api/auth/me"],
-    retry: false,
-    staleTime: Infinity,
-    gcTime: Infinity,
-    enabled: !!localStorage.getItem("auth_session_active"),
+  const { data: user, isLoading } = useQuery({
+    queryKey: ["/api/auth/login"],
+    enabled: false,
   });
-
-  const user = (authData as any)?.user;
 
   const loginMutation = useMutation({
     mutationFn: async (credentials: { email: string; password: string }) => {
@@ -35,12 +30,10 @@ export function useAuth() {
         throw new Error(error.message || "Login failed");
       }
       
-      localStorage.setItem("auth_session_active", "true");
       return response.json();
     },
     onSuccess: (data) => {
-      queryClient.setQueryData(["/api/auth/me"], data);
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      queryClient.setQueryData(["/api/auth/login"], data.user);
     },
   });
 
@@ -63,22 +56,19 @@ export function useAuth() {
         throw new Error(error.message || "Registration failed");
       }
       
-      localStorage.setItem("auth_session_active", "true");
       return response.json();
     },
     onSuccess: (data) => {
-      queryClient.setQueryData(["/api/auth/me"], data);
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/me"] });
+      queryClient.setQueryData(["/api/auth/login"], data.user);
     },
   });
 
   const logoutMutation = useMutation({
     mutationFn: async () => {
       await apiRequest("/api/auth/logout", "POST");
-      localStorage.removeItem("auth_session_active");
     },
     onSuccess: () => {
-      queryClient.clear();
+      queryClient.setQueryData(["/api/auth/login"], null);
       window.location.href = "/";
     },
   });

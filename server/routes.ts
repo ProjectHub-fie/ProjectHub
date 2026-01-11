@@ -231,20 +231,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     })(req, res, next);
   });
 
-  // Get current user
+  // No-op for removed /api/auth/me
   app.get('/api/auth/me', (req, res) => {
-    // Set cache control headers to prevent 304/caching issues
-    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate');
-    res.setHeader('Pragma', 'no-cache');
-    res.setHeader('Expires', '0');
-    res.setHeader('Surrogate-Control', 'no-store');
-
-    if (req.isAuthenticated()) {
-      const user = req.user as any;
-      res.json({ user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName } });
-    } else {
-      res.json({ user: null });
-    }
+    res.status(410).json({ message: "Endpoint removed" });
   });
 
   // Contact form endpoint
