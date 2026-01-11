@@ -25,15 +25,17 @@ export function useAuth() {
         body: JSON.stringify(credentials),
       });
       
+      const data = await response.json();
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || "Login failed");
+        throw new Error(data.message || "Login failed");
       }
       
-      return response.json();
+      return data;
     },
     onSuccess: (data) => {
-      queryClient.setQueryData(["/api/auth/login"], data.user);
+      if (data && data.user) {
+        queryClient.setQueryData(["/api/auth/login"], data.user);
+      }
     },
   });
 
@@ -51,15 +53,17 @@ export function useAuth() {
         body: JSON.stringify(userData),
       });
       
+      const data = await response.json();
       if (!response.ok) {
-        const error = await response.json();
-        throw new Error(error.message || "Registration failed");
+        throw new Error(data.message || "Registration failed");
       }
       
-      return response.json();
+      return data;
     },
     onSuccess: (data) => {
-      queryClient.setQueryData(["/api/auth/login"], data.user);
+      if (data && data.user) {
+        queryClient.setQueryData(["/api/auth/login"], data.user);
+      }
     },
   });
 
