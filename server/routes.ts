@@ -231,11 +231,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
     })(req, res, next);
   });
 
+  // No-op for removed /api/auth/me
   app.get('/api/auth/me', (req, res) => {
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ message: "Not authenticated" });
-    }
-    res.json(req.user);
+    res.status(410).json({ message: "Endpoint removed" });
   });
 
   // Contact form endpoint
@@ -304,46 +302,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Project requests fetch error:', error);
       res.status(500).json({ message: "Failed to fetch project requests" });
-    }
-  });
-
-  // Admin routes
-  const requireAdmin = (req: any, res: any, next: any) => {
-    if (req.isAuthenticated() && req.user?.isAdmin) {
-      return next();
-    }
-    res.status(403).json({ message: "Admin access required" });
-  };
-
-  app.get('/api/admin/project-requests', requireAdmin, async (_req, res) => {
-    try {
-      const requests = await storage.getAllProjectRequests();
-      res.json(requests);
-    } catch (error) {
-      console.error('Admin fetch requests error:', error);
-      res.status(500).json({ message: "Failed to fetch all requests" });
-    }
-  });
-
-  app.patch('/api/admin/project-requests/:id/status', requireAdmin, async (req, res) => {
-    try {
-      const { id } = req.params;
-      const { status } = req.body;
-      const updated = await storage.updateProjectRequestStatus(id, status);
-      res.json(updated);
-    } catch (error) {
-      console.error('Admin update status error:', error);
-      res.status(500).json({ message: "Failed to update status" });
-    }
-  });
-
-  app.get('/api/admin/users', requireAdmin, async (_req, res) => {
-    try {
-      const usersList = await storage.getAllUsers();
-      res.json(usersList);
-    } catch (error) {
-      console.error('Admin fetch users error:', error);
-      res.status(500).json({ message: "Failed to fetch users" });
     }
   });
 

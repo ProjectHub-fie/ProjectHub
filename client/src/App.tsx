@@ -10,14 +10,12 @@ import Login from "@/pages/login";
 import Projects from "@/pages/projects";
 import ProjectRequest from "@/pages/project-request";
 import ProjectPage from "@/pages/project";
-import AdminDashboard from "@/pages/admin";
 import ErrorPage from "@/pages/error";
 import NotFound from "@/pages/not-found";
-import { useAuth } from "@/hooks/useAuth";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { Button } from "@/components/ui/button";
-import { Sun, Moon, Loader2 } from "lucide-react";
+import { Sun, Moon } from "lucide-react";
 import { useTheme } from "@/components/theme-provider";
 
 function ThemeToggle() {
@@ -37,23 +35,12 @@ function ThemeToggle() {
 }
 
 function Router() {
-  const { isLoading } = useAuth();
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-full">
-        <Loader2 className="h-8 w-8 animate-spin text-primary" />
-      </div>
-    );
-  }
-
   return (
     <Switch>
       <Route path="/" component={Home} />
       <Route path="/login" component={Login} />
       <Route path="/projects" component={Projects} />
       <Route path="/dashboard" component={ProjectRequest} />
-      <Route path="/admin" component={AdminDashboard} />
       <Route path="/project/:id" component={ProjectPage} />
       <Route path="/error" component={ErrorPage} />
       <Route component={NotFound} />

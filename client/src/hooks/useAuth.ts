@@ -6,23 +6,15 @@ interface User {
   email: string | null;
   firstName: string | null;
   lastName: string | null;
-  isAdmin: boolean;
 }
 
 export function useAuth() {
   const queryClient = useQueryClient();
 
-  const { data: user, isLoading } = useQuery<User | null>({
+  const { data: user, isLoading } = useQuery({
     queryKey: ["/api/auth/login"],
     enabled: false,
   });
-
-  const meQuery = useQuery<User | null>({
-    queryKey: ["/api/auth/me"],
-    staleTime: Infinity,
-  });
-
-  const currentUser = user || meQuery.data;
 
   const loginMutation = useMutation({
     mutationFn: async (credentials: { email: string; password: string }) => {
@@ -46,7 +38,6 @@ export function useAuth() {
     onSuccess: (data) => {
       if (data && data.user) {
         queryClient.setQueryData(["/api/auth/login"], data.user);
-        queryClient.setQueryData(["/api/auth/me"], data.user);
       }
     },
   });
@@ -75,7 +66,6 @@ export function useAuth() {
     onSuccess: (data) => {
       if (data && data.user) {
         queryClient.setQueryData(["/api/auth/login"], data.user);
-        queryClient.setQueryData(["/api/auth/me"], data.user);
       }
     },
   });
@@ -86,15 +76,14 @@ export function useAuth() {
     },
     onSuccess: () => {
       queryClient.setQueryData(["/api/auth/login"], null);
-      queryClient.setQueryData(["/api/auth/me"], null);
       window.location.href = "/";
     },
   });
 
   return {
-    user: currentUser,
-    isLoading: isLoading || meQuery.isLoading,
-    isAuthenticated: !!currentUser,
+    user,
+    isLoading,
+    isAuthenticated: !!user,
     login: loginMutation.mutateAsync,
     register: registerMutation.mutateAsync,
     logout: logoutMutation.mutateAsync,
