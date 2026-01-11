@@ -80,6 +80,33 @@ export function useAuth() {
     },
   });
 
+  const updateProfileMutation = useMutation({
+    mutationFn: async (userData: {
+      firstName?: string;
+      lastName?: string;
+      profileImageUrl?: string;
+    }) => {
+      const response = await fetch("/api/auth/user", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify(userData),
+      });
+      
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to update profile");
+      }
+      
+      return data;
+    },
+    onSuccess: (data) => {
+      if (data && data.user) {
+        queryClient.setQueryData(["/api/auth/login"], data.user);
+      }
+    },
+  });
+
   return {
     user,
     isLoading,
@@ -87,8 +114,10 @@ export function useAuth() {
     login: loginMutation.mutateAsync,
     register: registerMutation.mutateAsync,
     logout: logoutMutation.mutateAsync,
+    updateProfile: updateProfileMutation.mutateAsync,
     isLoggingIn: loginMutation.isPending,
     isRegistering: registerMutation.isPending,
     isLoggingOut: logoutMutation.isPending,
+    isUpdatingProfile: updateProfileMutation.isPending,
   };
 }

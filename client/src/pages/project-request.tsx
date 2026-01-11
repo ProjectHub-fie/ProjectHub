@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -14,7 +14,8 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { useLocation } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
-import { LogOut, Plus, Clock, User } from "lucide-react";
+import { LogOut, Plus, Clock, User, Settings, Camera } from "lucide-react";
+import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 
 const projectRequestSchema = z.object({
   title: z.string().min(1, "Project title is required"),
@@ -24,11 +25,18 @@ const projectRequestSchema = z.object({
   technologies: z.array(z.string()).optional(),
 });
 
+const profileSchema = z.object({
+  firstName: z.string().min(1, "First name is required"),
+  lastName: z.string().min(1, "Last name is required"),
+  profileImageUrl: z.string().url("Invalid image URL").or(z.literal("")),
+});
+
 export default function ProjectRequestPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-  const { user, isLoading, isAuthenticated, logout } = useAuth();
+  const { user, isLoading, isAuthenticated, logout, updateProfile, isUpdatingProfile } = useAuth();
   const queryClient = useQueryClient();
+  const [showSettings, setShowSettings] = useState(false);
 
   const form = useForm<z.infer<typeof projectRequestSchema>>({
     resolver: zodResolver(projectRequestSchema),
@@ -40,6 +48,26 @@ export default function ProjectRequestPage() {
       technologies: [],
     },
   });
+
+  const profileForm = useForm<z.infer<typeof profileSchema>>({
+    resolver: zodResolver(profileSchema),
+    defaultValues: {
+      firstName: (user as any)?.firstName || "",
+      lastName: (user as any)?.lastName || "",
+      profileImageUrl: (user as any)?.profileImageUrl || "",
+    },
+  });
+
+  // Update profile form when user data loads
+  useEffect(() => {
+    if (user) {
+      profileForm.reset({
+        firstName: (user as any).firstName || "",
+        lastName: (user as any).lastName || "",
+        profileImageUrl: (user as any).profileImageUrl || "",
+      });
+    }
+  }, [user, profileForm]);
 
   // Redirect if not authenticated
   useEffect(() => {
@@ -78,6 +106,23 @@ export default function ProjectRequestPage() {
     createRequestMutation.mutate(values);
   };
 
+  const onUpdateProfile = async (values: z.infer<typeof profileSchema>) => {
+    try {
+      await updateProfile(values);
+      toast({
+        title: "Profile Updated",
+        description: "Your profile information has been updated successfully.",
+      });
+      setShowSettings(false);
+    } catch (error: any) {
+      toast({
+        title: "Update Failed",
+        description: error.message || "Failed to update profile. Please try again.",
+        variant: "destructive",
+      });
+    }
+  };
+
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-slate-900">
@@ -94,27 +139,135 @@ export default function ProjectRequestPage() {
     <div className="min-h-screen bg-slate-900 py-8 px-4">
       <div className="max-w-4xl mx-auto">
         {/* Header */}
-        <div className="flex justify-between items-center mb-8">
+        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 mb-8">
           <div>
             <h1 className="text-3xl font-bold text-white mb-2">Request Your Project</h1>
             <p className="text-slate-400">Tell us about your dream project and we'll bring it to life!</p>
           </div>
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2 text-slate-300">
-              <User className="h-4 w-4" />
-              <span>{(user as any)?.firstName} {(user as any)?.lastName}</span>
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex items-center gap-3 bg-slate-800 p-2 rounded-full pr-4">
+              <Avatar className="h-8 w-8 border border-slate-600">
+                <AvatarImage src={(user as any)?.profileImageUrl} alt="Profile" />
+                <AvatarFallback className="bg-emerald-500 text-white">
+                  {(user as any)?.firstName?.[0]}{(user as any)?.lastName?.[0]}
+                </AvatarFallback>
+              </Avatar>
+              <span className="text-slate-300 font-medium">{(user as any)?.firstName} {(user as any)?.lastName}</span>
             </div>
-            <Button
-              variant="outline"
-              onClick={() => logout()}
-              className="bg-slate-800 border-slate-600 hover:bg-slate-700"
-              data-testid="button-logout"
-            >
-              <LogOut className="h-4 w-4 mr-2" />
-              Logout
-            </Button>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="icon"
+                onClick={() => setShowSettings(!showSettings)}
+                className={`bg-slate-800 border-slate-600 hover:bg-slate-700 ${showSettings ? 'text-emerald-400 border-emerald-500/50' : ''}`}
+                data-testid="button-settings"
+              >
+                <Settings className="h-4 w-4" />
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => logout()}
+                className="bg-slate-800 border-slate-600 hover:bg-slate-700"
+                data-testid="button-logout"
+              >
+                <LogOut className="h-4 w-4 md:mr-2" />
+                <span className="hidden md:inline">Logout</span>
+              </Button>
+            </div>
           </div>
         </div>
+
+        {showSettings && (
+          <Card className="mb-8 bg-slate-800 border-slate-700 overflow-hidden animate-in slide-in-from-top duration-300">
+            <CardHeader className="bg-slate-800/50 border-b border-slate-700">
+              <CardTitle className="text-white flex items-center gap-2">
+                <User className="h-5 w-5 text-emerald-400" />
+                Profile Settings
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="pt-6">
+              <Form {...profileForm}>
+                <form onSubmit={profileForm.handleSubmit(onUpdateProfile)} className="space-y-6">
+                  <div className="flex flex-col md:flex-row gap-8">
+                    <div className="flex flex-col items-center gap-4">
+                      <Avatar className="h-24 w-24 border-2 border-emerald-500/20">
+                        <AvatarImage src={profileForm.watch("profileImageUrl")} />
+                        <AvatarFallback className="bg-slate-700 text-2xl">
+                          {(user as any)?.firstName?.[0]}{(user as any)?.lastName?.[0]}
+                        </AvatarFallback>
+                      </Avatar>
+                      <div className="text-xs text-slate-500 flex items-center gap-1">
+                        <Camera className="h-3 w-3" />
+                        Preview
+                      </div>
+                    </div>
+                    <div className="flex-1 space-y-4">
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <FormField
+                          control={profileForm.control}
+                          name="firstName"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-slate-300">First Name</FormLabel>
+                              <FormControl>
+                                <Input {...field} className="bg-slate-700 border-slate-600 text-white" />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                        <FormField
+                          control={profileForm.control}
+                          name="lastName"
+                          render={({ field }) => (
+                            <FormItem>
+                              <FormLabel className="text-slate-300">Last Name</FormLabel>
+                              <FormControl>
+                                <Input {...field} className="bg-slate-700 border-slate-600 text-white" />
+                              </FormControl>
+                              <FormMessage />
+                            </FormItem>
+                          )}
+                        />
+                      </div>
+                      <FormField
+                        control={profileForm.control}
+                        name="profileImageUrl"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel className="text-slate-300">Profile Image URL</FormLabel>
+                            <FormControl>
+                              <Input {...field} placeholder="https://..." className="bg-slate-700 border-slate-600 text-white" />
+                            </FormControl>
+                            <FormDescription className="text-slate-500">Paste a link to your avatar image</FormDescription>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+                      <div className="flex justify-end gap-3 pt-2">
+                        <Button 
+                          type="button" 
+                          variant="ghost" 
+                          onClick={() => setShowSettings(false)}
+                          className="text-slate-400 hover:text-white"
+                        >
+                          Cancel
+                        </Button>
+                        <Button 
+                          type="submit" 
+                          disabled={isUpdatingProfile}
+                          className="bg-emerald-600 hover:bg-emerald-700 text-white min-w-[120px]"
+                        >
+                          {isUpdatingProfile ? "Saving..." : "Save Changes"}
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </form>
+              </Form>
+            </CardContent>
+          </Card>
+        )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
           {/* Project Request Form */}

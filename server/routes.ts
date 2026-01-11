@@ -236,6 +236,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.status(410).json({ message: "Endpoint removed" });
   });
 
+  // Update user profile
+  app.patch('/api/auth/user', requireAuth, async (req, res) => {
+    try {
+      const user = req.user as any;
+      const { firstName, lastName, profileImageUrl } = req.body;
+
+      const updatedUser = await storage.upsertUser({
+        id: user.id,
+        firstName: firstName !== undefined ? firstName : user.firstName,
+        lastName: lastName !== undefined ? lastName : user.lastName,
+        profileImageUrl: profileImageUrl !== undefined ? profileImageUrl : user.profileImageUrl,
+      });
+
+      res.json({ 
+        user: { 
+          id: updatedUser.id, 
+          email: updatedUser.email, 
+          firstName: updatedUser.firstName, 
+          lastName: updatedUser.lastName,
+          profileImageUrl: updatedUser.profileImageUrl
+        } 
+      });
+    } catch (error) {
+      console.error('Profile update error:', error);
+      res.status(500).json({ message: "Failed to update profile" });
+    }
+  });
+
   // Contact form endpoint
   app.post('/api/contact', async (req, res) => {
     try {
