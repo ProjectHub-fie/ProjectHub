@@ -139,27 +139,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Save reset token to user
       await storage.updateUserResetToken(user.id, resetToken, resetTokenExpiry);
 
-      // Send reset email using Resend
-      const { Resend } = await import('resend');
-      const resend = new Resend(process.env.RESEND_API_KEY);
+      // Send reset email using Mailjet
+      const Mailjet = (await import('node-mailjet')).default;
+      const mailjet = Mailjet.apiConnect(
+        process.env.MAILJET_API_KEY || '',
+        process.env.MAILJET_API_SECRET || ''
+      );
 
       const resetUrl = `${req.protocol}://${req.get('host')}/reset-password?token=${resetToken}`;
       
-      await resend.emails.send({
-        from: 'ProjectHub <onboarding@resend.dev>',
-        to: email,
-        subject: 'Password Reset Request',
-        html: `
-          <h2>Password Reset Request</h2>
-          <p>Hello ${user.firstName},</p>
-          <p>You requested to reset your password. Use the token below to reset your password:</p>
-          <p><strong>Reset Token:</strong> <code>${resetToken}</code></p>
-          <p>This token will expire in 1 hour.</p>
-          <p>If you didn't request this, please ignore this email.</p>
-          <hr>
-          <p><em>ProjectHub Security Team</em></p>
-        `
-      });
+      await mailjet
+        .post("send", { version: 'v3.1' })
+        .request({
+          Messages: [
+            {
+              From: {
+                Email: process.env.EMAIL_USER || 'dev.projecthub.fie@gmail.com',
+                Name: "ProjectHub"
+              },
+              To: [
+                {
+                  Email: email,
+                  Name: user.firstName || ''
+                }
+              ],
+              Subject: "Password Reset Request",
+              HTMLPart: `
+                <h2>Password Reset Request</h2>
+                <p>Hello ${user.firstName},</p>
+                <p>You requested to reset your password. Use the token below to reset your password:</p>
+                <p><strong>Reset Token:</strong> <code>${resetToken}</code></p>
+                <p>This token will expire in 1 hour.</p>
+                <p>If you didn't request this, please ignore this email.</p>
+                <hr>
+                <p><em>ProjectHub Security Team</em></p>
+              `
+            }
+          ]
+        });
 
       res.json({ message: "If an account with that email exists, you will receive a reset email" });
     } catch (error) {
@@ -224,16 +241,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { name, email, subject, message } = req.body;
 
-      // Import Resend
-      const { Resend } = await import('resend');
-      const resend = new Resend(process.env.RESEND_API_KEY);
+      // Import nodemailer
+      const { default: nodemailer } = await import('nodemailer');
 
-      // Send email using Resend
-      await resend.emails.send({
-        from: 'ProjectHub Contact <onboarding@resend.dev>',
-        to: 'dev.projecthub.fie@gmail.com',
+      // Create transporter using Gmail SMTP
+      const transporter = nodemailer.createTransport({
+        service: 'gmail',
+        auth: {
+          user: process.env.EMAIL_USER || 'dev.projecthub.fie@gmail.com',
+          pass: process.env.EMAIL_PASS || 'udrp pxqd cvvz oaro' // App password, not regular password
+        }
+      });
+
+      // Email content
+      const mailOptions = {
+        from: `"Contact Form" <${process.env.EMAIL_USER || 'dev.projecthub.fie@gmail.com'}>`,
+        to: process.env.EMAIL_USER || 'dev.projecthub.fie@gmail.com',
         subject: `New Contact Form: ${subject}`,
-        replyTo: email,
         html: `
           <h2>New Contact Form Submission</h2>
           <p><strong>Name:</strong> ${name}</p>
@@ -243,8 +267,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
           <p>${message.replace(/\n/g, '<br>')}</p>
           <hr>
           <p><em>Sent from ProjectHub contact form</em></p>
-        `
-      });
+        `,
+        replyTo: email
+      };
+
+      // Send email
+      await transporter.sendMail(mailOptions);
 
       res.json({ message: "Contact form submitted successfully" });
     } catch (error) {
