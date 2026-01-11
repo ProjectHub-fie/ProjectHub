@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
-import { pgTable, varchar, text, timestamp, json, uuid } from "drizzle-orm/pg-core";
+import { pgTable, varchar, text, timestamp, json, uuid, boolean } from "drizzle-orm/pg-core";
 
 // Session storage table for authentication
 export const sessions = pgTable(
@@ -27,6 +27,7 @@ export const users = pgTable("users", {
   // Traditional email/password (optional)
   username: text("username").unique(),
   password: text("password"),
+  isAdmin: boolean("is_admin").default(false),
   // Password reset
   resetToken: varchar("reset_token", { length: 255 }).unique(),
   resetTokenExpiry: timestamp("reset_token_expiry"),

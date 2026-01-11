@@ -22,6 +22,7 @@ export interface IStorage {
   getProjectRequests(userId: string): Promise<ProjectRequest[]>;
   getAllProjectRequests(): Promise<ProjectRequest[]>;
   updateProjectRequestStatus(id: string, status: string): Promise<ProjectRequest>;
+  getAllUsers(): Promise<User[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -159,6 +160,10 @@ export class DatabaseStorage implements IStorage {
       .from(projectRequests)
       .where(eq(projectRequests.id, id));
     return updatedRequest;
+  }
+
+  async getAllUsers(): Promise<User[]> {
+    return db.select().from(users);
   }
 }
 

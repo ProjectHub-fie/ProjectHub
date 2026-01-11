@@ -10,6 +10,7 @@ import Login from "@/pages/login";
 import Projects from "@/pages/projects";
 import ProjectRequest from "@/pages/project-request";
 import ProjectPage from "@/pages/project";
+import AdminDashboard from "@/pages/admin";
 import ErrorPage from "@/pages/error";
 import NotFound from "@/pages/not-found";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
@@ -41,6 +42,7 @@ function Router() {
       <Route path="/login" component={Login} />
       <Route path="/projects" component={Projects} />
       <Route path="/dashboard" component={ProjectRequest} />
+      <Route path="/admin" component={AdminDashboard} />
       <Route path="/project/:id" component={ProjectPage} />
       <Route path="/error" component={ErrorPage} />
       <Route component={NotFound} />
