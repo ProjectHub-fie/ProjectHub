@@ -15,7 +15,7 @@ Our latest showcase includes high-impact projects with sophisticated architectur
 
 ## Authors
 
-- **Raj Roy**: Lead Developer and Architect.
+- **Yuboraj Roy**: Lead Developer and Architect.
 
 ## System Architecture
 
