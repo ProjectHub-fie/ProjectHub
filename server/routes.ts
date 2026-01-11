@@ -241,23 +241,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { name, email, subject, message } = req.body;
 
-      // Import nodemailer
-      const { default: nodemailer } = await import('nodemailer');
+      if (!process.env.RESEND_API_KEY) {
+        return res.status(500).json({ message: "Email service not configured" });
+      }
 
-      // Create transporter using Gmail SMTP
-      const transporter = nodemailer.createTransport({
-        service: 'gmail',
-        auth: {
-          user: process.env.EMAIL_USER || 'dev.projecthub.fie@gmail.com',
-          pass: process.env.EMAIL_PASS || 'udrp pxqd cvvz oaro' // App password, not regular password
-        }
-      });
+      const { Resend } = await import('resend');
+      const resend = new Resend(process.env.RESEND_API_KEY);
 
-      // Email content
-      const mailOptions = {
-        from: `"Contact Form" <${process.env.EMAIL_USER || 'dev.projecthub.fie@gmail.com'}>`,
+      const { data, error } = await resend.emails.send({
+        from: 'Contact Form <onboarding@resend.dev>',
         to: process.env.EMAIL_USER || 'dev.projecthub.fie@gmail.com',
         subject: `New Contact Form: ${subject}`,
+        reply_to: email,
         html: `
           <h2>New Contact Form Submission</h2>
           <p><strong>Name:</strong> ${name}</p>
@@ -266,13 +261,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
           <p><strong>Message:</strong></p>
           <p>${message.replace(/\n/g, '<br>')}</p>
           <hr>
-          <p><em>Sent from ProjectHub contact form</em></p>
+          <p><em>Sent from ProjectHub contact form via Resend</em></p>
         `,
-        replyTo: email
-      };
+      });
 
-      // Send email
-      await transporter.sendMail(mailOptions);
+      if (error) {
+        console.error('Resend error:', error);
+        return res.status(500).json({ message: "Failed to send email" });
+      }
 
       res.json({ message: "Contact form submitted successfully" });
     } catch (error) {
