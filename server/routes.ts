@@ -252,7 +252,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         from: 'Contact Form <onboarding@resend.dev>',
         to: process.env.EMAIL_USER || 'dev.projecthub.fie@gmail.com',
         subject: `New Contact Form: ${subject}`,
-        reply_to: email,
+        replyTo: email,
         html: `
           <h2>New Contact Form Submission</h2>
           <p><strong>Name:</strong> ${name}</p>
