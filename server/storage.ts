@@ -95,15 +95,16 @@ export class DatabaseStorage implements IStorage {
     
     if (existingUser) {
       // Update existing user
-      await db
+      const [updatedUser] = await db
         .update(users)
         .set({
           ...userData,
           updatedAt: new Date(),
         })
-        .where(eq(users.id, existingUser.id));
+        .where(eq(users.id, existingUser.id))
+        .returning();
       
-      return existingUser;
+      return updatedUser;
     } else {
       // Generate ID if not provided
       const userId = userData.id || (await import("crypto")).randomUUID();
