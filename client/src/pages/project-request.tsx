@@ -190,15 +190,44 @@ export default function ProjectRequestPage() {
                 <form onSubmit={profileForm.handleSubmit(onUpdateProfile)} className="space-y-6">
                   <div className="flex flex-col md:flex-row gap-8">
                     <div className="flex flex-col items-center gap-4">
-                      <Avatar className="h-24 w-24 border-2 border-emerald-500/20">
-                        <AvatarImage src={profileForm.watch("profileImageUrl")} />
-                        <AvatarFallback className="bg-slate-700 text-2xl">
-                          {(user as any)?.firstName?.[0]}{(user as any)?.lastName?.[0]}
-                        </AvatarFallback>
-                      </Avatar>
+                      <div className="relative group">
+                        <Avatar className="h-24 w-24 border-2 border-emerald-500/20">
+                          <AvatarImage src={profileForm.watch("profileImageUrl")} />
+                          <AvatarFallback className="bg-slate-700 text-2xl">
+                            {(user as any)?.firstName?.[0]}{(user as any)?.lastName?.[0]}
+                          </AvatarFallback>
+                        </Avatar>
+                        <label className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity cursor-pointer rounded-full">
+                          <Camera className="h-6 w-6 text-white" />
+                          <input
+                            type="file"
+                            accept="image/*"
+                            className="hidden"
+                            onChange={async (e) => {
+                              const file = e.target.files?.[0];
+                              if (file) {
+                                const formData = new FormData();
+                                formData.append('file', file);
+                                try {
+                                  const response = await fetch('/api/auth/upload-profile-pic', {
+                                    method: 'POST',
+                                    body: formData,
+                                  });
+                                  const data = await response.json();
+                                  if (response.ok) {
+                                    profileForm.setValue('profileImageUrl', data.user.profileImageUrl);
+                                    toast({ title: "Image uploaded!" });
+                                  }
+                                } catch (err) {
+                                  toast({ title: "Upload failed", variant: "destructive" });
+                                }
+                              }
+                            }}
+                          />
+                        </label>
+                      </div>
                       <div className="text-xs text-slate-500 flex items-center gap-1">
-                        <Camera className="h-3 w-3" />
-                        Preview
+                        Tap image to upload
                       </div>
                     </div>
                       <div className="flex-1 space-y-4">

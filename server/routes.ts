@@ -264,6 +264,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Profile picture upload
+  const multer = (await import('multer')).default;
+  const upload = multer({ 
+    limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
+    storage: multer.memoryStorage()
+  });
+
+  app.post('/api/auth/upload-profile-pic', requireAuth, upload.single('file'), async (req, res) => {
+    try {
+      if (!req.file) {
+        return res.status(400).json({ message: "No file uploaded" });
+      }
+
+      const user = req.user as any;
+      const base64Image = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+      
+      const updatedUser = await storage.upsertUser({
+        id: user.id,
+        profileImageUrl: base64Image
+      });
+
+      res.json({ 
+        user: { 
+          id: updatedUser.id,
+          profileImageUrl: updatedUser.profileImageUrl
+        } 
+      });
+    } catch (error) {
+      console.error('Upload error:', error);
+      res.status(500).json({ message: "Failed to upload image" });
+    }
+  });
+
   // Contact form endpoint
   app.post('/api/contact', async (req, res) => {
     try {
