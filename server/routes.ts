@@ -271,7 +271,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     storage: multer.memoryStorage()
   });
 
-  app.post('/api/auth/upload-profile-pic', requireAuth, upload.single('file'), async (req, res) => {
+  app.post('/api/auth/upload-profile-pic', requireAuth, upload.single('file'), async (req: any, res: any) => {
     try {
       if (!req.file) {
         return res.status(400).json({ message: "No file uploaded" });
