@@ -13,7 +13,9 @@ export function useAuth() {
 
   const { data: user, isLoading } = useQuery({
     queryKey: ["/api/auth/login"],
-    enabled: false,
+    enabled: true,
+    staleTime: Infinity,
+    retry: false,
   });
 
   const loginMutation = useMutation({

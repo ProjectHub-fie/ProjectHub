@@ -201,49 +201,74 @@ export default function ProjectRequestPage() {
                         Preview
                       </div>
                     </div>
-                    <div className="flex-1 space-y-4">
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <div className="flex-1 space-y-4">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <FormField
+                            control={profileForm.control}
+                            name="firstName"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel className="text-slate-300">First Name</FormLabel>
+                                <FormControl>
+                                  <Input 
+                                    {...field} 
+                                    className="bg-slate-700 border-slate-600 text-white" 
+                                    onChange={(e) => {
+                                      field.onChange(e);
+                                      const currentValues = profileForm.getValues();
+                                      updateProfile({ ...currentValues, firstName: e.target.value });
+                                    }}
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                          <FormField
+                            control={profileForm.control}
+                            name="lastName"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel className="text-slate-300">Last Name</FormLabel>
+                                <FormControl>
+                                  <Input 
+                                    {...field} 
+                                    className="bg-slate-700 border-slate-600 text-white" 
+                                    onChange={(e) => {
+                                      field.onChange(e);
+                                      const currentValues = profileForm.getValues();
+                                      updateProfile({ ...currentValues, lastName: e.target.value });
+                                    }}
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </div>
                         <FormField
                           control={profileForm.control}
-                          name="firstName"
+                          name="profileImageUrl"
                           render={({ field }) => (
                             <FormItem>
-                              <FormLabel className="text-slate-300">First Name</FormLabel>
+                              <FormLabel className="text-slate-300">Profile Image URL</FormLabel>
                               <FormControl>
-                                <Input {...field} className="bg-slate-700 border-slate-600 text-white" />
+                                <Input 
+                                  {...field} 
+                                  placeholder="https://..." 
+                                  className="bg-slate-700 border-slate-600 text-white" 
+                                  onChange={(e) => {
+                                    field.onChange(e);
+                                    const currentValues = profileForm.getValues();
+                                    updateProfile({ ...currentValues, profileImageUrl: e.target.value });
+                                  }}
+                                />
                               </FormControl>
+                              <FormDescription className="text-slate-500">Paste a link to your avatar image</FormDescription>
                               <FormMessage />
                             </FormItem>
                           )}
                         />
-                        <FormField
-                          control={profileForm.control}
-                          name="lastName"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel className="text-slate-300">Last Name</FormLabel>
-                              <FormControl>
-                                <Input {...field} className="bg-slate-700 border-slate-600 text-white" />
-                              </FormControl>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
-                      </div>
-                      <FormField
-                        control={profileForm.control}
-                        name="profileImageUrl"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel className="text-slate-300">Profile Image URL</FormLabel>
-                            <FormControl>
-                              <Input {...field} placeholder="https://..." className="bg-slate-700 border-slate-600 text-white" />
-                            </FormControl>
-                            <FormDescription className="text-slate-500">Paste a link to your avatar image</FormDescription>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
                       <div className="flex justify-end gap-3 pt-2">
                         <Button 
                           type="button" 
