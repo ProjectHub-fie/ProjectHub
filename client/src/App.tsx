@@ -74,7 +74,7 @@ function App() {
     "--sidebar-width-icon": "4rem",
   };
 
-  const recaptchaKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY || import.meta.env.RECAPTCHA_SITE_KEY || "placeholder-key";
+  const recaptchaKey = import.meta.env.RECAPTCHA_SITE_KEY;
 
   return (
     <QueryClientProvider client={queryClient}>
