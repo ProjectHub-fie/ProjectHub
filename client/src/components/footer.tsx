@@ -16,18 +16,9 @@ export default function Footer() {
     }
   };
 
-  const handleDiscordClick = (e: React.MouseEvent) => {
-    e.preventDefault();
-    window.open(
-      "https://discord.com/api/guilds/1317411980625313893/widget.json",
-      "DiscordWidget",
-      "width=400,height=600,menubar=no,toolbar=no,location=no,status=no"
-    );
-  };
-
   const socialLinks = [
     { icon: <Github />, href: "https://github.com/rajroy1313/", name: "github" },
-    { icon: <FaDiscord />, href: "#", name: "discord", onClick: handleDiscordClick },
+    { icon: <FaDiscord />, href: "https://discord.gg/gd7UNSfX86", name: "discord" },
     { icon: <Twitter />, href: "#", name: "twitter" },
     { icon: <Facebook />, href: "https://www.facebook.com/13yv13/", name: "facebook" }
   ];
@@ -80,7 +71,6 @@ export default function Footer() {
                 <a
                   key={link.name}
                   href={link.href}
-                  onClick={link.onClick}
                   className="text-slate-400 hover:text-blue-400 transition-colors duration-200 text-xl"
                   data-testid={`footer-social-${link.name}`}
                 >
