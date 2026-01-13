@@ -66,7 +66,7 @@ export default function HeroSection() {
         <div className="absolute top-32 md:top-40 right-4 md:right-20 w-16 h-16 md:w-24 md:h-24 bg-primary/10 rounded-full animate-float" style={{ animationDelay: "-2s" }}></div>
         <div className="absolute bottom-32 md:bottom-40 left-4 md:left-20 w-24 h-24 md:w-40 md:h-40 bg-primary/10 rounded-full animate-float" style={{ animationDelay: "-4s" }}></div>
       </div>
-
+       <div className="max-w-6xl mx-auo px-4 sm:px-6 lg:px-6 text-left: bg-blue-300">!This site is under constraction.</div> 
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative z-10">
         <div className="mb-6 md:mb-8">
           <img 
