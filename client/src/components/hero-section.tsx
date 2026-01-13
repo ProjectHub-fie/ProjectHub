@@ -70,7 +70,7 @@ export default function HeroSection() {
       <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 text-center relative z-10">
         <div className="mb-6 md:mb-8">
           <img 
-            src="\public\Project.jpg" 
+            src="\Project.jpg" 
             alt="Developer Profile" 
             className="w-32 h-32 md:w-48 md:h-48 rounded-full mx-auto border-4 border-primary/50 shadow-2xl object-cover hover:border-primary transition-all duration-300 hover:scale-105"
             data-testid="profile-image"
