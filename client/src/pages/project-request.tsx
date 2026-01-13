@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -33,7 +33,8 @@ const profileSchema = z.object({
 export default function ProjectRequestPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-  const { user, isLoading, isAuthenticated, logout, updateProfile, isUpdatingProfile } = useAuth();
+  const { user, updateProfile, isUpdatingProfile, isAuthenticated, isLoading, logout } = useAuth();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
   const [showSettings, setShowSettings] = useState(false);
 
@@ -189,7 +190,7 @@ export default function ProjectRequestPage() {
                     <div className="flex flex-col items-center gap-4">
                       <div className="relative group">
                         <Avatar className="h-24 w-24 border-2 border-emerald-500/20">
-                          <AvatarImage src={(user as any)?.profileImageUrl} />
+                          <AvatarImage src={user?.profileImageUrl || ""} />
                           <AvatarFallback className="bg-slate-700 text-2xl">
                             {(user as any)?.firstName?.[0]}{(user as any)?.lastName?.[0]}
                           </AvatarFallback>
