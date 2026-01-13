@@ -104,6 +104,8 @@ export class DatabaseStorage implements IStorage {
         }
       }
 
+      console.log('Updating user profile with data:', { id: existingUser.id, ...updateData });
+
       // Update existing user
       const [updatedUser] = await db
         .update(users)
@@ -114,6 +116,7 @@ export class DatabaseStorage implements IStorage {
         .where(eq(users.id, existingUser.id))
         .returning();
       
+      console.log('User profile updated successfully:', { id: updatedUser.id, profileImageUrl: updatedUser.profileImageUrl ? 'exists' : 'null' });
       return updatedUser;
     } else {
       // Generate ID if not provided

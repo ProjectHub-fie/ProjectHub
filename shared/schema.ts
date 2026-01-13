@@ -19,7 +19,7 @@ export const users = pgTable("users", {
   email: varchar("email", { length: 255 }).unique(),
   firstName: varchar("first_name", { length: 255 }),
   lastName: varchar("last_name", { length: 255 }),
-  profileImageUrl: varchar("profile_image_url", { length: 500 }),
+  profileImageUrl: text("profile_image_url"),
   // Social provider IDs
   googleId: varchar("google_id", { length: 255 }).unique(),
   discordId: varchar("discord_id", { length: 255 }).unique(),

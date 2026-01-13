@@ -259,15 +259,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const user = req.user as any;
       const { firstName, lastName, profileImageUrl } = req.body;
 
-      const updatedUser = await storage.upsertUser({
-        id: user.id,
-        firstName: firstName !== undefined ? firstName : user.firstName,
-        lastName: lastName !== undefined ? lastName : user.lastName,
-        profileImageUrl: profileImageUrl !== undefined ? profileImageUrl : user.profileImageUrl,
-      });
+    const updatedUser = await storage.upsertUser({
+      id: user.id,
+      firstName: firstName !== undefined ? firstName : user.firstName,
+      lastName: lastName !== undefined ? lastName : user.lastName,
+      profileImageUrl: profileImageUrl !== undefined ? profileImageUrl : user.profileImageUrl,
+    });
 
-      // Update the user in the session
-      req.login(updatedUser, (err) => {
+    console.log('Profile updated in DB:', { id: updatedUser.id, hasImage: !!updatedUser.profileImageUrl });
+
+    // Update the user in the session
+    req.login(updatedUser, (err) => {
         if (err) {
           console.error('Error re-logging user after profile update:', err);
           return res.status(500).json({ message: "Failed to update session" });
@@ -301,16 +303,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "No file uploaded" });
       }
 
-      const user = req.user as any;
-      const base64Image = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
-      
-      const updatedUser = await storage.upsertUser({
-        id: user.id,
-        profileImageUrl: base64Image
-      });
+    const user = req.user as any;
+    const base64Image = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
+    
+    console.log('Uploading image for user:', user.id, 'Image length:', base64Image.length);
 
-      // Update the user in the session
-      req.login(updatedUser, (err: any) => {
+    const updatedUser = await storage.upsertUser({
+      id: user.id,
+      profileImageUrl: base64Image
+    });
+
+    console.log('Image saved in DB for user:', updatedUser.id);
+
+    // Update the user in the session
+    req.login(updatedUser, (err: any) => {
         if (err) {
           console.error('Error re-logging user after picture upload:', err);
           return res.status(500).json({ message: "Failed to update session" });
