@@ -5,6 +5,7 @@ import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/theme-provider";
+import { GoogleReCaptchaProvider } from "react-google-recaptcha-v3";
 import Home from "@/pages/home";
 import Login from "@/pages/login";
 import Projects from "@/pages/projects";
@@ -73,26 +74,30 @@ function App() {
     "--sidebar-width-icon": "4rem",
   };
 
+  const recaptchaKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY || "placeholder-key";
+
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider defaultTheme="light" storageKey="portfolio-theme">
-        <TooltipProvider>
-          <SidebarProvider style={style as React.CSSProperties}>
-            <div className="flex h-screen w-full overflow-hidden bg-background">
-              <AppSidebar />
-              <div className="flex flex-col flex-1 overflow-hidden">
-                <header className="flex items-center justify-between p-4 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-                  <SidebarTrigger data-testid="button-sidebar-toggle" className="hover-elevate" />
-                  <ThemeToggle />
-                </header>
-                <main className="flex-1 overflow-y-auto">
-                  <Router />
-                </main>
+        <GoogleReCaptchaProvider reCaptchaKey={recaptchaKey}>
+          <TooltipProvider>
+            <SidebarProvider style={style as React.CSSProperties}>
+              <div className="flex h-screen w-full overflow-hidden bg-background">
+                <AppSidebar />
+                <div className="flex flex-col flex-1 overflow-hidden">
+                  <header className="flex items-center justify-between p-4 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+                    <SidebarTrigger data-testid="button-sidebar-toggle" className="hover-elevate" />
+                    <ThemeToggle />
+                  </header>
+                  <main className="flex-1 overflow-y-auto">
+                    <Router />
+                  </main>
+                </div>
               </div>
-            </div>
-            <Toaster />
-          </SidebarProvider>
-        </TooltipProvider>
+              <Toaster />
+            </SidebarProvider>
+          </TooltipProvider>
+        </GoogleReCaptchaProvider>
       </ThemeProvider>
     </QueryClientProvider>
   );

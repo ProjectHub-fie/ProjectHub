@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -13,6 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { useLocation } from "wouter";
 import { FaDiscord } from "react-icons/fa";
+import { useGoogleReCaptcha } from "react-google-recaptcha-v3";
 
 const loginSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -40,6 +41,7 @@ const resetPasswordSchema = z.object({
 });
 
 export default function LoginPage() {
+  const { executeRecaptcha } = useGoogleReCaptcha();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const { login, register, isLoggingIn, isRegistering, isAuthenticated } = useAuth();
@@ -91,9 +93,14 @@ export default function LoginPage() {
   }, [isAuthenticated, setLocation]);
 
   const onLogin = async (values: z.infer<typeof loginSchema>) => {
+    if (!executeRecaptcha) {
+      toast({ title: "Error", description: "reCAPTCHA not ready", variant: "destructive" });
+      return;
+    }
     try {
       console.log("Logging in with values:", values);
-      await login(values);
+      const token = await executeRecaptcha("login");
+      await login({ ...values, recaptchaToken: token } as any);
       toast({
         title: "Success!",
         description: "You've been logged in successfully.",
@@ -110,8 +117,13 @@ export default function LoginPage() {
   };
 
   const onRegister = async (values: z.infer<typeof registerSchema>) => {
+    if (!executeRecaptcha) {
+      toast({ title: "Error", description: "reCAPTCHA not ready", variant: "destructive" });
+      return;
+    }
     try {
-      await register(values);
+      const token = await executeRecaptcha("register");
+      await register({ ...values, recaptchaToken: token } as any);
       toast({
         title: "Welcome!",
         description: "Your account has been created successfully.",

@@ -335,9 +335,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   // Contact form endpoint
-  app.post('/api/contact', async (req, res) => {
+  app.post('/api/contact', async (req: any, res: any) => {
     try {
-      const { name, email, subject, message } = req.body;
+      const { name, email, subject, message, recaptchaToken } = req.body;
+
+      // Verify reCAPTCHA
+      if (process.env.RECAPTCHA_SECRET_KEY) {
+        const verifyResponse = await fetch(`https://www.google.com/recaptcha/api/siteverify?secret=${process.env.RECAPTCHA_SECRET_KEY}&response=${recaptchaToken}`, {
+          method: 'POST'
+        });
+        const verifyData: any = await verifyResponse.json();
+        if (!verifyData.success || verifyData.score < 0.5) {
+          return res.status(400).json({ message: "reCAPTCHA verification failed" });
+        }
+      }
 
       if (!process.env.RESEND_API_KEY) {
         return res.status(500).json({ message: "Email service not configured" });
