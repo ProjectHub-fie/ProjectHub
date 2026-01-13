@@ -249,14 +249,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
         profileImageUrl: profileImageUrl !== undefined ? profileImageUrl : user.profileImageUrl,
       });
 
-      res.json({ 
-        user: { 
-          id: updatedUser.id, 
-          email: updatedUser.email, 
-          firstName: updatedUser.firstName, 
-          lastName: updatedUser.lastName,
-          profileImageUrl: updatedUser.profileImageUrl
-        } 
+      // Update the user in the session
+      req.login(updatedUser, (err) => {
+        if (err) {
+          console.error('Error re-logging user after profile update:', err);
+          return res.status(500).json({ message: "Failed to update session" });
+        }
+        res.json({ 
+          user: { 
+            id: updatedUser.id, 
+            email: updatedUser.email, 
+            firstName: updatedUser.firstName, 
+            lastName: updatedUser.lastName,
+            profileImageUrl: updatedUser.profileImageUrl
+          } 
+        });
       });
     } catch (error) {
       console.error('Profile update error:', error);
@@ -285,11 +292,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
         profileImageUrl: base64Image
       });
 
-      res.json({ 
-        user: { 
-          id: updatedUser.id,
-          profileImageUrl: updatedUser.profileImageUrl
-        } 
+      // Update the user in the session
+      req.login(updatedUser, (err: any) => {
+        if (err) {
+          console.error('Error re-logging user after picture upload:', err);
+          return res.status(500).json({ message: "Failed to update session" });
+        }
+        res.json({ 
+          user: { 
+            id: updatedUser.id,
+            profileImageUrl: updatedUser.profileImageUrl
+          } 
+        });
       });
     } catch (error) {
       console.error('Upload error:', error);
