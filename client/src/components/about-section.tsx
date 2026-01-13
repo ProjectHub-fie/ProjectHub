@@ -54,16 +54,7 @@ export default function AboutSection() {
               ))}
             </div>
 
-            {/* Download Resume Button 
-            <div className="mt-12">
-              <Button
-                className="bg-gradient-to-r from-blue-500 to-violet-500 text-white px-8 py-4 rounded-xl font-medium hover:shadow-lg hover:shadow-blue-500/25 transition-all duration-300 hover:-translate-y-1"
-                data-testid="button-download-resume"
-               >
-                <Download className="w-4 h-4 mr-3" />
-                Download Resume
-              </Button>
-            </div> */}
+            
           </div>
 
         </div>
