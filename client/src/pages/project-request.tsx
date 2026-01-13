@@ -206,6 +206,15 @@ export default function ProjectRequestPage() {
                             onChange={async (e) => {
                               const file = e.target.files?.[0];
                               if (file) {
+                                if (file.size > 5 * 1024 * 1024) {
+                                  toast({
+                                    title: "Error",
+                                    variant: "destructive",
+                                    description: "File size must be less than 5MB",
+                                  });
+                                  return;
+                                }
+
                                 const formData = new FormData();
                                 formData.append('file', file);
                                 try {
@@ -216,10 +225,17 @@ export default function ProjectRequestPage() {
                                   const data = await response.json();
                                   if (response.ok) {
                                     profileForm.setValue('profileImageUrl', data.user.profileImageUrl);
+                                    queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
                                     toast({ title: "Image uploaded!" });
+                                  } else {
+                                    throw new Error(data.message || "Upload failed");
                                   }
-                                } catch (err) {
-                                  toast({ title: "Upload failed", variant: "destructive" });
+                                } catch (err: any) {
+                                  toast({ 
+                                    title: "Upload failed", 
+                                    description: err.message,
+                                    variant: "destructive" 
+                                  });
                                 }
                               }
                             }}

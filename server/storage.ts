@@ -94,11 +94,21 @@ export class DatabaseStorage implements IStorage {
     }
     
     if (existingUser) {
+      // Filter out null/undefined values and only include fields that exist in the schema
+      const updateData: any = {};
+      const allowedFields = ['email', 'firstName', 'lastName', 'profileImageUrl', 'password', 'googleId', 'discordId', 'facebookId', 'username', 'resetToken', 'resetTokenExpiry'];
+      
+      for (const field of allowedFields) {
+        if (userData[field] !== undefined) {
+          updateData[field] = userData[field];
+        }
+      }
+
       // Update existing user
       const [updatedUser] = await db
         .update(users)
         .set({
-          ...userData,
+          ...updateData,
           updatedAt: new Date(),
         })
         .where(eq(users.id, existingUser.id))
