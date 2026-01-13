@@ -236,6 +236,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.status(410).json({ message: "Endpoint removed" });
   });
 
+  // Get current user profile
+  app.get('/api/auth/user', (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Authentication required" });
+    }
+    const user = req.user as any;
+    res.json({ 
+      user: { 
+        id: user.id, 
+        email: user.email, 
+        firstName: user.firstName, 
+        lastName: user.lastName,
+        profileImageUrl: user.profileImageUrl
+      } 
+    });
+  });
+
   // Update user profile
   app.patch('/api/auth/user', requireAuth, async (req, res) => {
     try {

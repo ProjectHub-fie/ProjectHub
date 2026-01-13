@@ -12,8 +12,14 @@ export function useAuth() {
   const queryClient = useQueryClient();
 
   const { data: user, isLoading } = useQuery({
-    queryKey: ["/api/auth/login"],
-    enabled: true,
+    queryKey: ["/api/auth/user"],
+    queryFn: async () => {
+      const res = await fetch("/api/auth/user");
+      if (res.status === 401) return null;
+      if (!res.ok) throw new Error("Failed to fetch user");
+      const data = await res.json();
+      return data.user;
+    },
     staleTime: Infinity,
     retry: false,
   });
@@ -39,7 +45,7 @@ export function useAuth() {
     },
     onSuccess: (data) => {
       if (data && data.user) {
-        queryClient.setQueryData(["/api/auth/login"], data.user);
+        queryClient.setQueryData(["/api/auth/user"], data.user);
       }
     },
   });
@@ -67,17 +73,24 @@ export function useAuth() {
     },
     onSuccess: (data) => {
       if (data && data.user) {
-        queryClient.setQueryData(["/api/auth/login"], data.user);
+        queryClient.setQueryData(["/api/auth/user"], data.user);
       }
     },
   });
 
   const logoutMutation = useMutation({
     mutationFn: async () => {
-      await apiRequest("/api/auth/logout", "POST");
+      const response = await fetch("/api/auth/logout", {
+        method: "POST",
+        credentials: "include",
+      });
+      if (!response.ok) {
+        const data = await response.json();
+        throw new Error(data.message || "Logout failed");
+      }
     },
     onSuccess: () => {
-      queryClient.setQueryData(["/api/auth/login"], null);
+      queryClient.setQueryData(["/api/auth/user"], null);
       window.location.href = "/";
     },
   });
@@ -104,7 +117,7 @@ export function useAuth() {
     },
     onSuccess: (data) => {
       if (data && data.user) {
-        queryClient.setQueryData(["/api/auth/login"], data.user);
+        queryClient.setQueryData(["/api/auth/user"], data.user);
       }
     },
   });
