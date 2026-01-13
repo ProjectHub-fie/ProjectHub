@@ -61,7 +61,7 @@ export default function HeroSection() {
   return (
     <section id="home" className="min-h-screen flex items-center justify-center relative overflow-hidden pt-16 md:pt-20 bg-background text-foreground">
       {/* Animated Background Elements */}
-      <div className="max-w-6xl mx-auo px-4 sm:px-6 lg:px-6 text-left: bg-blue-300">!This site is under constraction.</div> 
+      
       <div className="absolute inset-0 overflow-hidden">
         <div className="absolute top-20 left-4 md:left-10 w-20 h-20 md:w-32 md:h-32 bg-primary/10 rounded-full animate-float"></div>
         <div className="absolute top-32 md:top-40 right-4 md:right-20 w-16 h-16 md:w-24 md:h-24 bg-primary/10 rounded-full animate-float" style={{ animationDelay: "-2s" }}></div>
