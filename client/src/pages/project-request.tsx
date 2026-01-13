@@ -28,7 +28,6 @@ const projectRequestSchema = z.object({
 const profileSchema = z.object({
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
-  profileImageUrl: z.string().url("Invalid image URL").or(z.literal("")),
 });
 
 export default function ProjectRequestPage() {
@@ -54,7 +53,6 @@ export default function ProjectRequestPage() {
     defaultValues: {
       firstName: (user as any)?.firstName || "",
       lastName: (user as any)?.lastName || "",
-      profileImageUrl: (user as any)?.profileImageUrl || "",
     },
   });
 
@@ -64,7 +62,6 @@ export default function ProjectRequestPage() {
       profileForm.reset({
         firstName: (user as any).firstName || "",
         lastName: (user as any).lastName || "",
-        profileImageUrl: (user as any).profileImageUrl || "",
       });
     }
   }, [user, profileForm]);
@@ -192,7 +189,7 @@ export default function ProjectRequestPage() {
                     <div className="flex flex-col items-center gap-4">
                       <div className="relative group">
                         <Avatar className="h-24 w-24 border-2 border-emerald-500/20">
-                          <AvatarImage src={profileForm.watch("profileImageUrl")} />
+                          <AvatarImage src={(user as any)?.profileImageUrl} />
                           <AvatarFallback className="bg-slate-700 text-2xl">
                             {(user as any)?.firstName?.[0]}{(user as any)?.lastName?.[0]}
                           </AvatarFallback>
@@ -224,7 +221,6 @@ export default function ProjectRequestPage() {
                                   });
                                   const data = await response.json();
                                   if (response.ok) {
-                                    profileForm.setValue('profileImageUrl', data.user.profileImageUrl);
                                     queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
                                     toast({ title: "Image uploaded!" });
                                   } else {
@@ -258,11 +254,6 @@ export default function ProjectRequestPage() {
                                   <Input 
                                     {...field} 
                                     className="bg-slate-700 border-slate-600 text-white" 
-                                    onChange={(e) => {
-                                      field.onChange(e);
-                                      const currentValues = profileForm.getValues();
-                                      updateProfile({ ...currentValues, firstName: e.target.value });
-                                    }}
                                   />
                                 </FormControl>
                                 <FormMessage />
@@ -279,11 +270,6 @@ export default function ProjectRequestPage() {
                                   <Input 
                                     {...field} 
                                     className="bg-slate-700 border-slate-600 text-white" 
-                                    onChange={(e) => {
-                                      field.onChange(e);
-                                      const currentValues = profileForm.getValues();
-                                      updateProfile({ ...currentValues, lastName: e.target.value });
-                                    }}
                                   />
                                 </FormControl>
                                 <FormMessage />
@@ -291,29 +277,6 @@ export default function ProjectRequestPage() {
                             )}
                           />
                         </div>
-                        <FormField
-                          control={profileForm.control}
-                          name="profileImageUrl"
-                          render={({ field }) => (
-                            <FormItem>
-                              <FormLabel className="text-slate-300">Profile Image URL</FormLabel>
-                              <FormControl>
-                                <Input 
-                                  {...field} 
-                                  placeholder="https://..." 
-                                  className="bg-slate-700 border-slate-600 text-white" 
-                                  onChange={(e) => {
-                                    field.onChange(e);
-                                    const currentValues = profileForm.getValues();
-                                    updateProfile({ ...currentValues, profileImageUrl: e.target.value });
-                                  }}
-                                />
-                              </FormControl>
-                              <FormDescription className="text-slate-500">Paste a link to your avatar image</FormDescription>
-                              <FormMessage />
-                            </FormItem>
-                          )}
-                        />
                       <div className="flex justify-end gap-3 pt-2">
                         <Button 
                           type="button" 
