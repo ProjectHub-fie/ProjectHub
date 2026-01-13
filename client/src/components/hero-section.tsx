@@ -58,6 +58,15 @@ export default function HeroSection() {
     }
   };
 
+  const handleDiscordClick = (e: React.MouseEvent) => {
+    e.preventDefault();
+    window.open(
+      "https://discord.com/api/guilds/1317411980625313893/widget.json",
+      "DiscordWidget",
+      "width=400,height=600,menubar=no,toolbar=no,location=no,status=no"
+    );
+  };
+
   return (
     <section id="home" className="min-h-screen flex items-center justify-center relative overflow-hidden pt-16 md:pt-20 bg-background text-foreground">
       {/* Animated Background Elements */}
@@ -145,7 +154,8 @@ export default function HeroSection() {
             <Github />
           </a>
           <a 
-            href="https://discord.gg/gd7UNSfX86" 
+            href="#" 
+            onClick={handleDiscordClick}
             className="text-muted-foreground hover:text-primary transition-colors duration-200 text-xl md:text-2xl p-2 hover:bg-secondary rounded-lg" 
             data-testid="social-discord"
             aria-label="Discord Server"
