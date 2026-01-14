@@ -51,10 +51,16 @@ export function AppSidebar() {
             <SidebarMenu>
               {items.map((item) => (
                 <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild isActive={location === item.url} className="hover:bg-primary/10 data-[active=true]:bg-primary data-[active=true]:text-primary-foreground">
-                    <Link href={item.url} className="flex items-center gap-2">
-                      <item.icon className="h-4 w-4" />
-                      <span>{item.title}</span>
+                  <SidebarMenuButton 
+                    asChild 
+                    isActive={location === item.url} 
+                    className="hover:bg-primary/10 data-[active=true]:bg-primary data-[active=true]:text-primary-foreground"
+                  >
+                    <Link href={item.url}>
+                      <div className="flex items-center gap-2">
+                        <item.icon className="h-4 w-4" />
+                        <span>{item.title}</span>
+                      </div>
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -77,7 +83,7 @@ export function AppSidebar() {
         <SidebarFooter className="p-4 border-t border-border">
           <div className="flex items-center gap-3">
             <Avatar className="h-8 w-8 border border-border">
-              <AvatarImage src={(user as any).profileImageUrl || ""} />
+              <AvatarImage src={user?.profileImageUrl || ""} />
               <AvatarFallback className="bg-primary/10 text-primary text-xs">
                 {(user as any).firstName?.[0]}{(user as any).lastName?.[0]}
               </AvatarFallback>
