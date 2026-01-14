@@ -339,7 +339,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { name, email, subject, message, recaptchaToken } = req.body;
 
-      // Verify reCAPTCHA
+      // Verify reCAPTCHA disabled
+      /*
       const recaptchaSecret = process.env.RECAPTCHA_SECRET_KEY || process.env.RECAPCHA_SECRET_KEY;
       console.log('reCAPTCHA debug:', { hasSecret: !!recaptchaSecret, hasToken: !!recaptchaToken });
       
@@ -363,6 +364,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
           console.error('reCAPTCHA error:', error);
         }
       }
+      */
 
       if (!process.env.RESEND_API_KEY) {
         return res.status(500).json({ message: "Email service not configured" });

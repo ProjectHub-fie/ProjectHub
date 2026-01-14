@@ -25,22 +25,22 @@ export default function ContactSection() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!executeRecaptcha) {
+    /* if (!executeRecaptcha) {
       toast({
         title: "Error",
         description: "reCAPTCHA not ready",
         variant: "destructive",
       });
       return;
-    }
+    } */
     setIsSubmitting(true);
 
     try {
-      const token = await executeRecaptcha("contact_form");
+      // const token = await executeRecaptcha("contact_form");
       const response = await fetch("/api/contact", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...formData, recaptchaToken: token }),
+        body: JSON.stringify({ ...formData }),
       });
 
       if (response.ok) {

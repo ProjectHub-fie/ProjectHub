@@ -93,14 +93,14 @@ export default function LoginPage() {
   }, [isAuthenticated, setLocation]);
 
   const onLogin = async (values: z.infer<typeof loginSchema>) => {
-    if (!executeRecaptcha) {
+    /* if (!executeRecaptcha) {
       toast({ title: "Error", description: "reCAPTCHA not ready", variant: "destructive" });
       return;
-    }
+    } */
     try {
       console.log("Logging in with values:", values);
-      const token = await executeRecaptcha("login");
-      await login({ ...values, recaptchaToken: token } as any);
+      // const token = await executeRecaptcha("login");
+      await login({ ...values } as any);
       toast({
         title: "Success!",
         description: "You've been logged in successfully.",
@@ -117,13 +117,13 @@ export default function LoginPage() {
   };
 
   const onRegister = async (values: z.infer<typeof registerSchema>) => {
-    if (!executeRecaptcha) {
+    /* if (!executeRecaptcha) {
       toast({ title: "Error", description: "reCAPTCHA not ready", variant: "destructive" });
       return;
-    }
+    } */
     try {
-      const token = await executeRecaptcha("register");
-      await register({ ...values, recaptchaToken: token } as any);
+      // const token = await executeRecaptcha("register");
+      await register({ ...values } as any);
       toast({
         title: "Welcome!",
         description: "Your account has been created successfully.",

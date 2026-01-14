@@ -80,7 +80,7 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider defaultTheme="light" storageKey="portfolio-theme">
-        <GoogleReCaptchaProvider reCaptchaKey={recaptchaKey}>
+        {/* <GoogleReCaptchaProvider reCaptchaKey={recaptchaKey}> */}
           <TooltipProvider>
             <SidebarProvider style={style as React.CSSProperties}>
               <div className="flex h-screen w-full overflow-hidden bg-background">
@@ -98,7 +98,7 @@ function App() {
               <Toaster />
             </SidebarProvider>
           </TooltipProvider>
-        </GoogleReCaptchaProvider>
+        {/* </GoogleReCaptchaProvider> */}
       </ThemeProvider>
     </QueryClientProvider>
   );
