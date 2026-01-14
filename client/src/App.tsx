@@ -75,7 +75,7 @@ function App() {
   };
 
   const recaptchaKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY || import.meta.env.VITE_RECAPCHA_SITE_KEY;
-  console.log('reCAPTCHA site key loaded:', !!recaptchaKey);
+  console.log('reCAPTCHA site key status:', !!recaptchaKey);
 
   return (
     <QueryClientProvider client={queryClient}>
