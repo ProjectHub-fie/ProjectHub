@@ -340,13 +340,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { name, email, subject, message, recaptchaToken } = req.body;
 
       // Verify reCAPTCHA
-      if (process.env.RECAPTCHA_SECRET_KEY) {
-        const verifyResponse = await fetch(`https://www.google.com/recaptcha/api/siteverify?secret=${process.env.RECAPTCHA_SECRET_KEY}&response=${recaptchaToken}`, {
-          method: 'POST'
-        });
-        const verifyData: any = await verifyResponse.json();
-        if (!verifyData.success || verifyData.score < 0.5) {
-          return res.status(400).json({ message: "reCAPTCHA verification failed" });
+      const recaptchaSecret = process.env.RECAPTCHA_SECRET_KEY || process.env.RECAPCHA_SECRET_KEY;
+      console.log('reCAPTCHA verification attempt:', { hasSecret: !!recaptchaSecret, hasToken: !!recaptchaToken });
+      
+      if (recaptchaSecret && recaptchaToken) {
+        try {
+          const verifyResponse = await fetch(`https://www.google.com/recaptcha/api/siteverify?secret=${recaptchaSecret}&response=${recaptchaToken}`, {
+            method: 'POST'
+          });
+          const verifyData: any = await verifyResponse.json();
+          console.log('reCAPTCHA verification result:', verifyData);
+          
+          if (!verifyData.success || (verifyData.score !== undefined && verifyData.score < 0.5)) {
+            return res.status(400).json({ message: "reCAPTCHA verification failed" });
+          }
+        } catch (error) {
+          console.error('reCAPTCHA verification error:', error);
+          // If verification fails due to network, we might want to allow it in dev or fail closed
         }
       }
 

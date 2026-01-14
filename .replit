@@ -4,7 +4,7 @@ hidden = [".config", ".git", "generated-icon.png", "node_modules", "dist"]
 
 [nix]
 channel = "stable-25_05"
-packages = ["mysql80", "firebase-tools", "dig"]
+packages = ["mysql80", "firebase-tools", "dig", "nix-output-monitor"]
 
 [deployment]
 deploymentTarget = "autoscale"
@@ -61,3 +61,8 @@ args = "npm run dev"
 
 [agent]
 expertMode = true
+
+[userenv]
+
+[userenv.shared]
+VITE_RECAPTCHA_SITE_KEY = "6Ld... (user provided key)"
