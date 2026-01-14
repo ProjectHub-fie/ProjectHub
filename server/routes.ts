@@ -341,7 +341,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Verify reCAPTCHA
       const recaptchaSecret = process.env.RECAPTCHA_SECRET_KEY || process.env.RECAPCHA_SECRET_KEY;
-      console.log('reCAPTCHA verification attempt:', { hasSecret: !!recaptchaSecret, hasToken: !!recaptchaToken });
+      console.log('reCAPTCHA verification attempt:', { 
+        hasSecret: !!recaptchaSecret, 
+        hasToken: !!recaptchaToken,
+        tokenSnippet: recaptchaToken ? `${recaptchaToken.substring(0, 10)}...` : 'none'
+      });
       
       if (recaptchaSecret && recaptchaToken) {
         try {
