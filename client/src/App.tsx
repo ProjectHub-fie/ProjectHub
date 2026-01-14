@@ -80,25 +80,23 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider defaultTheme="light" storageKey="portfolio-theme">
-        {/* <GoogleReCaptchaProvider reCaptchaKey={recaptchaKey}> */}
-          <TooltipProvider>
-            <SidebarProvider style={style as React.CSSProperties}>
-              <div className="flex h-screen w-full overflow-hidden bg-background">
-                <AppSidebar />
-                <div className="flex flex-col flex-1 overflow-hidden">
-                  <header className="flex items-center justify-between p-4 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-                    <SidebarTrigger data-testid="button-sidebar-toggle" className="hover-elevate" />
-                    <ThemeToggle />
-                  </header>
-                  <main className="flex-1 overflow-y-auto">
-                    <Router />
-                  </main>
-                </div>
+        <TooltipProvider>
+          <SidebarProvider style={style as React.CSSProperties}>
+            <div className="flex h-screen w-full overflow-hidden bg-background">
+              <AppSidebar />
+              <div className="flex flex-col flex-1 overflow-hidden">
+                <header className="flex items-center justify-between p-4 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+                  <SidebarTrigger data-testid="button-sidebar-toggle" className="hover-elevate" />
+                  <ThemeToggle />
+                </header>
+                <main className="flex-1 overflow-y-auto">
+                  <Router />
+                </main>
               </div>
-              <Toaster />
-            </SidebarProvider>
-          </TooltipProvider>
-        {/* </GoogleReCaptchaProvider> */}
+            </div>
+            <Toaster />
+          </SidebarProvider>
+        </TooltipProvider>
       </ThemeProvider>
     </QueryClientProvider>
   );
