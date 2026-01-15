@@ -259,17 +259,19 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const user = req.user as any;
       const { firstName, lastName, profileImageUrl } = req.body;
 
-    const updatedUser = await storage.upsertUser({
-      id: user.id,
-      firstName: firstName !== undefined ? firstName : user.firstName,
-      lastName: lastName !== undefined ? lastName : user.lastName,
-      profileImageUrl: profileImageUrl !== undefined ? profileImageUrl : user.profileImageUrl,
-    });
+      console.log('Patching profile for user:', user.id, { firstName, lastName });
 
-    console.log('Profile updated in DB:', { id: updatedUser.id, hasImage: !!updatedUser.profileImageUrl });
+      const updatedUser = await storage.upsertUser({
+        id: user.id,
+        firstName: firstName !== undefined ? firstName : user.firstName,
+        lastName: lastName !== undefined ? lastName : user.lastName,
+        profileImageUrl: profileImageUrl !== undefined ? profileImageUrl : user.profileImageUrl,
+      });
 
-    // Update the user in the session
-    req.login(updatedUser, (err) => {
+      console.log('Profile updated in DB:', { id: updatedUser.id, hasImage: !!updatedUser.profileImageUrl });
+
+      // Synchronize the session
+      req.login(updatedUser, (err) => {
         if (err) {
           console.error('Error re-logging user after profile update:', err);
           return res.status(500).json({ message: "Failed to update session" });

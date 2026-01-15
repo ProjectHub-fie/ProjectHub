@@ -106,13 +106,16 @@ export default function ProjectRequestPage() {
 
   const onUpdateProfile = async (values: z.infer<typeof profileSchema>) => {
     try {
+      console.log('Submitting profile update:', values);
       await updateProfile(values);
+      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
       toast({
         title: "Profile Updated",
         description: "Your profile information has been updated successfully.",
       });
       setShowSettings(false);
     } catch (error: any) {
+      console.error('Profile update error in component:', error);
       toast({
         title: "Update Failed",
         description: error.message || "Failed to update profile. Please try again.",
