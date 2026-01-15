@@ -138,12 +138,16 @@ export default function LoginPage() {
   };
 
   const onForgotPassword = async (values: z.infer<typeof forgotPasswordSchema>) => {
+    if (!captchaToken) {
+      toast({ title: "Captcha Required", description: "Please complete the hCaptcha.", variant: "destructive" });
+      return;
+    }
     setIsSendingReset(true);
     try {
       const response = await fetch("/api/auth/forgot-password", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(values),
+        body: JSON.stringify({ ...values, captchaToken }),
       });
 
       if (response.ok) {
@@ -169,6 +173,10 @@ export default function LoginPage() {
   };
 
   const onResetPassword = async (values: z.infer<typeof resetPasswordSchema>) => {
+    if (!captchaToken) {
+      toast({ title: "Captcha Required", description: "Please complete the hCaptcha.", variant: "destructive" });
+      return;
+    }
     setIsResettingPassword(true);
     try {
       const response = await fetch("/api/auth/reset-password", {
@@ -177,6 +185,7 @@ export default function LoginPage() {
         body: JSON.stringify({
           token: values.token,
           newPassword: values.newPassword,
+          captchaToken,
         }),
       });
 
@@ -519,7 +528,13 @@ export default function LoginPage() {
             <Button
               variant="outline"
               className="w-full bg-blue-600 border-input hover:bg-accent hover:text-accent-foreground flex items-center justify-center gap-2"
-              onClick={() => window.location.href = "/api/auth/discord"}
+              onClick={() => {
+                if (!captchaToken) {
+                  toast({ title: "Captcha Required", description: "Please complete the hCaptcha before using Discord login.", variant: "destructive" });
+                  return;
+                }
+                window.location.href = `/api/auth/discord?captchaToken=${captchaToken}`;
+              }}
               data-testid="button-discord-login"
             >
               <FaDiscord className="h-4 w-4 " />

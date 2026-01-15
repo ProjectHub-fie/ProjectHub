@@ -181,7 +181,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Forgot password endpoint
   app.post('/api/auth/forgot-password', async (req, res) => {
     try {
-      const { email } = req.body;
+      const { email, captchaToken } = req.body;
+
+      if (captchaToken) {
+        const hcaptchaSecret = process.env.HCAPTCHA_SECRET_KEY || process.env.VITE_HCAPTCHA_SECRET_KEY;
+        if (hcaptchaSecret) {
+          const verifyResponse = await fetch('https://hcaptcha.com/siteverify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `secret=${hcaptchaSecret}&response=${captchaToken}`
+          });
+          const verifyData: any = await verifyResponse.json();
+          if (!verifyData.success) {
+            return res.status(400).json({ message: "hCaptcha verification failed" });
+          }
+        }
+      }
 
       if (!email) {
         return res.status(400).json({ message: "Email is required" });
@@ -251,7 +266,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Reset password endpoint
   app.post('/api/auth/reset-password', async (req, res) => {
     try {
-      const { token, newPassword } = req.body;
+      const { token, newPassword, captchaToken } = req.body;
+
+      if (captchaToken) {
+        const hcaptchaSecret = process.env.HCAPTCHA_SECRET_KEY || process.env.VITE_HCAPTCHA_SECRET_KEY;
+        if (hcaptchaSecret) {
+          const verifyResponse = await fetch('https://hcaptcha.com/siteverify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `secret=${hcaptchaSecret}&response=${captchaToken}`
+          });
+          const verifyData: any = await verifyResponse.json();
+          if (!verifyData.success) {
+            return res.status(400).json({ message: "hCaptcha verification failed" });
+          }
+        }
+      }
 
       if (!token || !newPassword) {
         return res.status(400).json({ message: "Token and new password are required" });
@@ -282,10 +312,39 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Discord OAuth routes - enabled when Discord credentials are available
   app.get('/api/auth/discord', (req, res, next) => {
+    const { captchaToken } = req.query;
+    if (!captchaToken && process.env.NODE_ENV === 'production') {
+      return res.status(400).json({ message: "Captcha token required" });
+    }
+    // Store captcha token in session to verify in callback
+    (req.session as any).discordCaptchaToken = captchaToken;
     passport.authenticate('discord')(req, res, next);
   });
 
-  app.get('/api/auth/discord/callback', (req, res, next) => {
+  app.get('/api/auth/discord/callback', async (req, res, next) => {
+    const captchaToken = (req.session as any).discordCaptchaToken;
+    
+    if (captchaToken) {
+      const hcaptchaSecret = process.env.HCAPTCHA_SECRET_KEY || process.env.VITE_HCAPTCHA_SECRET_KEY;
+      if (hcaptchaSecret) {
+        try {
+          const verifyResponse = await fetch('https://hcaptcha.com/siteverify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `secret=${hcaptchaSecret}&response=${captchaToken}`
+          });
+          const verifyData: any = await verifyResponse.json();
+          if (!verifyData.success) {
+            delete (req.session as any).discordCaptchaToken;
+            return res.redirect('/login?error=captcha_failed');
+          }
+        } catch (err) {
+          console.error('Discord callback captcha verification error:', err);
+        }
+      }
+    }
+    delete (req.session as any).discordCaptchaToken;
+
     passport.authenticate('discord', { 
       failureRedirect: '/login?error=discord_failed',
       successRedirect: '/dashboard?login=success'
