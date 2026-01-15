@@ -26,7 +26,6 @@ export function useAuth() {
 
   const loginMutation = useMutation({
     mutationFn: async (credentials: { email: string; password: string }) => {
-      console.log("Attempting login...");
       const response = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -35,7 +34,6 @@ export function useAuth() {
       });
       
       const data = await response.json();
-      console.log("Login response data:", data);
       
       if (!response.ok) {
         throw new Error(data.message || "Invalid email or password");

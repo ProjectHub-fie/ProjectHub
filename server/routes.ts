@@ -275,12 +275,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Discord OAuth routes - enabled when Discord credentials are available
   app.get('/api/auth/discord', (req, res, next) => {
-    console.log('Initiating Discord authentication...');
     passport.authenticate('discord')(req, res, next);
   });
 
   app.get('/api/auth/discord/callback', (req, res, next) => {
-    console.log('Discord callback received');
     passport.authenticate('discord', { 
       failureRedirect: '/login?error=discord_failed',
       successRedirect: '/dashboard?login=success'
@@ -315,16 +313,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const user = req.user as any;
       const { firstName, lastName, profileImageUrl } = req.body;
 
-      console.log('Patching profile for user:', user.id, { firstName, lastName });
-
       const updatedUser = await storage.upsertUser({
         id: user.id,
         firstName: firstName !== undefined ? firstName : user.firstName,
         lastName: lastName !== undefined ? lastName : user.lastName,
         profileImageUrl: profileImageUrl !== undefined ? profileImageUrl : user.profileImageUrl,
       });
-
-      console.log('Profile updated in DB:', { id: updatedUser.id, hasImage: !!updatedUser.profileImageUrl });
 
       // Synchronize the session
       req.login(updatedUser, (err) => {
@@ -364,14 +358,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const user = req.user as any;
     const base64Image = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
     
-    console.log('Uploading image for user:', user.id, 'Image length:', base64Image.length);
-
     const updatedUser = await storage.upsertUser({
       id: user.id,
       profileImageUrl: base64Image
     });
-
-    console.log('Image saved in DB for user:', updatedUser.id);
 
     // Update the user in the session
     req.login(updatedUser, (err: any) => {
