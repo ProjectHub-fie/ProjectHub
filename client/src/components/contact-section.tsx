@@ -64,7 +64,8 @@ export default function ContactSection() {
     }
   };
 
-  const siteKey = import.meta.env.VITE_HCAPTCHA_SITE_KEY;
+  const siteKey = import.meta.env.VITE_HCAPTCHA_SITE_KEY || import.meta.env.HCAPTCHA_SITE_KEY;
+  console.log('hCaptcha site key:', siteKey);
 
   const contactInfo = [
     /*{
@@ -175,14 +176,12 @@ export default function ContactSection() {
                 />
               </div>
               
-              <div className="flex justify-center mb-4">
-                {siteKey && (
-                  <HCaptcha
-                    sitekey={siteKey}
-                    onVerify={(token) => setCaptchaToken(token)}
-                    onExpire={() => setCaptchaToken(null)}
-                  />
-                )}
+              <div className="flex justify-center mb-4 min-h-[78px]">
+                <HCaptcha
+                  sitekey={siteKey || "10000000-ffff-ffff-ffff-000000000001"}
+                  onVerify={(token) => setCaptchaToken(token)}
+                  onExpire={() => setCaptchaToken(null)}
+                />
               </div>
               <Button
                 type="submit"
