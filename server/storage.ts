@@ -8,6 +8,7 @@ import {
 } from "./../shared/schema.js";
 import { db } from "./db.js";
 import { eq } from "drizzle-orm";
+import crypto from "crypto";
 
 
 export interface IStorage {
@@ -120,7 +121,7 @@ export class DatabaseStorage implements IStorage {
       return updatedUser;
     } else {
       // Generate ID if not provided
-      const userId = userData.id || (await import("crypto")).randomUUID();
+      const userId = userData.id || crypto.randomUUID();
       
       const userWithId = {
         ...userData,
@@ -135,10 +136,9 @@ export class DatabaseStorage implements IStorage {
   // Project request operations
   async createProjectRequest(requestData: InsertProjectRequest): Promise<ProjectRequest> {
     // Generate a UUID for the request
-    const { randomUUID } = await import("crypto");
-    const requestId = randomUUID();
+    const requestId = crypto.randomUUID();
     
-    const requestWithId = {
+    const requestWithId: any = {
       ...requestData,
       id: requestId
     };
