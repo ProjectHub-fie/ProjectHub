@@ -5,7 +5,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Send, Mail, Phone, MapPin } from "lucide-react";
-import HCaptcha from "@hcaptcha/react-hcaptcha";
+import { Turnstile } from "@marsidev/react-turnstile";
 
 export default function ContactSection() {
   const [formData, setFormData] = useState({
@@ -28,7 +28,7 @@ export default function ContactSection() {
     if (!captchaToken) {
       toast({
         title: "Captcha Required",
-        description: "Please complete the hCaptcha to send your message.",
+        description: "Please complete the Turnstile verification to send your message.",
         variant: "destructive",
       });
       return;
@@ -64,8 +64,8 @@ export default function ContactSection() {
     }
   };
 
-  const siteKey = import.meta.env.VITE_HCAPTCHA_SITE_KEY || "10000000-ffff-ffff-ffff-000000000001";
-  console.log('hCaptcha site key status:', !!import.meta.env.VITE_HCAPTCHA_SITE_KEY);
+  const siteKey = import.meta.env.VITE_TURNSTILE_SITE_KEY || "1x00000000000000000000AA";
+  console.log('Turnstile site key status:', !!import.meta.env.VITE_TURNSTILE_SITE_KEY);
 
   const contactInfo = [
     /*{
@@ -177,10 +177,11 @@ export default function ContactSection() {
               </div>
               
               <div className="flex justify-center mb-4 min-h-[78px]">
-                <HCaptcha
-                  sitekey={siteKey || "10000000-ffff-ffff-ffff-000000000001"}
-                  onVerify={(token) => setCaptchaToken(token)}
+                <Turnstile
+                  siteKey={siteKey}
+                  onSuccess={(token) => setCaptchaToken(token)}
                   onExpire={() => setCaptchaToken(null)}
+                  onError={() => setCaptchaToken(null)}
                 />
               </div>
               <Button

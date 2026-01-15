@@ -54,22 +54,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { email, password, firstName, lastName, captchaToken } = req.body;
 
       if (captchaToken) {
-        const hcaptchaSecret = process.env.HCAPTCHA_SECRET_KEY || process.env.VITE_HCAPTCHA_SECRET_KEY;
-        console.log('Verifying hCaptcha token, secret present:', !!hcaptchaSecret);
-        if (hcaptchaSecret) {
+        const turnstileSecret = process.env.TURNSTILE_SECRET_KEY || process.env.VITE_TURNSTILE_SECRET_KEY || "1x0000000000000000000000000000000AA";
+        console.log('Verifying Turnstile token, secret present:', !!turnstileSecret);
+        if (turnstileSecret) {
           try {
-            const verifyResponse = await fetch('https://hcaptcha.com/siteverify', {
+            const verifyResponse = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
               method: 'POST',
               headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-              body: `secret=${hcaptchaSecret}&response=${captchaToken}`
+              body: `secret=${turnstileSecret}&response=${captchaToken}`
             });
             const verifyData: any = await verifyResponse.json();
             if (!verifyData.success) {
-              console.error('hCaptcha verification failed:', verifyData);
-              return res.status(400).json({ message: "hCaptcha verification failed" });
+              console.error('Turnstile verification failed:', verifyData);
+              return res.status(400).json({ message: "Security verification failed" });
             }
           } catch (verifyError) {
-            console.error('hCaptcha fetch error:', verifyError);
+            console.error('Turnstile fetch error:', verifyError);
           }
         }
       }
@@ -114,18 +114,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     
     // Validate captcha before proceeding to passport
     if (captchaToken) {
-      const hcaptchaSecret = process.env.HCAPTCHA_SECRET_KEY || process.env.VITE_HCAPTCHA_SECRET_KEY;
-      if (hcaptchaSecret) {
-        fetch('https://hcaptcha.com/siteverify', {
+      const turnstileSecret = process.env.TURNSTILE_SECRET_KEY || process.env.VITE_TURNSTILE_SECRET_KEY || "1x0000000000000000000000000000000AA";
+      if (turnstileSecret) {
+        fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-          body: `secret=${hcaptchaSecret}&response=${captchaToken}`
+          body: `secret=${turnstileSecret}&response=${captchaToken}`
         })
         .then(res => res.json())
         .then((verifyData: any) => {
           if (!verifyData.success) {
-            console.error('hCaptcha verification failed:', verifyData);
-            return res.status(400).json({ message: "hCaptcha verification failed" });
+            console.error('Turnstile verification failed:', verifyData);
+            return res.status(400).json({ message: "Security verification failed" });
           }
           
           passport.authenticate('local', (err: any, user: any, info: any) => {
@@ -184,16 +184,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { email, captchaToken } = req.body;
 
       if (captchaToken) {
-        const hcaptchaSecret = process.env.HCAPTCHA_SECRET_KEY || process.env.VITE_HCAPTCHA_SECRET_KEY;
-        if (hcaptchaSecret) {
-          const verifyResponse = await fetch('https://hcaptcha.com/siteverify', {
+        const turnstileSecret = process.env.TURNSTILE_SECRET_KEY || process.env.VITE_TURNSTILE_SECRET_KEY || "1x0000000000000000000000000000000AA";
+        if (turnstileSecret) {
+          const verifyResponse = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: `secret=${hcaptchaSecret}&response=${captchaToken}`
+            body: `secret=${turnstileSecret}&response=${captchaToken}`
           });
           const verifyData: any = await verifyResponse.json();
           if (!verifyData.success) {
-            return res.status(400).json({ message: "hCaptcha verification failed" });
+            return res.status(400).json({ message: "Security verification failed" });
           }
         }
       }
@@ -269,16 +269,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { token, newPassword, captchaToken } = req.body;
 
       if (captchaToken) {
-        const hcaptchaSecret = process.env.HCAPTCHA_SECRET_KEY || process.env.VITE_HCAPTCHA_SECRET_KEY;
-        if (hcaptchaSecret) {
-          const verifyResponse = await fetch('https://hcaptcha.com/siteverify', {
+        const turnstileSecret = process.env.TURNSTILE_SECRET_KEY || process.env.VITE_TURNSTILE_SECRET_KEY || "1x0000000000000000000000000000000AA";
+        if (turnstileSecret) {
+          const verifyResponse = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: `secret=${hcaptchaSecret}&response=${captchaToken}`
+            body: `secret=${turnstileSecret}&response=${captchaToken}`
           });
           const verifyData: any = await verifyResponse.json();
           if (!verifyData.success) {
-            return res.status(400).json({ message: "hCaptcha verification failed" });
+            return res.status(400).json({ message: "Security verification failed" });
           }
         }
       }
@@ -325,13 +325,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const captchaToken = (req.session as any).discordCaptchaToken;
     
     if (captchaToken) {
-      const hcaptchaSecret = process.env.HCAPTCHA_SECRET_KEY || process.env.VITE_HCAPTCHA_SECRET_KEY;
-      if (hcaptchaSecret) {
+      const turnstileSecret = process.env.TURNSTILE_SECRET_KEY || process.env.VITE_TURNSTILE_SECRET_KEY || "1x0000000000000000000000000000000AA";
+      if (turnstileSecret) {
         try {
-          const verifyResponse = await fetch('https://hcaptcha.com/siteverify', {
+          const verifyResponse = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
             method: 'POST',
             headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: `secret=${hcaptchaSecret}&response=${captchaToken}`
+            body: `secret=${turnstileSecret}&response=${captchaToken}`
           });
           const verifyData: any = await verifyResponse.json();
           if (!verifyData.success) {
@@ -339,7 +339,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
             return res.redirect('/login?error=captcha_failed');
           }
         } catch (err) {
-          console.error('Discord callback captcha verification error:', err);
+          console.error('Discord callback Turnstile verification error:', err);
         }
       }
     }
@@ -455,22 +455,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Always try to verify if token is present
       if (captchaToken) {
-        const hcaptchaSecret = process.env.HCAPTCHA_SECRET_KEY || process.env.VITE_HCAPTCHA_SECRET_KEY;
-        console.log('Verifying hCaptcha token, secret present:', !!hcaptchaSecret);
-        if (hcaptchaSecret) {
+        const turnstileSecret = process.env.TURNSTILE_SECRET_KEY || process.env.VITE_TURNSTILE_SECRET_KEY || "1x0000000000000000000000000000000AA";
+        console.log('Verifying Turnstile token, secret present:', !!turnstileSecret);
+        if (turnstileSecret) {
           try {
-            const verifyResponse = await fetch('https://hcaptcha.com/siteverify', {
+            const verifyResponse = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
               method: 'POST',
               headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-              body: `secret=${hcaptchaSecret}&response=${captchaToken}`
+              body: `secret=${turnstileSecret}&response=${captchaToken}`
             });
             const verifyData: any = await verifyResponse.json();
             if (!verifyData.success) {
-              console.error('hCaptcha verification failed:', verifyData);
-              return res.status(400).json({ message: "hCaptcha verification failed" });
+              console.error('Turnstile verification failed:', verifyData);
+              return res.status(400).json({ message: "Security verification failed" });
             }
           } catch (verifyError) {
-            console.error('hCaptcha fetch error:', verifyError);
+            console.error('Turnstile fetch error:', verifyError);
           }
         }
       }

@@ -13,7 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { useLocation } from "wouter";
 import { FaDiscord } from "react-icons/fa";
-import HCaptcha from "@hcaptcha/react-hcaptcha";
+import { Turnstile } from "@marsidev/react-turnstile";
 
 const loginSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -51,8 +51,8 @@ export default function LoginPage() {
   const [isResettingPassword, setIsResettingPassword] = useState(false);
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
 
-  const siteKey = import.meta.env.VITE_HCAPTCHA_SITE_KEY || "10000000-ffff-ffff-ffff-000000000001";
-  console.log('hCaptcha site key status (Login):', !!import.meta.env.VITE_HCAPTCHA_SITE_KEY);
+  const siteKey = import.meta.env.VITE_TURNSTILE_SITE_KEY || "1x00000000000000000000AA";
+  console.log('Turnstile site key status:', !!import.meta.env.VITE_TURNSTILE_SITE_KEY);
 
   const loginForm = useForm<z.infer<typeof loginSchema>>({
     resolver: zodResolver(loginSchema),
@@ -97,7 +97,7 @@ export default function LoginPage() {
 
   const onLogin = async (values: z.infer<typeof loginSchema>) => {
     if (!captchaToken) {
-      toast({ title: "Captcha Required", description: "Please complete the hCaptcha.", variant: "destructive" });
+      toast({ title: "Captcha Required", description: "Please complete the Turnstile verification.", variant: "destructive" });
       return;
     }
     try {
@@ -118,7 +118,7 @@ export default function LoginPage() {
 
   const onRegister = async (values: z.infer<typeof registerSchema>) => {
     if (!captchaToken) {
-      toast({ title: "Captcha Required", description: "Please complete the hCaptcha.", variant: "destructive" });
+      toast({ title: "Captcha Required", description: "Please complete the Turnstile verification.", variant: "destructive" });
       return;
     }
     try {
@@ -139,7 +139,7 @@ export default function LoginPage() {
 
   const onForgotPassword = async (values: z.infer<typeof forgotPasswordSchema>) => {
     if (!captchaToken) {
-      toast({ title: "Captcha Required", description: "Please complete the hCaptcha.", variant: "destructive" });
+      toast({ title: "Captcha Required", description: "Please complete the Turnstile verification.", variant: "destructive" });
       return;
     }
     setIsSendingReset(true);
@@ -174,7 +174,7 @@ export default function LoginPage() {
 
   const onResetPassword = async (values: z.infer<typeof resetPasswordSchema>) => {
     if (!captchaToken) {
-      toast({ title: "Captcha Required", description: "Please complete the hCaptcha.", variant: "destructive" });
+      toast({ title: "Captcha Required", description: "Please complete the Turnstile verification.", variant: "destructive" });
       return;
     }
     setIsResettingPassword(true);
@@ -267,10 +267,11 @@ export default function LoginPage() {
                     )}
                   />
                   <div className="flex justify-center py-2 min-h-[78px]">
-                    <HCaptcha
-                      sitekey={siteKey || "10000000-ffff-ffff-ffff-000000000001"}
-                      onVerify={(token) => setCaptchaToken(token)}
+                    <Turnstile
+                      siteKey={siteKey}
+                      onSuccess={(token) => setCaptchaToken(token)}
                       onExpire={() => setCaptchaToken(null)}
+                      onError={() => setCaptchaToken(null)}
                     />
                   </div>
                   <Button
@@ -502,10 +503,11 @@ export default function LoginPage() {
                     )}
                   />
                   <div className="flex justify-center py-2 min-h-[78px]">
-                    <HCaptcha
-                      sitekey={siteKey || "10000000-ffff-ffff-ffff-000000000001"}
-                      onVerify={(token) => setCaptchaToken(token)}
+                    <Turnstile
+                      siteKey={siteKey}
+                      onSuccess={(token) => setCaptchaToken(token)}
                       onExpire={() => setCaptchaToken(null)}
+                      onError={() => setCaptchaToken(null)}
                     />
                   </div>
                   <Button
@@ -530,7 +532,7 @@ export default function LoginPage() {
               className="w-full bg-blue-600 border-input hover:bg-accent hover:text-accent-foreground flex items-center justify-center gap-2"
               onClick={() => {
                 if (!captchaToken) {
-                  toast({ title: "Captcha Required", description: "Please complete the hCaptcha before using Discord login.", variant: "destructive" });
+                  toast({ title: "Captcha Required", description: "Please complete the Turnstile verification before using Discord login.", variant: "destructive" });
                   return;
                 }
                 window.location.href = `/api/auth/discord?captchaToken=${captchaToken}`;
