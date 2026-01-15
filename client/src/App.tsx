@@ -73,9 +73,6 @@ function App() {
     "--sidebar-width-icon": "4rem",
   };
 
-  const recaptchaKey = import.meta.env.VITE_RECAPTCHA_SITE_KEY || import.meta.env.VITE_RECAPCHA_SITE_KEY;
-  console.log('reCAPTCHA site key status:', !!recaptchaKey);
-
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider defaultTheme="light" storageKey="portfolio-theme">

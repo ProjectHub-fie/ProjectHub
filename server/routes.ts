@@ -54,7 +54,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { email, password, firstName, lastName, captchaToken } = req.body;
 
       if (captchaToken) {
-        const hcaptchaSecret = process.env.HCAPTCHA_SECRET_KEY;
+        const hcaptchaSecret = process.env.HCAPTCHA_SECRET_KEY || process.env.VITE_HCAPTCHA_SECRET_KEY;
         if (hcaptchaSecret) {
           try {
             const verifyResponse = await fetch('https://hcaptcha.com/siteverify', {
@@ -113,7 +113,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     
     // Validate captcha before proceeding to passport
     if (captchaToken) {
-      const hcaptchaSecret = process.env.HCAPTCHA_SECRET_KEY;
+      const hcaptchaSecret = process.env.HCAPTCHA_SECRET_KEY || process.env.VITE_HCAPTCHA_SECRET_KEY;
       if (hcaptchaSecret) {
         fetch('https://hcaptcha.com/siteverify', {
           method: 'POST',
@@ -395,7 +395,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Always try to verify if token is present
       if (captchaToken) {
-        const hcaptchaSecret = process.env.HCAPTCHA_SECRET_KEY;
+        const hcaptchaSecret = process.env.HCAPTCHA_SECRET_KEY || process.env.VITE_HCAPTCHA_SECRET_KEY;
         if (hcaptchaSecret) {
           try {
             const verifyResponse = await fetch('https://hcaptcha.com/siteverify', {
