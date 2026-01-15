@@ -51,8 +51,8 @@ export default function LoginPage() {
   const [isResettingPassword, setIsResettingPassword] = useState(false);
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
 
-  const siteKey = import.meta.env.VITE_HCAPTCHA_SITE_KEY;
-  console.log('hCaptcha site key status (Login):', !!siteKey);
+  const siteKey = import.meta.env.VITE_HCAPTCHA_SITE_KEY || "10000000-ffff-ffff-ffff-000000000001";
+  console.log('hCaptcha site key status (Login):', !!import.meta.env.VITE_HCAPTCHA_SITE_KEY);
 
   const loginForm = useForm<z.infer<typeof loginSchema>>({
     resolver: zodResolver(loginSchema),
