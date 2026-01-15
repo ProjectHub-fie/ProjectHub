@@ -54,7 +54,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { email, password, firstName, lastName, captchaToken } = req.body;
 
       if (captchaToken) {
-        const turnstileSecret = process.env.TURNSTILE_SECRET_KEY || process.env.VITE_TURNSTILE_SECRET_KEY || "1x0000000000000000000000000000000AA";
+        const turnstileSecret = process.env.TURNSTILE_SECRET_KEY || process.env.VITE_TURNSTILE_SECRET_KEY;
         console.log('Verifying Turnstile token, secret present:', !!turnstileSecret);
         if (turnstileSecret) {
           try {
@@ -114,7 +114,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     
     // Validate captcha before proceeding to passport
     if (captchaToken) {
-      const turnstileSecret = process.env.TURNSTILE_SECRET_KEY || process.env.VITE_TURNSTILE_SECRET_KEY || "1x0000000000000000000000000000000AA";
+      const turnstileSecret = process.env.TURNSTILE_SECRET_KEY || process.env.VITE_TURNSTILE_SECRET_KEY;
       if (turnstileSecret) {
         fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
           method: 'POST',
@@ -325,7 +325,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const captchaToken = (req.session as any).discordCaptchaToken;
     
     if (captchaToken) {
-      const turnstileSecret = process.env.TURNSTILE_SECRET_KEY || process.env.VITE_TURNSTILE_SECRET_KEY || "1x0000000000000000000000000000000AA";
+      const turnstileSecret = process.env.TURNSTILE_SECRET_KEY || process.env.VITE_TURNSTILE_SECRET_KEY;
       if (turnstileSecret) {
         try {
           const verifyResponse = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
@@ -455,7 +455,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Always try to verify if token is present
       if (captchaToken) {
-        const turnstileSecret = process.env.TURNSTILE_SECRET_KEY || process.env.VITE_TURNSTILE_SECRET_KEY || "1x0000000000000000000000000000000AA";
+        const turnstileSecret = process.env.TURNSTILE_SECRET_KEY || process.env.VITE_TURNSTILE_SECRET_KEY;
         console.log('Verifying Turnstile token, secret present:', !!turnstileSecret);
         if (turnstileSecret) {
           try {

@@ -64,8 +64,8 @@ export default function ContactSection() {
     }
   };
 
-  const siteKey = import.meta.env.VITE_TURNSTILE_SITE_KEY || "1x00000000000000000000AA";
-  console.log('Turnstile site key status:', !!import.meta.env.VITE_TURNSTILE_SITE_KEY);
+  const siteKey = import.meta.env.VITE_TURNSTILE_SITE_KEY;
+  console.log('Turnstile site key status:', !!siteKey);
 
   const contactInfo = [
     /*{
