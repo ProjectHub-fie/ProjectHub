@@ -211,6 +211,14 @@ export default function ProjectsPage() {
                 <div className="flex gap-3">
                   <Button
                     className="flex-1"
+                    onClick={() => setLocation(`/project/${project.id}`)}
+                  >
+                    <ExternalLink className="w-4 h-4 mr-2" />
+                    View Details
+                  </Button>
+                  <Button
+                    variant="outline"
+                    className="flex-1"
                     onClick={() => project.liveUrl && window.open(project.liveUrl, '_blank')}
                     disabled={!project.liveUrl}
                   >
