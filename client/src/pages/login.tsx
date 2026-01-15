@@ -51,7 +51,7 @@ export default function LoginPage() {
   const [isResettingPassword, setIsResettingPassword] = useState(false);
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
 
-  const siteKey = import.meta.env.VITE_HCAPTCHA_SITE_KEY || import.meta.env.HCAPTCHA_SITE_KEY;
+  const siteKey = import.meta.env.VITE_HCAPTCHA_SITE_KEY || "10000000-ffff-ffff-ffff-000000000001";
   console.log('hCaptcha site key (Login):', siteKey);
 
   const loginForm = useForm<z.infer<typeof loginSchema>>({

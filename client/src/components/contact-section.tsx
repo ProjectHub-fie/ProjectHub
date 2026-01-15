@@ -64,7 +64,7 @@ export default function ContactSection() {
     }
   };
 
-  const siteKey = import.meta.env.VITE_HCAPTCHA_SITE_KEY || import.meta.env.HCAPTCHA_SITE_KEY;
+  const siteKey = import.meta.env.VITE_HCAPTCHA_SITE_KEY || "10000000-ffff-ffff-ffff-000000000001";
   console.log('hCaptcha site key:', siteKey);
 
   const contactInfo = [
