@@ -1,20 +1,20 @@
-import { useState, useCallback } from "react";
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Send, Mail, Phone, MapPin } from "lucide-react";
-import { useGoogleReCaptcha } from "react-google-recaptcha-v3";
+import HCaptcha from "@hcaptcha/react-hcaptcha";
 
 export default function ContactSection() {
-  const { executeRecaptcha } = useGoogleReCaptcha();
   const [formData, setFormData] = useState({
     name: "",
     email: "",
     subject: "",
     message: ""
   });
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
 
@@ -25,22 +25,21 @@ export default function ContactSection() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    /* if (!executeRecaptcha) {
+    if (!captchaToken) {
       toast({
-        title: "Error",
-        description: "reCAPTCHA not ready",
+        title: "Captcha Required",
+        description: "Please complete the hCaptcha to send your message.",
         variant: "destructive",
       });
       return;
-    } */
+    }
     setIsSubmitting(true);
 
     try {
-      // const token = await executeRecaptcha("contact_form");
       const response = await fetch("/api/contact", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...formData }),
+        body: JSON.stringify({ ...formData, captchaToken }),
       });
 
       if (response.ok) {
@@ -49,6 +48,7 @@ export default function ContactSection() {
           description: "Thank you for reaching out. We'll get back to you soon.",
         });
         setFormData({ name: "", email: "", subject: "", message: "" });
+        setCaptchaToken(null);
       } else {
         const error = await response.json();
         throw new Error(error.message || "Failed to send message");
@@ -63,6 +63,8 @@ export default function ContactSection() {
       setIsSubmitting(false);
     }
   };
+
+  const siteKey = import.meta.env.VITE_HCAPTCHA_SITE_KEY;
 
   const contactInfo = [
     /*{
@@ -173,9 +175,18 @@ export default function ContactSection() {
                 />
               </div>
               
+              <div className="flex justify-center mb-4">
+                {siteKey && (
+                  <HCaptcha
+                    sitekey={siteKey}
+                    onVerify={(token) => setCaptchaToken(token)}
+                    onExpire={() => setCaptchaToken(null)}
+                  />
+                )}
+              </div>
               <Button
                 type="submit"
-                disabled={isSubmitting}
+                disabled={isSubmitting || !captchaToken}
                 className="w-full bg-blue-200 text-primary-foreground py-4 rounded-lg font-medium hover:shadow-lg transition-all duration-300 hover:-translate-y-1 disabled:opacity-50"
                 data-testid="button-submit-form"
               >

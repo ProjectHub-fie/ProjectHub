@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -13,7 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { useLocation } from "wouter";
 import { FaDiscord } from "react-icons/fa";
-import { useGoogleReCaptcha } from "react-google-recaptcha-v3";
+import HCaptcha from "@hcaptcha/react-hcaptcha";
 
 const loginSchema = z.object({
   email: z.string().email("Invalid email address"),
@@ -41,7 +41,6 @@ const resetPasswordSchema = z.object({
 });
 
 export default function LoginPage() {
-  const { executeRecaptcha } = useGoogleReCaptcha();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const { login, register, isLoggingIn, isRegistering, isAuthenticated } = useAuth();
@@ -50,6 +49,9 @@ export default function LoginPage() {
   const [showResetPassword, setShowResetPassword] = useState(false);
   const [isSendingReset, setIsSendingReset] = useState(false);
   const [isResettingPassword, setIsResettingPassword] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+
+  const siteKey = import.meta.env.VITE_HCAPTCHA_SITE_KEY;
 
   const loginForm = useForm<z.infer<typeof loginSchema>>({
     resolver: zodResolver(loginSchema),
@@ -93,14 +95,13 @@ export default function LoginPage() {
   }, [isAuthenticated, setLocation]);
 
   const onLogin = async (values: z.infer<typeof loginSchema>) => {
-    /* if (!executeRecaptcha) {
-      toast({ title: "Error", description: "reCAPTCHA not ready", variant: "destructive" });
+    if (!captchaToken) {
+      toast({ title: "Captcha Required", description: "Please complete the hCaptcha.", variant: "destructive" });
       return;
-    } */
+    }
     try {
       console.log("Logging in with values:", values);
-      // const token = await executeRecaptcha("login");
-      await login({ ...values } as any);
+      await login({ ...values, captchaToken } as any);
       toast({
         title: "Success!",
         description: "You've been logged in successfully.",
@@ -117,13 +118,12 @@ export default function LoginPage() {
   };
 
   const onRegister = async (values: z.infer<typeof registerSchema>) => {
-    /* if (!executeRecaptcha) {
-      toast({ title: "Error", description: "reCAPTCHA not ready", variant: "destructive" });
+    if (!captchaToken) {
+      toast({ title: "Captcha Required", description: "Please complete the hCaptcha.", variant: "destructive" });
       return;
-    } */
+    }
     try {
-      // const token = await executeRecaptcha("register");
-      await register({ ...values } as any);
+      await register({ ...values, captchaToken } as any);
       toast({
         title: "Welcome!",
         description: "Your account has been created successfully.",
@@ -258,10 +258,19 @@ export default function LoginPage() {
                       </FormItem>
                     )}
                   />
+                  <div className="flex justify-center py-2">
+                    {siteKey && (
+                      <HCaptcha
+                        sitekey={siteKey}
+                        onVerify={(token) => setCaptchaToken(token)}
+                        onExpire={() => setCaptchaToken(null)}
+                      />
+                    )}
+                  </div>
                   <Button
                     type="submit"
                     className="w-full bg- bg-green-500 text-primary-foreground"
-                    disabled={isLoggingIn}
+                    disabled={isLoggingIn || !captchaToken}
                     data-testid="button-login-submit"
                   >
                     {isLoggingIn ? "Signing In..." : "Sign In"}
@@ -486,10 +495,19 @@ export default function LoginPage() {
                       </FormItem>
                     )}
                   />
+                  <div className="flex justify-center py-2">
+                    {siteKey && (
+                      <HCaptcha
+                        sitekey={siteKey}
+                        onVerify={(token) => setCaptchaToken(token)}
+                        onExpire={() => setCaptchaToken(null)}
+                      />
+                    )}
+                  </div>
                   <Button
                     type="submit"
                     className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
-                    disabled={isRegistering}
+                    disabled={isRegistering || !captchaToken}
                     data-testid="button-register-submit"
                   >
                     {isRegistering ? "Creating Account..." : "Create Account"}
