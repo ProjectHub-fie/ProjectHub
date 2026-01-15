@@ -66,3 +66,4 @@ expertMode = true
 
 [userenv.shared]
 VITE_RECAPTCHA_SITE_KEY = "6Ld... (user provided key)"
+VITE_HCAPTCHA_SITE_KEY = "10000000-ffff-ffff-ffff-000000000001"
