@@ -208,32 +208,35 @@ export default function ProjectsPage() {
                   ))}
                 </div>
 
-                <div className="flex gap-3">
-                  <Button
-                    className="flex-1"
-                    onClick={() => setLocation(`/project/${project.id}`)}
-                  >
-                    <ExternalLink className="w-4 h-4 mr-2" />
-                    View Details
-                  </Button>
+                <div className="flex flex-col gap-3">
+                  <div className="flex gap-3">
+                    <Button
+                      className="flex-1"
+                      onClick={() => setLocation(`/project/${project.id}`)}
+                    >
+                      <ExternalLink className="w-4 h-4 mr-2" />
+                      View Details
+                    </Button>
+                    {project.githubUrl && (
+                      <Button
+                        variant="outline"
+                        size="icon"
+                        className="shrink-0"
+                        onClick={() => window.open(project.githubUrl, '_blank')}
+                      >
+                        <Github className="w-4 h-4" />
+                      </Button>
+                    )}
+                  </div>
                   <Button
                     variant="outline"
-                    className="flex-1"
+                    className="w-full"
                     onClick={() => project.liveUrl && window.open(project.liveUrl, '_blank')}
                     disabled={!project.liveUrl}
                   >
                     {getActionIcon(project.category)}
                     {getActionText(project.category)}
                   </Button>
-                  {project.githubUrl && (
-                    <Button
-                      variant="outline"
-                      size="icon"
-                      onClick={() => window.open(project.githubUrl, '_blank')}
-                    >
-                      <Github className="w-4 h-4" />
-                    </Button>
-                  )}
                 </div>
               </div>
             </div>
