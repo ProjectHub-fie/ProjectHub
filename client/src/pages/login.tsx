@@ -100,7 +100,6 @@ export default function LoginPage() {
       return;
     }
     try {
-      console.log("Logging in with values:", values);
       await login({ ...values, captchaToken } as any);
       toast({
         title: "Success!",
@@ -108,7 +107,6 @@ export default function LoginPage() {
       });
       setLocation("/dashboard");
     } catch (error: any) {
-      console.error("Login Error:", error);
       toast({
         title: "Login Failed",
         description: error.message || "Please check your credentials and try again.",
