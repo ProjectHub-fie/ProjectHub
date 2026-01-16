@@ -120,13 +120,14 @@ These are usually provided automatically by the Replit environment, but ensure t
 
 ---
 
-## Local Development Setup
+## Local Development (VS Code)
 
-If you are running this locally, you can create a `.env` file in the root directory:
+For detailed instructions on how to clone and run this project locally in VS Code, please refer to the [vs.md](./vs.md) file.
 
-```env
-DATABASE_URL=your_postgres_url_here
-SESSION_SECRET=your_random_secret_here
-NODE_ENV=development
-PORT=5000
-```
+### Quick Start
+1. `npm install`
+2. Configure `.env` (see `vs.md` for template)
+3. `npm run db:push`
+4. `npm run dev`
+
+---
