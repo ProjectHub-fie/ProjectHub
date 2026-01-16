@@ -120,14 +120,11 @@ These are usually provided automatically by the Replit environment, but ensure t
 
 ---
 
-## Local Development (VS Code)
+## Recent Updates
 
-For detailed instructions on how to clone and run this project locally in VS Code, please refer to the [vs.md](./vs.md) file.
-
-### Quick Start
-1. `npm install`
-2. Configure `.env` (see `vs.md` for template)
-3. `npm run db:push`
-4. `npm run dev`
+- **Security Enhancements**: Integrated Cloudflare Turnstile with manual verification to prevent bot submissions while maintaining a smooth user experience.
+- **Improved Feedback System**: Implemented a new emerald green notification system for successful user actions (message sent, login, project request), optimized for both mobile and desktop visibility.
+- **Mobile Optimization**: Fixed notification positioning for mobile devices, ensuring critical feedback is always visible at the top-center of the screen.
+- **Local Development Guide**: Added a dedicated guide (`vs.md`) for setting up the project locally in VS Code.
 
 ---
