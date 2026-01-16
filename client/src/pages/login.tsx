@@ -105,6 +105,7 @@ export default function LoginPage() {
       toast({
         title: "Success!",
         description: "You've been logged in successfully.",
+        className: "bg-emerald-500 border-emerald-600 text-white",
       });
       setLocation("/dashboard");
     } catch (error: any) {
@@ -126,6 +127,7 @@ export default function LoginPage() {
       toast({
         title: "Welcome!",
         description: "Your account has been created successfully.",
+        className: "bg-emerald-500 border-emerald-600 text-white",
       });
       setLocation("/dashboard");
     } catch (error: any) {
@@ -154,6 +156,7 @@ export default function LoginPage() {
         toast({
           title: "Reset Email Sent!",
           description: "Check your email for password reset instructions.",
+          className: "bg-emerald-500 border-emerald-600 text-white",
         });
         setShowForgotPassword(false);
         forgotPasswordForm.reset();
@@ -193,6 +196,7 @@ export default function LoginPage() {
         toast({
           title: "Password Reset Successfully!",
           description: "You can now login with your new password.",
+          className: "bg-emerald-500 border-emerald-600 text-white",
         });
         setShowResetPassword(false);
         resetPasswordForm.reset();
