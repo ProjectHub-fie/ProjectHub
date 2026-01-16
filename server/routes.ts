@@ -224,7 +224,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         process.env.MAILJET_API_SECRET || ''
       );
 
-      const resetUrl = `${req.protocol}://${req.get('host')}/reset-password?token=${resetToken}`;
+      const resetTokenLink = `${req.protocol}://${req.get('host')}/reset-password?token=${resetToken}`;
       
       await mailjet
         .post("send", { version: 'v3.1' })
@@ -247,6 +247,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
                 <p>Hello ${user.firstName},</p>
                 <p>You requested to reset your password. Use the token below to reset your password:</p>
                 <p><strong>Reset Token:</strong> <code>${resetToken}</code></p>
+                <p>Alternatively, click the link below:</p>
+                <p><a href="${resetTokenLink}">${resetTokenLink}</a></p>
                 <p>This token will expire in 1 hour.</p>
                 <p>If you didn't request this, please ignore this email.</p>
                 <hr>
