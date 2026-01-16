@@ -4,10 +4,26 @@ import { sql } from "drizzle-orm";
 import { registerRoutes } from "./routes.js";
 import { setupVite, serveStatic, log } from "./vite.js";
 import { db } from "./db.js";
+import { exec } from "child_process";
 
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
+
+// Run database push automatically on start in the background
+if (process.env.NODE_ENV !== "production") {
+  log("Initiating background database push...");
+  exec("npx drizzle-kit push --force", (error, stdout, stderr) => {
+    if (error) {
+      log(`Database push failed: ${error.message}`);
+      return;
+    }
+    if (stderr) {
+      log(`Database push warning: ${stderr}`);
+    }
+    log("Database push completed successfully.");
+  });
+}
 
 app.use((req, res, next) => {
   const start = Date.now();
