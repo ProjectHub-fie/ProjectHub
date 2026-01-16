@@ -48,6 +48,17 @@ export const projectRequests = pgTable("project_requests", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// Project interactions table (likes and ratings)
+export const projectInteractions = pgTable("project_interactions", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  projectId: text("project_id").notNull(),
+  userId: uuid("user_id").references(() => users.id).notNull(),
+  isLiked: varchar("is_liked", { length: 5 }).default("false"), // "true" or "false"
+  rating: varchar("rating", { length: 5 }), // "1" to "5"
+  createdAt: timestamp("created_at").defaultNow(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 // Schemas for validation
 export const insertUserSchema = createInsertSchema(users).omit({
   id: true,
@@ -76,8 +87,16 @@ export const insertProjectRequestSchema = createInsertSchema(projectRequests).om
   technologies: z.array(z.string()).optional(),
 });
 
+export const insertProjectInteractionSchema = createInsertSchema(projectInteractions).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
+});
+
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type UpsertUser = z.infer<typeof upsertUserSchema>;
 export type User = typeof users.$inferSelect;
 export type InsertProjectRequest = z.infer<typeof insertProjectRequestSchema>;
 export type ProjectRequest = typeof projectRequests.$inferSelect;
+export type ProjectInteraction = typeof projectInteractions.$inferSelect;
+export type InsertProjectInteraction = z.infer<typeof insertProjectInteractionSchema>;

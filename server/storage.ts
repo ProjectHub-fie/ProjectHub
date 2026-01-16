@@ -1,13 +1,16 @@
 import {
   users,
   projectRequests,
+  projectInteractions,
   type User,
   type UpsertUser,
   type InsertProjectRequest,
   type ProjectRequest,
+  type ProjectInteraction,
+  type InsertProjectInteraction,
 } from "./../shared/schema.js";
 import { db } from "./db.js";
-import { eq } from "drizzle-orm";
+import { eq, and, avg, count } from "drizzle-orm";
 import crypto from "crypto";
 
 
@@ -23,9 +26,54 @@ export interface IStorage {
   getProjectRequests(userId: string): Promise<ProjectRequest[]>;
   getAllProjectRequests(): Promise<ProjectRequest[]>;
   updateProjectRequestStatus(id: string, status: string): Promise<ProjectRequest>;
+
+  // Project interaction operations
+  getProjectInteractions(projectId: string): Promise<{ likes: number, averageRating: number, userInteraction?: ProjectInteraction }>;
+  upsertProjectInteraction(interaction: InsertProjectInteraction): Promise<ProjectInteraction>;
+  getUserInteraction(projectId: string, userId: string): Promise<ProjectInteraction | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
+  // ... (existing methods)
+
+  async getProjectInteractions(projectId: string): Promise<{ likes: number, averageRating: number, userInteraction?: ProjectInteraction }> {
+    const likesResult = await db.select({ value: count() }).from(projectInteractions).where(and(eq(projectInteractions.projectId, projectId), eq(projectInteractions.isLiked, "true")));
+    const ratingResult = await db.select({ value: avg(sql`CAST(${projectInteractions.rating} AS DECIMAL)`) }).from(projectInteractions).where(eq(projectInteractions.projectId, projectId));
+    
+    return {
+      likes: Number(likesResult[0]?.value || 0),
+      averageRating: Number(ratingResult[0]?.value || 0),
+    };
+  }
+
+  async getUserInteraction(projectId: string, userId: string): Promise<ProjectInteraction | undefined> {
+    const [interaction] = await db.select().from(projectInteractions).where(and(eq(projectInteractions.projectId, projectId), eq(projectInteractions.userId, userId)));
+    return interaction;
+  }
+
+  async upsertProjectInteraction(interactionData: InsertProjectInteraction): Promise<ProjectInteraction> {
+    const existing = await this.getUserInteraction(interactionData.projectId, interactionData.userId);
+    
+    if (existing) {
+      const [updated] = await db
+        .update(projectInteractions)
+        .set({
+          isLiked: interactionData.isLiked !== undefined ? interactionData.isLiked : existing.isLiked,
+          rating: interactionData.rating !== undefined ? interactionData.rating : existing.rating,
+          updatedAt: new Date(),
+        })
+        .where(eq(projectInteractions.id, existing.id))
+        .returning();
+      return updated;
+    } else {
+      const [inserted] = await db.insert(projectInteractions).values({
+        ...interactionData,
+        id: crypto.randomUUID(),
+      }).returning();
+      return inserted;
+    }
+  }
+}
   // User operations
   async getUser(id: string): Promise<User | undefined> {
     const [user] = await db.select().from(users).where(eq(users.id, id));
