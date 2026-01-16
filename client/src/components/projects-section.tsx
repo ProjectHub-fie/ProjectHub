@@ -1,8 +1,72 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ExternalLink, Github, Download, Bot, BarChart3, Terminal, User, Network } from "lucide-react";
+import { ExternalLink, Github, Download, Bot, BarChart3, Terminal, User, Network, Heart, Star } from "lucide-react";
 import { useLocation } from "wouter";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
+
+function ProjectInteractions({ projectId }: { projectId: string }) {
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  
+  const { data: interactions } = useQuery({
+    queryKey: ["/api/projects", projectId, "interactions"],
+  });
+
+  const interactionMutation = useMutation({
+    mutationFn: async (data: { isLiked?: boolean; rating?: number }) => {
+      return apiRequest(`/api/projects/${projectId}/interactions`, "POST", data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "interactions"] });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Action failed",
+        description: error.message || "You must be logged in to like or rate projects.",
+        variant: "destructive",
+      });
+    }
+  });
+
+  return (
+    <div className="flex items-center gap-4 mt-4 py-2 border-t border-border/50">
+      <button 
+        onClick={(e) => {
+          e.stopPropagation();
+          interactionMutation.mutate({ isLiked: interactions?.userInteraction?.isLiked !== "true" });
+        }}
+        className={`flex items-center gap-1 transition-colors ${interactions?.userInteraction?.isLiked === "true" ? "text-red-500" : "text-muted-foreground hover:text-red-400"}`}
+      >
+        <Heart className={`w-4 h-4 ${interactions?.userInteraction?.isLiked === "true" ? "fill-current" : ""}`} />
+        <span className="text-xs font-medium">{interactions?.likes || 0}</span>
+      </button>
+      <div className="flex items-center gap-1">
+        {[1, 2, 3, 4, 5].map((star) => (
+          <button
+            key={star}
+            onClick={(e) => {
+              e.stopPropagation();
+              interactionMutation.mutate({ rating: star });
+            }}
+            className={`transition-colors ${Number(interactions?.userInteraction?.rating) >= star ? "text-yellow-500" : "text-muted-foreground hover:text-yellow-400"}`}
+          >
+            <Star className={`w-3 h-3 ${Number(interactions?.userInteraction?.rating) >= star ? "fill-current" : ""}`} />
+          </button>
+        ))}
+        {interactions?.averageRating > 0 && (
+          <span className="text-[10px] text-muted-foreground ml-1">
+            ({interactions.averageRating.toFixed(1)})
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
 
 interface Project {
   id: string;
@@ -250,6 +314,7 @@ export default function ProjectsSection() {
                     </Button>
                   )}
                 </div>
+                <ProjectInteractions projectId={project.id} />
               </div>
             </div>
           ))}

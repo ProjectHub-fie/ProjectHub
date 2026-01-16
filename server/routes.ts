@@ -539,6 +539,44 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.get('/api/projects/:projectId/interactions', async (req, res) => {
+    try {
+      const { projectId } = req.params;
+      const interactions = await storage.getProjectInteractions(projectId);
+      
+      let userInteraction = null;
+      if (req.isAuthenticated()) {
+        const user = req.user as any;
+        userInteraction = await storage.getUserInteraction(projectId, user.id);
+      }
+      
+      res.json({ ...interactions, userInteraction });
+    } catch (error) {
+      console.error('Fetch interactions error:', error);
+      res.status(500).json({ message: "Failed to fetch project interactions" });
+    }
+  });
+
+  app.post('/api/projects/:projectId/interactions', requireAuth, async (req, res) => {
+    try {
+      const { projectId } = req.params;
+      const user = req.user as any;
+      const { isLiked, rating } = req.body;
+
+      const interaction = await storage.upsertProjectInteraction({
+        projectId,
+        userId: user.id,
+        isLiked: isLiked?.toString(),
+        rating: rating?.toString(),
+      });
+
+      res.json(interaction);
+    } catch (error) {
+      console.error('Update interaction error:', error);
+      res.status(500).json({ message: "Failed to update project interaction" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
