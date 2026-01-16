@@ -65,7 +65,3 @@ expertMode = true
 [userenv]
 
 [userenv.shared]
-VITE_RECAPTCHA_SITE_KEY = "6Ld... (user provided key)"
-VITE_HCAPTCHA_SITE_KEY = "45dafd8e-429c-499a-9afe-065ad04287ca"
-VITE_TURNSTILE_SITE_KEY = "0x4AAAAAACMs4uviDJ_b45X9"
-TURNSTILE_SECRET_KEY = "0x4AAAAAACMs4ttBX0s9BdI9KJkLMTMMqQk"
