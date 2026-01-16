@@ -68,12 +68,12 @@ export default function ContactSection() {
   console.log('Turnstile site key status:', !!import.meta.env.VITE_TURNSTILE_SITE_KEY, 'using key:', siteKey);
 
   const contactInfo = [
-    /*{
+    {
       icon: <Mail className="text-blue-400" />,
       label: "Email",
       value: "dev.projecthub.fie@gmail.com",
       color: "bg-blue-500/20"
-    },*/
+    },
     {
       icon: <Phone className="text-emerald-400" />,
       label: "Phone",
@@ -182,6 +182,9 @@ export default function ContactSection() {
                   onSuccess={(token) => setCaptchaToken(token)}
                   onExpire={() => setCaptchaToken(null)}
                   onError={() => setCaptchaToken(null)}
+                  options={{
+                    appearance: "execute"
+                  }}
                 />
               </div>
               <Button
