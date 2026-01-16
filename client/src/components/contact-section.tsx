@@ -183,6 +183,9 @@ export default function ContactSection() {
                   onSuccess={(token) => setCaptchaToken(token)}
                   onExpire={() => setCaptchaToken(null)}
                   onError={() => setCaptchaToken(null)}
+                  options={{
+                    appearance: "execute"
+                  }}
                 />
               </div>
               <Button
