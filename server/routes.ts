@@ -544,13 +544,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { projectId } = req.params;
       const interactions = await storage.getProjectInteractions(projectId);
       
-      let userInteraction = null;
+      let userInteraction: any = null;
       if (req.isAuthenticated()) {
         const user = req.user as any;
-        userInteraction = await storage.getUserInteraction(projectId, user.id);
+        const interaction = await storage.getUserInteraction(projectId, user.id);
+        userInteraction = interaction || null;
       }
       
-      res.json({ ...interactions, userInteraction });
+      // Calculate summary statistics
+      const likes = interactions.filter(i => i.isLiked === "true").length;
+      const ratings = interactions.filter(i => i.rating && i.rating !== "0").map(i => Number(i.rating));
+      const averageRating = ratings.length > 0 
+        ? ratings.reduce((a, b) => a + b, 0) / ratings.length 
+        : 0;
+
+      res.json({ 
+        likes, 
+        averageRating, 
+        totalRatings: ratings.length,
+        userInteraction 
+      });
     } catch (error) {
       console.error('Fetch interactions error:', error);
       res.status(500).json({ message: "Failed to fetch project interactions" });

@@ -277,7 +277,8 @@ export default function LoginPage() {
                       onExpire={() => setCaptchaToken(null)}
                       onError={() => setCaptchaToken(null)}
                       options={{
-                        appearance: "execute"
+                        theme: "auto",
+                        appearance: "always"
                       }}
                     />
                   </div>
@@ -516,7 +517,8 @@ export default function LoginPage() {
                       onExpire={() => setCaptchaToken(null)}
                       onError={() => setCaptchaToken(null)}
                       options={{
-                        appearance: "execute"
+                        theme: "auto",
+                        appearance: "always"
                       }}
                     />
                   </div>

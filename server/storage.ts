@@ -28,7 +28,7 @@ export interface IStorage {
   updateProjectRequestStatus(id: string, status: string): Promise<ProjectRequest>;
 
   // Project interaction operations
-  getProjectInteractions(projectId: string): Promise<{ likes: number, averageRating: number }>;
+  getProjectInteractions(projectId: string): Promise<ProjectInteraction[]>;
   upsertProjectInteraction(interaction: InsertProjectInteraction): Promise<ProjectInteraction>;
   getUserInteraction(projectId: string, userId: string): Promise<ProjectInteraction | undefined>;
 }
@@ -184,14 +184,8 @@ export class DatabaseStorage implements IStorage {
   }
 
   // Project interaction operations
-  async getProjectInteractions(projectId: string): Promise<{ likes: number, averageRating: number }> {
-    const likesResult = await db.select({ value: count() }).from(projectInteractions).where(and(eq(projectInteractions.projectId, projectId), eq(projectInteractions.isLiked, "true")));
-    const ratingResult = await db.select({ value: avg(sql`CAST(${projectInteractions.rating} AS DECIMAL)`) }).from(projectInteractions).where(eq(projectInteractions.projectId, projectId));
-    
-    return {
-      likes: Number(likesResult[0]?.value || 0),
-      averageRating: Number(ratingResult[0]?.value || 0),
-    };
+  async getProjectInteractions(projectId: string): Promise<ProjectInteraction[]> {
+    return db.select().from(projectInteractions).where(eq(projectInteractions.projectId, projectId));
   }
 
   async getUserInteraction(projectId: string, userId: string): Promise<ProjectInteraction | undefined> {
