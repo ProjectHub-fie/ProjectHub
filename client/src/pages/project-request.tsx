@@ -89,6 +89,7 @@ export default function ProjectRequestPage() {
       toast({
         title: "Request Submitted!",
         description: "Your project request has been submitted successfully. We'll get back to you soon!",
+        className: "bg-emerald-500 border-emerald-600 text-white",
       });
     },
     onError: (error: any) => {
@@ -112,6 +113,7 @@ export default function ProjectRequestPage() {
       toast({
         title: "Profile Updated",
         description: "Your profile information has been updated successfully.",
+        className: "bg-emerald-500 border-emerald-600 text-white",
       });
       setShowSettings(false);
     } catch (error: any) {
@@ -226,7 +228,10 @@ export default function ProjectRequestPage() {
                                   const data = await response.json();
                                   if (response.ok) {
                                     queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
-                                    toast({ title: "Image uploaded!" });
+                                    toast({ 
+                                      title: "Image uploaded!",
+                                      className: "bg-emerald-500 border-emerald-600 text-white",
+                                    });
                                   } else {
                                     throw new Error(data.message || "Upload failed");
                                   }
