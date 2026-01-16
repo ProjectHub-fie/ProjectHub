@@ -276,9 +276,6 @@ export default function LoginPage() {
                       onSuccess={(token) => setCaptchaToken(token)}
                       onExpire={() => setCaptchaToken(null)}
                       onError={() => setCaptchaToken(null)}
-                      options={{
-                        appearance: "execute"
-                      }}
                     />
                   </div>
                   <Button
@@ -515,9 +512,6 @@ export default function LoginPage() {
                       onSuccess={(token) => setCaptchaToken(token)}
                       onExpire={() => setCaptchaToken(null)}
                       onError={() => setCaptchaToken(null)}
-                      options={{
-                        appearance: "execute"
-                      }}
                     />
                   </div>
                   <Button
