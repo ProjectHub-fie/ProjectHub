@@ -184,7 +184,8 @@ export default function ContactSection() {
                   onExpire={() => setCaptchaToken(null)}
                   onError={() => setCaptchaToken(null)}
                   options={{
-                    appearance: "execute"
+                    theme: "auto",
+                    appearance: "always"
                   }}
                 />
               </div>
