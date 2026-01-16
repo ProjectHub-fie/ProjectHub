@@ -34,3 +34,7 @@ npm run dev
 - **Node.js**: Version 18 or higher.
 - **PostgreSQL**: A running instance accessible via the `DATABASE_URL`.
 - **Environment**: The project uses `tsx` and `vite`, which are included in the dependencies.
+
+### error
+'NODE_ENV' is not recognized as an internal or external command,
+operable program or batch file.
