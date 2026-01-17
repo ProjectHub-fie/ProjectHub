@@ -211,7 +211,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       // Generate reset token
       const { randomBytes } = await import("crypto");
-      const resetToken = randomBytes(32).toString('hex');
+      const resetToken = randomBytes(3).toString('hex').toUpperCase(); // 6 character alphanumeric code
       const resetTokenExpiry = new Date(Date.now() + 3600000); // 1 hour from now
 
       // Save reset token to user
@@ -243,16 +243,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
               ],
               Subject: "Password Reset Request",
               HTMLPart: `
-                <h2>Password Reset Request</h2>
-                <p>Hello ${user.firstName},</p>
-                <p>You requested to reset your password. Use the token below to reset your password:</p>
-                <p><strong>Reset Token:</strong> <code>${resetToken}</code></p>
-                <p>Alternatively, click the link below:</p>
-                <p><a href="${resetTokenLink}">${resetTokenLink}</a></p>
-                <p>This token will expire in 1 hour.</p>
-                <p>If you didn't request this, please ignore this email.</p>
-                <hr>
-                <p><em>ProjectHub Security Team</em></p>
+                <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
+                  <h2 style="color: #3b82f6; margin-bottom: 20px;">Password Reset Request</h2>
+                  <p>Hello ${user.firstName},</p>
+                  <p>You requested to reset your password for ProjectHub. Use the verification code below to complete the process:</p>
+                  <div style="background-color: #f8fafc; padding: 15px; text-align: center; border-radius: 6px; margin: 25px 0;">
+                    <span style="font-size: 32px; font-weight: bold; letter-spacing: 5px; color: #1e293b;">${resetToken}</span>
+                  </div>
+                  <p>Alternatively, click the button below to reset your password:</p>
+                  <div style="text-align: center; margin: 30px 0;">
+                    <a href="${resetTokenLink}" style="background-color: #3b82f6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">Reset Password</a>
+                  </div>
+                  <p style="color: #64748b; font-size: 14px;">This code will expire in 1 hour. If you didn't request this, please ignore this email.</p>
+                  <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 30px 0;">
+                  <p style="color: #94a3b8; font-size: 12px; text-align: center;">ProjectHub Security Team</p>
+                </div>
               `
             }
           ]
