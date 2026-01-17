@@ -549,7 +549,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/projects/:projectId/interactions', async (req, res) => {
     try {
       const { projectId } = req.params;
-      const interactions = await storage.getProjectInteractions(projectId);
+      const { likes, averageRating } = await storage.getProjectInteractions(projectId);
       
       let userInteraction: any = null;
       if (req.isAuthenticated()) {
@@ -558,17 +558,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
         userInteraction = interaction || null;
       }
       
-      // Calculate summary statistics
-      const likes = interactions.filter(i => i.isLiked === "true").length;
-      const ratings = interactions.filter(i => i.rating && i.rating !== "0").map(i => Number(i.rating));
-      const averageRating = ratings.length > 0 
-        ? ratings.reduce((a, b) => a + b, 0) / ratings.length 
-        : 0;
-
       res.json({ 
         likes, 
         averageRating, 
-        totalRatings: ratings.length,
         userInteraction 
       });
     } catch (error) {
