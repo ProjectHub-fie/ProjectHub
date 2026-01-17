@@ -13,7 +13,7 @@ function ProjectInteractions({ projectId }: { projectId: string }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   
-  const { data: interactions } = useQuery({
+  const { data: interactions } = useQuery<any>({
     queryKey: ["/api/projects", projectId, "interactions"],
   });
 
