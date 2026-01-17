@@ -14,7 +14,7 @@ function ProjectInteractions({ projectId }: { projectId: string }) {
   const queryClient = useQueryClient();
   
   const { data: interactions } = useQuery<any>({
-    queryKey: ["/api/projects", projectId, "interactions"],
+    queryKey: ["/api/projects", projectId, "interactions", user?.id],
   });
 
   const interactionMutation = useMutation({
@@ -22,7 +22,7 @@ function ProjectInteractions({ projectId }: { projectId: string }) {
       return apiRequest(`/api/projects/${projectId}/interactions`, "POST", data);
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "interactions"] });
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "interactions"], exact: false });
       toast({
         title: "Success!",
         description: "Your interaction has been recorded.",
@@ -38,12 +38,36 @@ function ProjectInteractions({ projectId }: { projectId: string }) {
     }
   });
 
+  const handleLike = () => {
+    if (!user) {
+      toast({
+        title: "Authentication required",
+        description: "You must be logged in to like projects.",
+        variant: "destructive",
+      });
+      return;
+    }
+    interactionMutation.mutate({ isLiked: interactions?.userInteraction?.isLiked !== "true" });
+  };
+
+  const handleRating = (star: number) => {
+    if (!user) {
+      toast({
+        title: "Authentication required",
+        description: "You must be logged in to rate projects.",
+        variant: "destructive",
+      });
+      return;
+    }
+    interactionMutation.mutate({ rating: star });
+  };
+
   return (
     <div className="flex items-center gap-4 mt-4 py-2 border-t border-border/50">
       <button 
         onClick={(e) => {
           e.stopPropagation();
-          interactionMutation.mutate({ isLiked: interactions?.userInteraction?.isLiked !== "true" });
+          handleLike();
         }}
         className={`flex items-center gap-1 transition-colors ${interactions?.userInteraction?.isLiked === "true" ? "text-red-500" : "text-muted-foreground hover:text-red-400"}`}
       >
@@ -56,7 +80,7 @@ function ProjectInteractions({ projectId }: { projectId: string }) {
             key={star}
             onClick={(e) => {
               e.stopPropagation();
-              interactionMutation.mutate({ rating: star });
+              handleRating(star);
             }}
             className={`transition-colors ${Number(interactions?.userInteraction?.rating) >= star ? "text-yellow-500" : "text-muted-foreground hover:text-yellow-400"}`}
           >
