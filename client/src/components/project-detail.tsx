@@ -2,8 +2,12 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent } from "@/components/ui/card";
 import { Separator } from "@/components/ui/separator";
-import { ExternalLink, Github, Download, Bot, ArrowLeft, Calendar, Users, Star, CheckCircle2 } from "lucide-react";
+import { ExternalLink, Github, Download, Bot, ArrowLeft, Calendar, Users, Star, CheckCircle2, Heart } from "lucide-react";
 import { useLocation } from "wouter";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
+import { useAuth } from "@/hooks/useAuth";
+import { useToast } from "@/hooks/use-toast";
 
 interface ProjectDetailProps {
   project: {
@@ -28,6 +32,58 @@ interface ProjectDetailProps {
 
 export default function ProjectDetail({ project }: ProjectDetailProps) {
   const [, setLocation] = useLocation();
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+
+  const { data: interactions } = useQuery<any>({
+    queryKey: ["/api/projects", project.id, "interactions", user?.id],
+  });
+
+  const interactionMutation = useMutation({
+    mutationFn: async (data: { isLiked?: boolean; rating?: number }) => {
+      return apiRequest(`/api/projects/${project.id}/interactions`, "POST", data);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/projects", project.id, "interactions"], exact: false });
+      toast({
+        title: "Success!",
+        description: "Your interaction has been recorded.",
+        variant: "success",
+      });
+    },
+    onError: (error: any) => {
+      toast({
+        title: "Action failed",
+        description: error.message || "You must be logged in to like or rate projects.",
+        variant: "destructive",
+      });
+    }
+  });
+
+  const handleLike = () => {
+    if (!user) {
+      toast({
+        title: "Authentication required",
+        description: "You must be logged in to like projects.",
+        variant: "destructive",
+      });
+      return;
+    }
+    interactionMutation.mutate({ isLiked: interactions?.userInteraction?.isLiked !== "true" });
+  };
+
+  const handleRating = (star: number) => {
+    if (!user) {
+      toast({
+        title: "Authentication required",
+        description: "You must be logged in to rate projects.",
+        variant: "destructive",
+      });
+      return;
+    }
+    interactionMutation.mutate({ rating: star });
+  };
 
   const getActionIcon = (category: string) => {
     switch (category) {
@@ -121,6 +177,23 @@ export default function ProjectDetail({ project }: ProjectDetailProps) {
           )}
         </div>
 
+        {/* Like Button */}
+        <div className="flex items-center justify-center mb-8">
+          <button 
+            onClick={handleLike}
+            className={`flex items-center gap-2 px-6 py-3 rounded-full border-2 transition-all duration-200 ${
+              interactions?.userInteraction?.isLiked === "true" 
+                ? "bg-red-500 text-white border-red-500 hover:bg-red-600" 
+                : "bg-background text-muted-foreground border-muted-foreground/30 hover:border-red-400 hover:text-red-400"
+            }`}
+          >
+            <Heart className={`w-5 h-5 ${interactions?.userInteraction?.isLiked === "true" ? "fill-current" : ""}`} />
+            <span className="font-semibold">
+              {interactions?.userInteraction?.isLiked === "true" ? "Liked" : "Like"} ({interactions?.likes || 0})
+            </span>
+          </button>
+        </div>
+
         <div className="grid md:grid-cols-2 gap-10">
           {/* Project Details */}
           <Card className="hover-elevate border-muted/40 shadow-sm">
@@ -161,6 +234,44 @@ export default function ProjectDetail({ project }: ProjectDetailProps) {
                     </div>
                   </div>
                 )}
+
+                {/* Likes and Rating */}
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-full bg-red-500/10 flex items-center justify-center">
+                    <Heart className="w-5 h-5 text-red-500" />
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground text-xs uppercase font-bold tracking-widest">Likes</p>
+                    <p className="font-semibold">{interactions?.likes || 0}</p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-4">
+                  <div className="w-10 h-10 rounded-full bg-yellow-500/10 flex items-center justify-center">
+                    <Star className="w-5 h-5 text-yellow-500" />
+                  </div>
+                  <div>
+                    <p className="text-muted-foreground text-xs uppercase font-bold tracking-widest">Rating</p>
+                    <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1">
+                        {[1, 2, 3, 4, 5].map((star) => (
+                          <button
+                            key={star}
+                            onClick={() => handleRating(star)}
+                            className={`transition-colors ${Number(interactions?.userInteraction?.rating) >= star ? "text-yellow-500" : "text-muted-foreground hover:text-yellow-400"}`}
+                          >
+                            <Star className={`w-4 h-4 ${Number(interactions?.userInteraction?.rating) >= star ? "fill-current" : ""}`} />
+                          </button>
+                        ))}
+                      </div>
+                      {interactions?.averageRating > 0 && (
+                        <span className="text-sm text-muted-foreground">
+                          ({interactions.averageRating.toFixed(1)})
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </div>
               </div>
 
               <Separator className="my-8" />
