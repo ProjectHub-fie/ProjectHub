@@ -23,6 +23,11 @@ function ProjectInteractions({ projectId }: { projectId: string }) {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "interactions"] });
+      toast({
+        title: "Success!",
+        description: "Your interaction has been recorded.",
+        variant: "success",
+      });
     },
     onError: (error: any) => {
       toast({

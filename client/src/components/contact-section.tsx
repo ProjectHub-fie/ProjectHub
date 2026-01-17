@@ -46,7 +46,7 @@ export default function ContactSection() {
         toast({
           title: "Message Sent!",
           description: "Thank you for reaching out. We'll get back to you soon.",
-          className: "bg-emerald-500 border-emerald-600 text-white",
+          variant: "success",
         });
         setFormData({ name: "", email: "", subject: "", message: "" });
         setCaptchaToken(null);
