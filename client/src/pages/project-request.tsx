@@ -39,6 +39,13 @@ export default function ProjectRequestPage() {
   const queryClient = useQueryClient();
   const [showSettings, setShowSettings] = useState(false);
 
+  // Schema for profile update
+  const profileSchema = z.object({
+    firstName: z.string().min(1, "First name is required"),
+    lastName: z.string().min(1, "Last name is required"),
+    id: z.string().optional(),
+  });
+
   const form = useForm<z.infer<typeof projectRequestSchema>>({
     resolver: zodResolver(projectRequestSchema),
     defaultValues: {

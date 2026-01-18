@@ -1,38 +1,47 @@
-export default async function handler(req, res) {
-  // Configure CORS
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+import { storage } from "../../server/storage.js";
+import bcrypt from "bcryptjs";
 
-  if (req.method === 'OPTIONS') {
-    res.status(200).end();
-    return;
+export default async function handler(req, res) {
+  if (req.method !== 'POST') {
+    return res.status(405).json({ message: "Method not allowed" });
   }
 
-  if (req.method === 'POST') {
-    const { email, password, firstName, lastName } = req.body;
+  try {
+    const { email, password, firstName, lastName, captchaToken } = req.body;
     
     if (!email || !password || !firstName || !lastName) {
       return res.status(400).json({ message: "All fields are required" });
     }
 
-    // Simple demo registration - in production use proper auth
+    const existingUser = await storage.getUserByEmail(email);
+    if (existingUser) {
+      return res.status(400).json({ message: "Email already registered" });
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const user = await storage.upsertUser({
+      email,
+      firstName,
+      lastName,
+      password: hashedPassword,
+    });
+
     const userData = {
-      id: 'user-' + Date.now(),
-      email: email,
-      firstName: firstName,
-      lastName: lastName
+      id: user.id,
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName
     };
     
-    // Create a simple session token for stateless authentication
     const sessionToken = Buffer.from(JSON.stringify(userData)).toString('base64');
     
-    res.setHeader('X-User-Session', sessionToken);
+    res.setHeader('Set-Cookie', `connect.sid=${sessionToken}; Path=/; HttpOnly; SameSite=Lax`);
     res.json({
       user: userData,
       sessionToken: sessionToken
     });
-  } else {
-    res.status(405).json({ message: "Method not allowed" });
+  } catch (error) {
+    console.error('API Register error:', error);
+    res.status(500).json({ message: "Registration failed" });
   }
 }
