@@ -36,7 +36,8 @@ export default async function handler(req, res) {
     // Simple session token
     const sessionToken = Buffer.from(JSON.stringify(userData)).toString('base64');
     
-    res.setHeader('Set-Cookie', `connect.sid=${sessionToken}; Path=/; HttpOnly; SameSite=Lax`);
+    // Set cookie and also return it in response for development convenience
+    res.setHeader('Set-Cookie', `connect.sid=${sessionToken}; Path=/; HttpOnly; SameSite=Lax; Max-Age=86400`);
     res.json({
       user: userData,
       sessionToken: sessionToken
