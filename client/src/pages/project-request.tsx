@@ -108,7 +108,8 @@ export default function ProjectRequestPage() {
   const onUpdateProfile = async (values: z.infer<typeof profileSchema>) => {
     try {
       console.log('Submitting profile update:', values);
-      await updateProfile(values);
+      // Pass ID explicitly for Vercel serverless compatibility
+      await updateProfile({ ...values, id: user?.id });
       queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
       toast({
         title: "Profile Updated",
@@ -220,6 +221,9 @@ export default function ProjectRequestPage() {
 
                                 const formData = new FormData();
                                 formData.append('file', file);
+                                if (user?.id) {
+                                  formData.append('userId', user.id.toString());
+                                }
                                 try {
                                   const response = await fetch('/api/auth/upload-profile-pic', {
                                     method: 'POST',
