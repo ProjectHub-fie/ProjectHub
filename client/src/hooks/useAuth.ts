@@ -1,5 +1,5 @@
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
+import { useState, useEffect } from "react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 interface User {
   id: string;
@@ -8,28 +8,26 @@ interface User {
   lastName: string | null;
 }
 
+const USER_STORAGE_KEY = "projecthub_user";
+
 export function useAuth() {
   const queryClient = useQueryClient();
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
 
-  const { data: user, isLoading } = useQuery({
-    queryKey: ["/api/auth/user"],
-    queryFn: async () => {
-      try {
-        const res = await fetch("/api/auth/user", {
-          credentials: "include",
-        });
-        if (res.status === 401) return null;
-        if (!res.ok) return null;
-        const data = await res.json();
-        return data.user || null;
-      } catch (err) {
-        console.error("Auth fetch error:", err);
-        return null;
+  // Load user from localStorage on mount
+  useEffect(() => {
+    try {
+      const storedUser = localStorage.getItem(USER_STORAGE_KEY);
+      if (storedUser) {
+        setUser(JSON.parse(storedUser));
       }
-    },
-    staleTime: Infinity,
-    retry: false,
-  });
+    } catch (error) {
+      console.error("Error loading user from localStorage:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  }, []);
 
   const loginMutation = useMutation({
     mutationFn: async (credentials: { email: string; password: string }) => {
@@ -39,18 +37,19 @@ export function useAuth() {
         credentials: "include",
         body: JSON.stringify(credentials),
       });
-      
+
       const data = await response.json();
-      
+
       if (!response.ok) {
         throw new Error(data.message || "Invalid email or password");
       }
-      
+
       return data;
     },
     onSuccess: (data) => {
       if (data && data.user) {
-        queryClient.setQueryData(["/api/auth/user"], data.user);
+        setUser(data.user);
+        localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(data.user));
       }
     },
   });
@@ -68,17 +67,18 @@ export function useAuth() {
         credentials: "include",
         body: JSON.stringify(userData),
       });
-      
+
       const data = await response.json();
       if (!response.ok) {
         throw new Error(data.message || "Registration failed");
       }
-      
+
       return data;
     },
     onSuccess: (data) => {
       if (data && data.user) {
-        queryClient.setQueryData(["/api/auth/user"], data.user);
+        setUser(data.user);
+        localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(data.user));
       }
     },
   });
@@ -95,7 +95,8 @@ export function useAuth() {
       }
     },
     onSuccess: () => {
-      queryClient.setQueryData(["/api/auth/user"], null);
+      setUser(null);
+      localStorage.removeItem(USER_STORAGE_KEY);
       window.location.href = "/";
     },
   });
@@ -112,17 +113,18 @@ export function useAuth() {
         credentials: "include",
         body: JSON.stringify(userData),
       });
-      
+
       const data = await response.json();
       if (!response.ok) {
         throw new Error(data.message || "Failed to update profile");
       }
-      
+
       return data;
     },
     onSuccess: (data) => {
       if (data && data.user) {
-        queryClient.setQueryData(["/api/auth/user"], data.user);
+        setUser(data.user);
+        localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(data.user));
       }
     },
   });

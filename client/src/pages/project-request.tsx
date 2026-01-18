@@ -110,7 +110,6 @@ export default function ProjectRequestPage() {
     try {
       console.log('Submitting profile update:', values);
       await updateProfile(values);
-      queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
       toast({
         title: "Profile Updated",
         description: "Your profile information has been updated successfully.",
@@ -231,7 +230,6 @@ export default function ProjectRequestPage() {
                                   });
                                   const data = await response.json();
                                   if (response.ok) {
-                                    queryClient.invalidateQueries({ queryKey: ["/api/auth/user"] });
                                     toast({ 
                                       title: "Image uploaded!",
                                       variant: "success",
