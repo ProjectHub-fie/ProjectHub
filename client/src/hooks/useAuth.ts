@@ -14,11 +14,16 @@ export function useAuth() {
   const { data: user, isLoading } = useQuery({
     queryKey: ["/api/auth/user"],
     queryFn: async () => {
-      const res = await fetch("/api/auth/user");
-      if (res.status === 401) return null;
-      if (!res.ok) throw new Error("Failed to fetch user");
-      const data = await res.json();
-      return data.user;
+      try {
+        const res = await fetch("/api/auth/user");
+        if (res.status === 401) return null;
+        if (!res.ok) return null;
+        const data = await res.json();
+        return data.user || null;
+      } catch (err) {
+        console.error("Auth fetch error:", err);
+        return null;
+      }
     },
     staleTime: Infinity,
     retry: false,

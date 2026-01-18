@@ -5,8 +5,10 @@ export default async function handler(req, res) {
     const cookies = parse(req.headers.cookie || '');
     const sessionToken = cookies['connect.sid'];
 
+    console.log('API Auth User - Token present:', !!sessionToken);
+
     if (!sessionToken) {
-      return res.status(401).json({ message: "Authentication required" });
+      return res.status(401).json({ user: null, message: "Authentication required" });
     }
 
     try {
@@ -15,10 +17,11 @@ export default async function handler(req, res) {
       if (!userData || typeof userData !== 'object') {
         throw new Error("Malformed session data");
       }
+      console.log('API Auth User - Success:', userData.email);
       res.json({ user: userData });
     } catch (e) {
-      console.error('Session parsing error:', e, 'Token snippet:', sessionToken?.substring(0, 10));
-      res.status(401).json({ message: "Invalid session" });
+      console.error('Session parsing error:', e);
+      res.status(401).json({ user: null, message: "Invalid session" });
     }
   } else {
     res.status(405).json({ message: "Method not allowed" });
