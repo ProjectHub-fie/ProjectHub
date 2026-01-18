@@ -10,9 +10,14 @@ export default async function handler(req, res) {
     }
 
     try {
-      const userData = JSON.parse(Buffer.from(sessionToken, 'base64').toString());
+      const decodedSession = Buffer.from(sessionToken, 'base64').toString();
+      const userData = JSON.parse(decodedSession);
+      if (!userData || typeof userData !== 'object') {
+        throw new Error("Malformed session data");
+      }
       res.json({ user: userData });
     } catch (e) {
+      console.error('Session parsing error:', e, 'Token snippet:', sessionToken?.substring(0, 10));
       res.status(401).json({ message: "Invalid session" });
     }
   } else {
