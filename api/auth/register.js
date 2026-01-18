@@ -34,8 +34,9 @@ export default async function handler(req, res) {
     };
     
     const sessionToken = Buffer.from(JSON.stringify(userData)).toString('base64');
+    const isProd = process.env.NODE_ENV === 'production';
     
-    res.setHeader('Set-Cookie', `connect.sid=${sessionToken}; Path=/; HttpOnly; SameSite=None; Secure; Max-Age=86400`);
+    res.setHeader('Set-Cookie', `connect.sid=${sessionToken}; Path=/; HttpOnly; SameSite=${isProd ? 'None' : 'Lax'}; ${isProd ? 'Secure;' : ''} Max-Age=86400`);
     res.json({
       user: userData,
       sessionToken: sessionToken
