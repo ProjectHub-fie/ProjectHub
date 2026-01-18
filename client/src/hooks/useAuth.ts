@@ -6,6 +6,7 @@ interface User {
   email: string | null;
   firstName: string | null;
   lastName: string | null;
+  profileImageUrl?: string | null;
 }
 
 const USER_STORAGE_KEY = "projecthub_user";
