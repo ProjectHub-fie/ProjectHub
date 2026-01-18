@@ -13,7 +13,23 @@ export default async function handler(req, res) {
       return res.status(400).json({ message: "Email and password are required" });
     }
 
-    // Verify captcha if needed (skipping for brevity but usually should be here)
+    if (captchaToken) {
+      const turnstileSecret = process.env.TURNSTILE_SECRET_KEY || process.env.VITE_TURNSTILE_SECRET_KEY || "1x0000000000000000000000000000000AA";
+      try {
+        const verifyResponse = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: `secret=${turnstileSecret}&response=${captchaToken}`
+        });
+        const verifyData = await verifyResponse.json();
+        if (!verifyData.success) {
+          console.error('Turnstile verification failed:', verifyData);
+          return res.status(400).json({ message: "Security verification failed" });
+        }
+      } catch (verifyError) {
+        console.error('Turnstile fetch error:', verifyError);
+      }
+    }
 
     const user = await storage.getUserByEmail(email);
     if (!user || !user.password) {
