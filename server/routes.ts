@@ -37,8 +37,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     saveUninitialized: false,
     proxy: true, // Required for Vercel
     cookie: {
-      secure: false, // Set to false for local development to allow http
-      sameSite: 'lax',
+      secure: true, // Required for cross-site cookies in Vercel
+      sameSite: 'none',
       httpOnly: true,
       maxAge: 24 * 60 * 60 * 1000 // 24 hours
     }
