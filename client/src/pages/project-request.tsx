@@ -28,6 +28,7 @@ const projectRequestSchema = z.object({
 const profileSchema = z.object({
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
+  id: z.string().optional(),
 });
 
 export default function ProjectRequestPage() {

@@ -44,7 +44,7 @@ export default async function handler(req, res) {
     const base64Image = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
     
     const updatedUser = await storage.upsertUser({
-      id: parseInt(userId),
+      id: userId,
       profileImageUrl: base64Image
     });
 
