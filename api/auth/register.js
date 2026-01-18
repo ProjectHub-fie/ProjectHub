@@ -13,7 +13,7 @@ export default async function handler(req, res) {
       return res.status(400).json({ message: "All fields are required" });
     }
 
-    if (captchaToken) {
+    if (captchaToken && process.env.NODE_ENV === 'production') {
       const turnstileSecret = process.env.TURNSTILE_SECRET_KEY || process.env.VITE_TURNSTILE_SECRET_KEY || "1x0000000000000000000000000000000AA";
       try {
         const verifyResponse = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
@@ -29,6 +29,8 @@ export default async function handler(req, res) {
       } catch (verifyError) {
         console.error('Turnstile fetch error:', verifyError);
       }
+    } else if (captchaToken) {
+      console.log('Skipping Turnstile verification in development');
     }
 
     const existingUser = await storage.getUserByEmail(email);
