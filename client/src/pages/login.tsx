@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -50,6 +50,7 @@ export default function LoginPage() {
   const [isSendingReset, setIsSendingReset] = useState(false);
   const [isResettingPassword, setIsResettingPassword] = useState(false);
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
+  const turnstileRef = useRef<any>(null);
 
   const siteKey = import.meta.env.VITE_TURNSTILE_SITE_KEY || "1x00000000000000000000AA";
   console.log('Turnstile site key status:', !!import.meta.env.VITE_TURNSTILE_SITE_KEY, 'using key:', siteKey);
@@ -114,6 +115,9 @@ export default function LoginPage() {
         description: error.message || "Please check your credentials and try again.",
         variant: "destructive",
       });
+      // Reset captcha on failure
+      setCaptchaToken(null);
+      turnstileRef.current?.reset();
     }
   };
 
@@ -136,6 +140,9 @@ export default function LoginPage() {
         description: error.message || "Please try again.",
         variant: "destructive",
       });
+      // Reset captcha on failure
+      setCaptchaToken(null);
+      turnstileRef.current?.reset();
     }
   };
 
@@ -170,6 +177,9 @@ export default function LoginPage() {
         description: error.message || "Please try again.",
         variant: "destructive",
       });
+      // Reset captcha on failure
+      setCaptchaToken(null);
+      turnstileRef.current?.reset();
     } finally {
       setIsSendingReset(false);
     }
@@ -272,6 +282,7 @@ export default function LoginPage() {
                   />
                   <div className="flex justify-center py-2 min-h-[78px]">
                     <Turnstile
+                      ref={turnstileRef}
                       siteKey={siteKey}
                       onSuccess={(token) => setCaptchaToken(token)}
                       onExpire={() => setCaptchaToken(null)}
@@ -511,8 +522,7 @@ export default function LoginPage() {
                     )}
                   />
                   <div className="flex justify-center py-2 min-h-[78px]">
-                    <Turnstile
-                      siteKey={siteKey}
+                    <Turnstile                      ref={turnstileRef}                      siteKey={siteKey}
                       onSuccess={(token) => setCaptchaToken(token)}
                       onExpire={() => setCaptchaToken(null)}
                       onError={() => setCaptchaToken(null)}
