@@ -57,10 +57,10 @@ export function AppSidebar() {
                     className="hover:bg-primary/10 data-[active=true]:bg-primary data-[active=true]:text-primary-foreground"
                   >
                     <Link href={item.url}>
-                      <div className="flex items-center gap-2">
+                      <span className="flex items-center gap-2">
                         <item.icon className="h-4 w-4" />
                         <span>{item.title}</span>
-                      </div>
+                      </span>
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
