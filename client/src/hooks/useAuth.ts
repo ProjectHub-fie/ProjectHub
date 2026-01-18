@@ -15,7 +15,9 @@ export function useAuth() {
     queryKey: ["/api/auth/user"],
     queryFn: async () => {
       try {
-        const res = await fetch("/api/auth/user");
+        const res = await fetch("/api/auth/user", {
+          credentials: "include",
+        });
         if (res.status === 401) return null;
         if (!res.ok) return null;
         const data = await res.json();
