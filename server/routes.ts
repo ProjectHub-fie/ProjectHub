@@ -18,19 +18,14 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Trust proxy for Vercel
   app.set('trust proxy', 1);
 
-  // Session configuration with PostgreSQL store
-  const pgSession = (await import("connect-pg-simple")).default(session);
-  const pg = (await import("pg")).default;
-  const pool = new pg.Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false }
-  });
+  // Session configuration with MongoDB store
+  const MongoStore = (await import("connect-mongo")).default;
   
   app.use(session({
-    store: new pgSession({
-      pool,
-      tableName: 'session',
-      createTableIfMissing: true
+    store: MongoStore.create({
+      mongoUrl: process.env.DATABASE_URL?.replace('postgresql://', 'mongodb://').replace('postgres://', 'mongodb://'),
+      collectionName: 'sessions',
+      ttl: 24 * 60 * 60 * 1000 // 24 hours
     }),
     secret: process.env.SESSION_SECRET || 'fallback-secret-key',
     resave: true, // Force session saving to ensure cookie is set

@@ -1,27 +1,20 @@
 import path from "path";
 import express, { type Request, Response, NextFunction } from "express";
-import { sql } from "drizzle-orm";
+import mongoose from "mongoose";
 import { registerRoutes } from "./routes.js";
 import { setupVite, serveStatic, log } from "./vite.js";
-import { db } from "./db.js";
-import { exec } from "child_process";
+import { connectDB } from "./db.js";
 
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 
-// Run database push automatically on start in the background
+// Connect to MongoDB on start
 if (process.env.NODE_ENV !== "production") {
-  log("Initiating background database push...");
-  exec("npx drizzle-kit push --force", (error, stdout, stderr) => {
-    if (error) {
-      log(`Database push failed: ${error.message}`);
-      return;
-    }
-    if (stderr) {
-      log(`Database push warning: ${stderr}`);
-    }
-    log("Database push completed successfully.");
+  connectDB().then(() => {
+    log("MongoDB connected successfully in development mode.");
+  }).catch((error) => {
+    log(`MongoDB connection failed: ${error.message}`);
   });
 }
 
@@ -58,9 +51,12 @@ app.use((req, res, next) => {
 // Test database connection
 async function testDatabaseConnection() {
   try {
-    // For postgres-js, we can just run a simple query
-    await db.execute(sql`SELECT 1 as test`);
-    console.log("✅ Database connected successfully");
+    // For MongoDB, we can check if the connection is ready
+    if (mongoose.connection.readyState === 1) {
+      console.log("✅ Database connected successfully");
+    } else {
+      console.log("🔄 Database connection in progress...");
+    }
   } catch (error) {
     console.error("❌ Database connection failed:", (error as Error).message);
     console.log("🔄 Server will continue without database...");

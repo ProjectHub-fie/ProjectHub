@@ -1,102 +1,153 @@
-import { sql } from "drizzle-orm";
-import { createInsertSchema } from "drizzle-zod";
+import mongoose, { Schema, Document } from "mongoose";
 import { z } from "zod";
-import { pgTable, varchar, text, timestamp, json, uuid } from "drizzle-orm/pg-core";
 
-// Session storage table for authentication
-export const sessions = pgTable(
-  "sessions",
-  {
-    sid: varchar("sid", { length: 255 }).primaryKey(),
-    sess: json("sess").notNull(),
-    expire: timestamp("expire").notNull(),
-  }
-);
+// Session storage interface for authentication
+export interface ISession extends Document {
+  sid: string;
+  sess: any;
+  expire: Date;
+}
 
-// Users table with social authentication support
-export const users = pgTable("users", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  email: varchar("email", { length: 255 }).unique(),
-  firstName: varchar("first_name", { length: 255 }),
-  lastName: varchar("last_name", { length: 255 }),
-  profileImageUrl: text("profile_image_url"),
+// Users interface with social authentication support
+export interface IUser extends Document {
+  email?: string;
+  firstName?: string;
+  lastName?: string;
+  profileImageUrl?: string;
   // Social provider IDs
-  googleId: varchar("google_id", { length: 255 }).unique(),
-  discordId: varchar("discord_id", { length: 255 }).unique(),
-  facebookId: varchar("facebook_id", { length: 255 }).unique(),
+  googleId?: string;
+  discordId?: string;
+  facebookId?: string;
   // Traditional email/password (optional)
-  username: text("username").unique(),
-  password: text("password"),
+  username?: string;
+  password?: string;
   // Password reset
-  resetToken: varchar("reset_token", { length: 255 }).unique(),
-  resetTokenExpiry: timestamp("reset_token_expiry"),
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
+  resetToken?: string;
+  resetTokenExpiry?: Date;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// Project requests interface
+export interface IProjectRequest extends Document {
+  userId: mongoose.Types.ObjectId;
+  title: string;
+  description: string;
+  budget?: string;
+  timeline?: string;
+  technologies: string[];
+  status: string; // pending, approved, rejected, in-progress, completed
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// Project interactions interface (likes and ratings)
+export interface IProjectInteraction extends Document {
+  projectId: string;
+  userId: mongoose.Types.ObjectId;
+  isLiked: string; // "true" or "false"
+  rating?: string; // "1" to "5"
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// Mongoose Schemas
+export const SessionSchema = new Schema<ISession>({
+  sid: { type: String, required: true, unique: true },
+  sess: { type: Schema.Types.Mixed, required: true },
+  expire: { type: Date, required: true },
 });
 
-// Project requests table
-export const projectRequests = pgTable("project_requests", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  userId: uuid("user_id").references(() => users.id).notNull(),
-  title: text("title").notNull(),
-  description: text("description").notNull(),
-  budget: varchar("budget", { length: 100 }),
-  timeline: varchar("timeline", { length: 100 }),
-  technologies: json("technologies").$type<string[]>(),
-  status: varchar("status", { length: 50 }).default("pending"), // pending, approved, rejected, in-progress, completed
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
+export const UserSchema = new Schema<IUser>({
+  email: { type: String, unique: true, sparse: true },
+  firstName: { type: String },
+  lastName: { type: String },
+  profileImageUrl: { type: String },
+  googleId: { type: String, unique: true, sparse: true },
+  discordId: { type: String, unique: true, sparse: true },
+  facebookId: { type: String, unique: true, sparse: true },
+  username: { type: String, unique: true, sparse: true },
+  password: { type: String },
+  resetToken: { type: String, unique: true, sparse: true },
+  resetTokenExpiry: { type: Date },
+}, {
+  timestamps: true,
 });
 
-// Project interactions table (likes and ratings)
-export const projectInteractions = pgTable("project_interactions", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  projectId: text("project_id").notNull(),
-  userId: uuid("user_id").references(() => users.id).notNull(),
-  isLiked: varchar("is_liked", { length: 5 }).default("false"), // "true" or "false"
-  rating: varchar("rating", { length: 5 }), // "1" to "5"
-  createdAt: timestamp("created_at").defaultNow(),
-  updatedAt: timestamp("updated_at").defaultNow(),
+export const ProjectRequestSchema = new Schema<IProjectRequest>({
+  userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+  title: { type: String, required: true },
+  description: { type: String, required: true },
+  budget: { type: String },
+  timeline: { type: String },
+  technologies: [{ type: String }],
+  status: { type: String, default: 'pending' },
+}, {
+  timestamps: true,
 });
 
-// Schemas for validation
-export const insertUserSchema = createInsertSchema(users).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
+export const ProjectInteractionSchema = new Schema<IProjectInteraction>({
+  projectId: { type: String, required: true },
+  userId: { type: Schema.Types.ObjectId, ref: 'User', required: true },
+  isLiked: { type: String, default: 'false' },
+  rating: { type: String },
+}, {
+  timestamps: true,
 });
 
-export const upsertUserSchema = createInsertSchema(users).pick({
-  id: true,
-  email: true,
-  firstName: true,
-  lastName: true,
-  profileImageUrl: true,
-  googleId: true,
-  discordId: true,
-  facebookId: true,
-  username: true,
-  password: true,
+// Models
+export const Session = mongoose.models.Session || mongoose.model<ISession>('Session', SessionSchema);
+export const User = mongoose.models.User || mongoose.model<IUser>('User', UserSchema);
+export const ProjectRequest = mongoose.models.ProjectRequest || mongoose.model<IProjectRequest>('ProjectRequest', ProjectRequestSchema);
+export const ProjectInteraction = mongoose.models.ProjectInteraction || mongoose.model<IProjectInteraction>('ProjectInteraction', ProjectInteractionSchema);
+
+// Zod Schemas for validation (keeping these for API validation)
+export const insertUserSchema = z.object({
+  email: z.string().email().optional(),
+  firstName: z.string().optional(),
+  lastName: z.string().optional(),
+  profileImageUrl: z.string().optional(),
+  googleId: z.string().optional(),
+  discordId: z.string().optional(),
+  facebookId: z.string().optional(),
+  username: z.string().optional(),
+  password: z.string().optional(),
 });
 
-export const insertProjectRequestSchema = createInsertSchema(projectRequests).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
-}).extend({
+export const upsertUserSchema = z.object({
+  id: z.string().optional(),
+  email: z.string().email().optional(),
+  firstName: z.string().optional(),
+  lastName: z.string().optional(),
+  profileImageUrl: z.string().optional(),
+  googleId: z.string().optional(),
+  discordId: z.string().optional(),
+  facebookId: z.string().optional(),
+  username: z.string().optional(),
+  password: z.string().optional(),
+});
+
+export const insertProjectRequestSchema = z.object({
+  userId: z.string(),
+  title: z.string(),
+  description: z.string(),
+  budget: z.string().optional(),
+  timeline: z.string().optional(),
   technologies: z.array(z.string()).optional(),
 });
 
-export const insertProjectInteractionSchema = createInsertSchema(projectInteractions).omit({
-  id: true,
-  createdAt: true,
-  updatedAt: true,
+export const insertProjectInteractionSchema = z.object({
+  projectId: z.string(),
+  userId: z.string(),
+  isLiked: z.string().optional(),
+  rating: z.string().optional(),
 });
 
+// Type exports
 export type InsertUser = z.infer<typeof insertUserSchema>;
 export type UpsertUser = z.infer<typeof upsertUserSchema>;
-export type User = typeof users.$inferSelect;
+export type User = IUser;
 export type InsertProjectRequest = z.infer<typeof insertProjectRequestSchema>;
-export type ProjectRequest = typeof projectRequests.$inferSelect;
-export type ProjectInteraction = typeof projectInteractions.$inferSelect;
+export type ProjectRequest = IProjectRequest;
+export type ProjectInteraction = IProjectInteraction;
 export type InsertProjectInteraction = z.infer<typeof insertProjectInteractionSchema>;
