@@ -155,7 +155,7 @@ const projects: Project[] = [
   },
   {
     id: "db",
-    title: "Database Dashboard",
+    title: "Database",
     description: "Online based database dashboard for your PostgreeSQL.",
     image: "/api/placeholder/400/300",
     category: "websites",
