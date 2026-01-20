@@ -62,6 +62,6 @@ export const insertProjectInteractionSchema = z.object({
 
 // Type exports
 export type UpsertUser = z.infer<typeof upsertUserSchema>;
-export type User = IUser;
-export type ProjectRequest = IProjectRequest;
-export type ProjectInteraction = IProjectInteraction;
+export type UserType = IUser;
+export type ProjectRequestType = IProjectRequest;
+export type ProjectInteractionType = IProjectInteraction;

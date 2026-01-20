@@ -9,7 +9,7 @@ packages = ["mysql80", "firebase-tools", "dig", "nix-output-monitor", "gccgo13"]
 [deployment]
 deploymentTarget = "autoscale"
 build = ["npm", "run", "build"]
-run = ["npm", "run", "start"]
+run = ["node", "./dist/index.cjs"]
 
 [[ports]]
 localPort = 3000

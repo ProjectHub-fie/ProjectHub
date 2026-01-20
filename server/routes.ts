@@ -5,6 +5,8 @@ import bcrypt from "bcryptjs";
 import { storage } from "./storage.js";
 import passport from "./auth.js";
 import { insertProjectRequestSchema } from "./../shared/schema.js";
+import pg from "pg";
+import connectPgSimple from "connect-pg-simple";
 
 // Middleware to check if user is authenticated
 function requireAuth(req: any, res: any, next: any) {
@@ -18,19 +20,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Trust proxy for Vercel
   app.set('trust proxy', 1);
 
-  // Session configuration with MongoDB store
-  const MongoStore = (await import("connect-mongo")).default;
+  // Session configuration with PostgreSQL store
+  const PgSession = connectPgSimple(session);
+  const pgPool = new pg.Pool({
+    connectionString: process.env.DATABASE_URL,
+  });
   
   app.use(session({
-    store: MongoStore.create({
-      mongoUrl: process.env.DATABASE_URL?.replace('postgresql://', 'mongodb://').replace('postgres://', 'mongodb://'),
-      collectionName: 'sessions',
-      ttl: 24 * 60 * 60 * 1000 // 24 hours
+    store: new PgSession({
+      pool: pgPool,
+      tableName: 'sessions',
+      createTableIfMissing: true,
     }),
     secret: process.env.SESSION_SECRET || 'fallback-secret-key',
-    resave: true, // Force session saving to ensure cookie is set
+    resave: false,
     saveUninitialized: false,
-    proxy: true, // Required for Vercel
+    proxy: true,
     cookie: {
       secure: process.env.NODE_ENV === "production",
       sameSite: process.env.NODE_ENV === "production" ? 'none' : 'lax',

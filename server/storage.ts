@@ -1,7 +1,4 @@
 import {
-  User,
-  ProjectRequest,
-  ProjectInteraction,
   type IUser,
   type IProjectRequest,
   type IProjectInteraction,
@@ -135,40 +132,48 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getAllProjectRequests(): Promise<IProjectRequest[]> {
-    return ProjectRequest.find({});
+    return await db.select().from(projectRequests);
   }
 
   async updateProjectRequestStatus(id: string, status: string): Promise<IProjectRequest | null> {
-    return ProjectRequest.findByIdAndUpdate(
-      id,
-      { status, updatedAt: new Date() },
-      { new: true }
-    );
+    const result = await db.update(projectRequests)
+      .set({ status: status as any, updatedAt: new Date() })
+      .where(eq(projectRequests.id, id))
+      .returning();
+    return result[0] || null;
   }
 
   // Project interaction operations
   async getProjectInteractions(projectId: string): Promise<{ likes: number, averageRating: number }> {
-    const likesResult = await ProjectInteraction.countDocuments({
-      projectId,
-      isLiked: "true"
-    });
+    const likesResult = await db.select({ count: sql<number>`count(*)` })
+      .from(projectInteractions)
+      .where(and(
+        eq(projectInteractions.projectId, projectId),
+        eq(projectInteractions.isLiked, true)
+      ));
 
-    const ratingResult = await ProjectInteraction.aggregate([
-      { $match: { projectId, rating: { $ne: null } } },
-      { $group: { _id: null, average: { $avg: { $toDouble: "$rating" } } } }
-    ]);
+    const ratingResult = await db.select({ average: sql<number>`avg(${projectInteractions.rating})` })
+      .from(projectInteractions)
+      .where(and(
+        eq(projectInteractions.projectId, projectId),
+        sql`${projectInteractions.rating} is not null`
+      ));
 
     return {
-      likes: likesResult,
-      averageRating: ratingResult.length > 0 ? ratingResult[0].average : 0,
+      likes: Number(likesResult[0]?.count || 0),
+      averageRating: Number(ratingResult[0]?.average || 0),
     };
   }
 
   async getUserInteraction(projectId: string, userId: string): Promise<IProjectInteraction | null> {
-    return ProjectInteraction.findOne({
-      projectId,
-      userId: new mongoose.Types.ObjectId(userId)
-    });
+    const result = await db.select()
+      .from(projectInteractions)
+      .where(and(
+        eq(projectInteractions.projectId, projectId),
+        eq(projectInteractions.userId, userId)
+      ))
+      .limit(1);
+    return result[0] || null;
   }
 
   async upsertProjectInteraction(interactionData: InsertProjectInteraction): Promise<IProjectInteraction> {
@@ -179,17 +184,20 @@ export class DatabaseStorage implements IStorage {
       if (interactionData.isLiked !== undefined) updateData.isLiked = interactionData.isLiked;
       if (interactionData.rating !== undefined) updateData.rating = interactionData.rating;
 
-      return ProjectInteraction.findByIdAndUpdate(
-        existing._id,
-        updateData,
-        { new: true }
-      ) as Promise<IProjectInteraction>;
+      const result = await db.update(projectInteractions)
+        .set(updateData)
+        .where(eq(projectInteractions.id, existing.id))
+        .returning();
+      return result[0];
     } else {
-      const interaction = new ProjectInteraction({
-        ...interactionData,
-        userId: new mongoose.Types.ObjectId(interactionData.userId),
-      });
-      return interaction.save();
+      const result = await db.insert(projectInteractions)
+        .values({
+          ...interactionData,
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        })
+        .returning();
+      return result[0];
     }
   }
 }
