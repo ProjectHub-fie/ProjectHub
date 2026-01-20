@@ -1,5 +1,7 @@
 import { config } from "dotenv";
-import mongoose from "mongoose";
+import { drizzle } from 'drizzle-orm/postgres-js';
+import postgres from 'postgres';
+import * as schema from '../drizzle/schema.js';
 
 config();
 
@@ -7,20 +9,22 @@ if (!process.env.DATABASE_URL) {
   throw new Error("DATABASE_URL must be set");
 }
 
-// Convert PostgreSQL URL to MongoDB URL if needed
-// Assuming DATABASE_URL is a MongoDB connection string
-// If it's still PostgreSQL, you might need to update your environment variables
-const mongoUrl = process.env.DATABASE_URL.replace('postgresql://', 'mongodb://').replace('postgres://', 'mongodb://');
+// Create the connection
+const client = postgres(process.env.DATABASE_URL);
+export const db = drizzle(client, { schema });
 
+// Test the connection
 export const connectDB = async () => {
   try {
-    await mongoose.connect(mongoUrl);
-    console.log('MongoDB connected successfully');
+    await client`SELECT 1`;
+    console.log('PostgreSQL connected successfully');
   } catch (error) {
-    console.error('MongoDB connection error:', error);
+    console.error('PostgreSQL connection error:', error);
     throw error;
   }
 };
 
-// Export mongoose instance for use in other files
-export const db = mongoose.connection;
+// Export for cleanup
+export const closeDB = async () => {
+  await client.end();
+};

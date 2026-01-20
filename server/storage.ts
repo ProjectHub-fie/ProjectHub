@@ -10,7 +10,9 @@ import {
   type InsertProjectRequest,
   type InsertProjectInteraction,
 } from "./../shared/schema.js";
-import mongoose from "mongoose";
+import { db } from "./db.js";
+import { eq, and, sql } from "drizzle-orm";
+import { users, projectRequests, projectInteractions } from "../drizzle/schema.js";
 
 
 export interface IStorage {
@@ -35,49 +37,55 @@ export interface IStorage {
 export class DatabaseStorage implements IStorage {
   // User operations
   async getUser(id: string): Promise<IUser | null> {
-    return User.findById(id);
+    const result = await db.select().from(users).where(eq(users.id, id)).limit(1);
+    return result[0] || null;
   }
 
   async getUserByEmail(email: string): Promise<IUser | null> {
-    return User.findOne({ email });
+    const result = await db.select().from(users).where(eq(users.email, email)).limit(1);
+    return result[0] || null;
   }
 
   async getUserBySocialId(provider: string, socialId: string): Promise<IUser | null> {
-    const fieldMap: { [key: string]: string } = {
-      google: 'googleId',
-      discord: 'discordId',
-      facebook: 'facebookId',
+    const fieldMap: { [key: string]: any } = {
+      google: users.googleId,
+      discord: users.discordId,
+      facebook: users.facebookId,
     };
 
     const field = fieldMap[provider];
     if (!field) return null;
 
-    return User.findOne({ [field]: socialId });
+    const result = await db.select().from(users).where(eq(field, socialId)).limit(1);
+    return result[0] || null;
   }
 
   async getUserByResetToken(token: string): Promise<IUser | null> {
-    return User.findOne({ resetToken: token });
+    const result = await db.select().from(users).where(eq(users.resetToken, token)).limit(1);
+    return result[0] || null;
   }
 
   async updateUserResetToken(id: string, token: string, expiry: Date): Promise<void> {
-    await User.findByIdAndUpdate(id, {
+    await db.update(users).set({
       resetToken: token,
       resetTokenExpiry: expiry,
       updatedAt: new Date(),
-    });
+    }).where(eq(users.id, id));
   }
 
   async resetUserPassword(id: string, hashedPassword: string): Promise<void> {
-    await User.findByIdAndUpdate(id, {
+    await db.update(users).set({
       password: hashedPassword,
       resetToken: null,
       resetTokenExpiry: null,
       updatedAt: new Date(),
-    });
+    }).where(eq(users.id, id));
   }
 
   async upsertUser(userData: any): Promise<IUser> {
-    // Check if user exists by email or ID
+    // For upsert, we'll try to insert, and if conflict on email or id, update
+    // But since id is uuid, and email is unique, we need to handle carefully
+    // For simplicity, check if exists first
     let existingUser: IUser | null = null;
     if (userData.id) {
       existingUser = await this.getUser(userData.id);
@@ -86,7 +94,7 @@ export class DatabaseStorage implements IStorage {
     }
 
     if (existingUser) {
-      // Filter out null/undefined values and only include fields that exist in the schema
+      // Update existing user
       const updateData: any = {};
       const allowedFields = ['email', 'firstName', 'lastName', 'profileImageUrl', 'password', 'googleId', 'discordId', 'facebookId', 'username', 'resetToken', 'resetTokenExpiry'];
 
@@ -98,36 +106,32 @@ export class DatabaseStorage implements IStorage {
 
       updateData.updatedAt = new Date();
 
-      console.log('Updating user profile with data:', { id: existingUser._id, ...updateData });
-
-      // Update existing user
-      const updatedUser = await User.findByIdAndUpdate(
-        existingUser._id,
-        updateData,
-        { new: true }
-      );
-
-      console.log('User profile updated successfully:', { id: updatedUser!._id, profileImageUrl: updatedUser!.profileImageUrl ? 'exists' : 'null' });
-      return updatedUser!;
+      await db.update(users).set(updateData).where(eq(users.id, existingUser.id));
+      return { ...existingUser, ...updateData };
     } else {
       // Create new user
-      const newUser = new User(userData);
-      const savedUser = await newUser.save();
-      return savedUser;
+      const newUserData = {
+        ...userData,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      };
+      const result = await db.insert(users).values(newUserData).returning();
+      return result[0];
     }
   }
 
   // Project request operations
   async createProjectRequest(requestData: InsertProjectRequest): Promise<IProjectRequest> {
-    const request = new ProjectRequest({
+    const result = await db.insert(projectRequests).values({
       ...requestData,
-      userId: new mongoose.Types.ObjectId(requestData.userId),
-    });
-    return request.save();
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }).returning();
+    return result[0];
   }
 
   async getProjectRequests(userId: string): Promise<IProjectRequest[]> {
-    return ProjectRequest.find({ userId: new mongoose.Types.ObjectId(userId) });
+    return await db.select().from(projectRequests).where(eq(projectRequests.userId, userId));
   }
 
   async getAllProjectRequests(): Promise<IProjectRequest[]> {
