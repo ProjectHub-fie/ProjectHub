@@ -3,7 +3,7 @@ import { Strategy as LocalStrategy } from "passport-local";
 import { Strategy as DiscordStrategy } from "passport-discord";
 import bcrypt from "bcryptjs";
 import { storage } from "./storage.js";
-import type { User } from "././../shared/schema.js";
+import type { UserType as User } from "././../shared/schema.js";
 
 // Local strategy (email/password)
 passport.use(new LocalStrategy({
