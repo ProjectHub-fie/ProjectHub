@@ -137,7 +137,10 @@ export class DatabaseStorage implements IStorage {
 
   async updateProjectRequestStatus(id: string, status: string): Promise<IProjectRequest | null> {
     const result = await db.update(projectRequests)
-      .set({ status: status as any, updatedAt: new Date() })
+      .set({ 
+        status: sql`${status}::project_request_status`, 
+        updatedAt: new Date() 
+      })
       .where(eq(projectRequests.id, id))
       .returning();
     return result[0] || null;
@@ -145,14 +148,14 @@ export class DatabaseStorage implements IStorage {
 
   // Project interaction operations
   async getProjectInteractions(projectId: string): Promise<{ likes: number, averageRating: number }> {
-    const likesResult = await db.select({ count: sql<number>`count(*)` })
+    const likesResult = await db.select({ count: sql<string>`count(*)` })
       .from(projectInteractions)
       .where(and(
         eq(projectInteractions.projectId, projectId),
         eq(projectInteractions.isLiked, true)
       ));
 
-    const ratingResult = await db.select({ average: sql<number>`avg(${projectInteractions.rating})` })
+    const ratingResult = await db.select({ average: sql<string>`avg(${projectInteractions.rating})` })
       .from(projectInteractions)
       .where(and(
         eq(projectInteractions.projectId, projectId),
@@ -160,8 +163,8 @@ export class DatabaseStorage implements IStorage {
       ));
 
     return {
-      likes: Number(likesResult[0]?.count || 0),
-      averageRating: Number(ratingResult[0]?.average || 0),
+      likes: parseInt(likesResult[0]?.count || "0", 10),
+      averageRating: parseFloat(ratingResult[0]?.average || "0"),
     };
   }
 
