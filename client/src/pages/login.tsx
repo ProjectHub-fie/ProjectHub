@@ -340,7 +340,7 @@ export default function LoginPage() {
                             />
                             <Button
                               type="submit"
-                              className="w-full bg-primary hover:bg-primary/90 text-primary-foreground"
+                              className="w-full bg-green-600 hover:bg-primary/90 text-primary-foreground"
                               disabled={isSendingReset}
                               data-testid="button-send-reset"
                             >
