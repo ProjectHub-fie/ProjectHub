@@ -12,6 +12,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
   await setupAuth(app);
   registerAuthRoutes(app);
 
+  // Auth Middlewares
+  const requireAuth = (req: any, res: any, next: any) => {
+    if (req.isAuthenticated()) return next();
+    res.status(401).json({ message: "Authentication required" });
+  };
+
+  const requireAdminPassword = (req: any, res: any, next: any) => {
+    if ((req.session as any).isAdminLoggedIn) return next();
+    res.status(401).json({ message: "Admin password required" });
+  };
+
   // Admin management routes
   app.post('/api/admin/login', async (req, res) => {
     try {

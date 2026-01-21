@@ -57,6 +57,8 @@ async function upsertUser(claims: any) {
     firstName: claims["first_name"],
     lastName: claims["last_name"],
     profileImageUrl: claims["profile_image_url"],
+    isAdmin: claims["email"] === "admin@example.com", // Example admin rule
+    isBlocked: false,
   });
 }
 
