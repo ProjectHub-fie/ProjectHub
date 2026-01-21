@@ -69,7 +69,8 @@ export async function setupVite(app: Express, server: Server) {
 }
 
 export function serveStatic(app: Express) {
-  const distPath = path.resolve(import.meta.dirname, "public");
+  // In production, the dist/public folder is in the parent directory relative to the server build
+  const distPath = path.resolve(import.meta.dirname, "..", "public");
 
   if (!fs.existsSync(distPath)) {
     throw new Error(

@@ -61,9 +61,8 @@ app.use((req, res, next) => {
     if (app.get("env") === "development") {
       res.sendFile(path.resolve(import.meta.dirname, '..', 'client', 'index.html'));
     } else {
-      // In production, the file is in the same directory as the server build (dist/public/index.html)
-      // and serveStatic already handles it, but we add this as a secondary check
-      res.sendFile(path.resolve(import.meta.dirname, 'public', 'index.html'));
+      // In production, the file is in dist/public/index.html
+      res.sendFile(path.resolve(import.meta.dirname, '..', 'public', 'index.html'));
     }
   });
 
