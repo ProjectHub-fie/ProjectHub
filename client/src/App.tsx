@@ -16,7 +16,7 @@ import { Loader2, Lock } from "lucide-react";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
 
-function AuthLanding() {
+function AuthLanding({ onVerified }: { onVerified: () => void }) {
   const [pin, setPin] = useState("");
   const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -35,7 +35,7 @@ function AuthLanding() {
       });
 
       if (res.ok) {
-        window.location.href = "/api/login";
+        onVerified();
       } else {
         toast({
           title: "Access Denied",
@@ -107,6 +107,7 @@ function AuthLanding() {
 }
 
 function Router() {
+  const [isAdmin, setIsAdmin] = useState(false);
   const { user, isLoading, isAuthenticated } = useAuth();
 
   if (isLoading) {
@@ -117,8 +118,8 @@ function Router() {
     );
   }
 
-  if (!isAuthenticated) {
-    return <AuthLanding />;
+  if (!isAdmin) {
+    return <AuthLanding onVerified={() => setIsAdmin(true)} />;
   }
 
   return (
@@ -129,13 +130,10 @@ function Router() {
           <div className="p-4 border-b flex items-center justify-between">
             <SidebarTrigger />
             <div className="flex items-center gap-4">
-              <span className="text-sm text-muted-foreground">
-                {user?.firstName} {user?.lastName}
-              </span>
               <Button 
                 variant="ghost" 
                 size="sm"
-                onClick={() => window.location.href = "/api/logout"}
+                onClick={() => setIsAdmin(false)}
               >
                 Log Out
               </Button>

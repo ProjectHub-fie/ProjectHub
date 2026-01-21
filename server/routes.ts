@@ -9,19 +9,25 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.set('trust proxy', 1);
 
   // Setup replit auth (includes session and passport)
-  await setupAuth(app);
-  registerAuthRoutes(app);
+  // await setupAuth(app);
+  // registerAuthRoutes(app);
+
+  // Use a simple session instead
+  const session = (await import("express-session")).default;
+  app.use(session({
+    secret: process.env.SESSION_SECRET || 'fallback-secret-key',
+    resave: false,
+    saveUninitialized: false,
+    cookie: { secure: process.env.NODE_ENV === "production" }
+  }));
 
   // Auth Middlewares
   const requireAuth = (req: any, res: any, next: any) => {
-    if (req.isAuthenticated()) return next();
+    if ((req.session as any).isAdminLoggedIn) return next();
     res.status(401).json({ message: "Authentication required" });
   };
 
-  const requireAdminPassword = (req: any, res: any, next: any) => {
-    if ((req.session as any).isAdminLoggedIn) return next();
-    res.status(401).json({ message: "Admin password required" });
-  };
+  const requireAdminPassword = requireAuth;
 
   // Admin management routes
   app.post('/api/admin/login', async (req, res) => {
@@ -133,11 +139,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const { likes, averageRating } = await storage.getProjectInteractions(projectId);
       
       let userInteraction: any = null;
-      if (req.isAuthenticated()) {
-        const user = req.user as any;
-        const interaction = await storage.getUserInteraction(projectId, user.id);
-        userInteraction = interaction || null;
-      }
+      // if (req.isAuthenticated()) {
+      //   const user = req.user as any;
+      //   const interaction = await storage.getUserInteraction(projectId, user.id);
+      //   userInteraction = interaction || null;
+      // }
       
       res.json({ 
         likes, 
