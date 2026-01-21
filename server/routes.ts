@@ -538,11 +538,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.get('/api/project-requests', requireAuth, async (req, res) => {
     try {
       const user = req.user as any;
-      const requests = await storage.getProjectRequests(user.id);
+      const requests = await storage.getAllProjectRequests(); // Changed to get all for management
       res.json(requests);
     } catch (error) {
       console.error('Project requests fetch error:', error);
       res.status(500).json({ message: "Failed to fetch project requests" });
+    }
+  });
+
+  app.delete('/api/projects/:id', requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      // Note: Implement storage.deleteProjectRequest in storage.ts
+      await storage.deleteProjectRequest(id);
+      res.json({ message: "Project deleted" });
+    } catch (error) {
+      console.error('Delete project error:', error);
+      res.status(500).json({ message: "Failed to delete project" });
     }
   });
 

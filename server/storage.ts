@@ -24,6 +24,7 @@ export interface IStorage {
   getProjectRequests(userId: string): Promise<IProjectRequest[]>;
   getAllProjectRequests(): Promise<IProjectRequest[]>;
   updateProjectRequestStatus(id: string, status: string): Promise<IProjectRequest | null>;
+  deleteProjectRequest(id: string): Promise<void>;
 
   // Project interaction operations
   getProjectInteractions(projectId: string): Promise<{ likes: number, averageRating: number }>;
@@ -144,6 +145,10 @@ export class DatabaseStorage implements IStorage {
       .where(eq(projectRequests.id, id))
       .returning();
     return result[0] || null;
+  }
+
+  async deleteProjectRequest(id: string): Promise<void> {
+    await db.delete(projectRequests).where(eq(projectRequests.id, id));
   }
 
   // Project interaction operations
