@@ -16,6 +16,7 @@ const items = [
   { title: "Dashboard", url: "/admin", icon: LayoutDashboard },
   { title: "User Management", url: "/users", icon: Users },
   { title: "Project Requests", url: "/", icon: FileEdit },
+  { title: "Admin Credentials", url: "/admin/info", icon: ShieldCheck },
 ];
 
 export function AppSidebar() {
