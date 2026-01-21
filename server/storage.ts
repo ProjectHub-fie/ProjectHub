@@ -33,7 +33,9 @@ export interface IStorage {
 
   // Admin credentials
   getAdminByPin(pin: string): Promise<any | null>;
+  getAllAdmins(): Promise<any[]>;
   setAdminPassword(pin: string, hash: string): Promise<void>;
+  deleteAdmin(id: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -232,6 +234,10 @@ export class DatabaseStorage implements IStorage {
     return result[0] || null;
   }
 
+  async getAllAdmins(): Promise<any[]> {
+    return await db.select().from(adminCredentials);
+  }
+
   async setAdminPassword(pin: string, hash: string): Promise<void> {
     const existing = await this.getAdminByPin(pin);
     if (existing) {
@@ -239,6 +245,10 @@ export class DatabaseStorage implements IStorage {
     } else {
       await db.insert(adminCredentials).values({ pin, passwordHash: hash });
     }
+  }
+
+  async deleteAdmin(id: string): Promise<void> {
+    await db.delete(adminCredentials).where(eq(adminCredentials.id, id));
   }
 }
 

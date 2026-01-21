@@ -30,6 +30,34 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const requireAdminPassword = requireAuth;
 
   // Admin management routes
+  app.get('/api/admin/list', async (req, res) => {
+    if (!(req.session as any).isAdminLoggedIn) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    const admins = await storage.getAllAdmins();
+    // Don't return hashes
+    res.json(admins.map(a => ({ id: a.id, pin: a.pin, updatedAt: a.updatedAt })));
+  });
+
+  app.post('/api/admin/create', async (req, res) => {
+    if (!(req.session as any).isAdminLoggedIn) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    const { pin, password } = req.body;
+    const bcrypt = await import("bcryptjs");
+    const hash = await bcrypt.default.hash(password, 10);
+    await storage.setAdminPassword(pin, hash);
+    res.json({ success: true });
+  });
+
+  app.delete('/api/admin/:id', async (req, res) => {
+    if (!(req.session as any).isAdminLoggedIn) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+    await storage.deleteAdmin(req.params.id);
+    res.json({ success: true });
+  });
+
   app.post('/api/admin/login', async (req, res) => {
     const { username: pin, password } = req.body;
     const bcrypt = await import("bcryptjs");

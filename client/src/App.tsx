@@ -6,6 +6,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import ProjectsPage from "@/pages/projects-page";
 import UsersPage from "@/pages/users-page";
 import AdminPage from "@/pages/admin-page";
+import AdminInfo from "@/pages/admin-info";
+import CreateAdmin from "@/pages/create-admin";
 import NotFound from "./pages/not-found";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
@@ -134,6 +136,8 @@ function Router() {
             <Route path="/" component={ProjectsPage} />
             <Route path="/users" component={UsersPage} />
             <Route path="/admin" component={AdminPage} />
+            <Route path="/admin/info" component={AdminInfo} />
+            <Route path="/admin/create" component={CreateAdmin} />
             <Route component={NotFound} />
           </Switch>
         </main>
