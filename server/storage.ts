@@ -4,7 +4,7 @@ import {
   type InsertProjectRequest,
   type InsertProjectInteraction,
 } from "./../shared/schema.js";
-import { type User as IUser, type UpsertUser } from "@shared/models/auth";
+import { type User as IUser, type UpsertUser } from "@shared/models/auth.js";
 import { db } from "./db.js";
 import { eq, and, sql } from "drizzle-orm";
 import { users, projectRequests, projectInteractions, adminCredentials } from "../drizzle/schema.js";

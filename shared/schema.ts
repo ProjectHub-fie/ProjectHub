@@ -1,4 +1,4 @@
-export * from "./models/auth";
+export * from "./models/auth.js";
 
 import { z } from "zod";
 import { createInsertSchema } from "drizzle-zod";
