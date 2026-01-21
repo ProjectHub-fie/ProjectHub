@@ -32,8 +32,8 @@ export interface IStorage {
   getUserInteraction(projectId: string, userId: string): Promise<IProjectInteraction | null>;
 
   // Admin credentials
-  getAdminPasswordHash(): Promise<string | null>;
-  setAdminPassword(hash: string): Promise<void>;
+  getAdminByPin(pin: string): Promise<any | null>;
+  setAdminPassword(pin: string, hash: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -227,17 +227,17 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  async getAdminPasswordHash(): Promise<string | null> {
-    const result = await db.select().from(adminCredentials).limit(1);
-    return result[0]?.passwordHash || null;
+  async getAdminByPin(pin: string): Promise<any | null> {
+    const result = await db.select().from(adminCredentials).where(eq(adminCredentials.pin, pin)).limit(1);
+    return result[0] || null;
   }
 
-  async setAdminPassword(hash: string): Promise<void> {
-    const existing = await db.select().from(adminCredentials).limit(1);
-    if (existing[0]) {
-      await db.update(adminCredentials).set({ passwordHash: hash, updatedAt: new Date() }).where(eq(adminCredentials.id, existing[0].id));
+  async setAdminPassword(pin: string, hash: string): Promise<void> {
+    const existing = await this.getAdminByPin(pin);
+    if (existing) {
+      await db.update(adminCredentials).set({ passwordHash: hash, updatedAt: new Date() }).where(eq(adminCredentials.id, existing.id));
     } else {
-      await db.insert(adminCredentials).values({ passwordHash: hash });
+      await db.insert(adminCredentials).values({ pin, passwordHash: hash });
     }
   }
 }

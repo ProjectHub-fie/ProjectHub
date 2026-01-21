@@ -34,16 +34,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const { username: pin, password } = req.body;
     const bcrypt = await import("bcryptjs");
     
-    // Check for hardcoded credentials or database credentials
-    const hash = await storage.getAdminPasswordHash();
+    // Check database credentials
+    const admin = await storage.getAdminByPin(pin);
     
-    // Default: PIN '1234' and Password 'admin123' if not set
-    const isValidPin = pin === '1234'; 
-    const isValidPassword = hash 
-      ? await bcrypt.default.compare(password, hash)
-      : password === 'admin123';
-
-    if (isValidPin && isValidPassword) {
+    if (admin && await bcrypt.default.compare(password, admin.passwordHash)) {
       (req.session as any).isAdminLoggedIn = true;
       res.json({ success: true });
     } else {
