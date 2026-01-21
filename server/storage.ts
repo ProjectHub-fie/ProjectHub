@@ -18,6 +18,8 @@ export interface IStorage {
   getUserByEmail(email: string): Promise<IUser | null>;
   getUserBySocialId(provider: string, socialId: string): Promise<IUser | null>;
   upsertUser(user: UpsertUser): Promise<IUser>;
+  getAllUsers(): Promise<IUser[]>;
+  toggleUserBlock(id: string): Promise<IUser>;
   
   // Project request operations
   createProjectRequest(request: InsertProjectRequest): Promise<IProjectRequest>;
@@ -94,7 +96,7 @@ export class DatabaseStorage implements IStorage {
     if (existingUser) {
       // Update existing user
       const updateData: any = {};
-      const allowedFields = ['email', 'firstName', 'lastName', 'profileImageUrl', 'password', 'googleId', 'discordId', 'facebookId', 'username', 'resetToken', 'resetTokenExpiry'];
+      const allowedFields = ['email', 'firstName', 'lastName', 'profileImageUrl', 'password', 'googleId', 'discordId', 'facebookId', 'username', 'resetToken', 'resetTokenExpiry', 'isAdmin', 'isBlocked'];
 
       for (const field of allowedFields) {
         if (userData[field] !== undefined) {
@@ -116,6 +118,20 @@ export class DatabaseStorage implements IStorage {
       const result = await db.insert(users).values(newUserData).returning();
       return result[0];
     }
+  }
+
+  async getAllUsers(): Promise<IUser[]> {
+    return await db.select().from(users);
+  }
+
+  async toggleUserBlock(id: string): Promise<IUser> {
+    const user = await this.getUser(id);
+    if (!user) throw new Error("User not found");
+    const result = await db.update(users)
+      .set({ isBlocked: !user.isBlocked, updatedAt: new Date() })
+      .where(eq(users.id, id))
+      .returning();
+    return result[0];
   }
 
   // Project request operations

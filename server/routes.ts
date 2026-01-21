@@ -518,7 +518,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // Project request routes
+  // User management routes
+  app.get('/api/users', requireAuth, async (req, res) => {
+    try {
+      const user = req.user as any;
+      if (!user.isAdmin) return res.status(403).json({ message: "Forbidden" });
+      const allUsers = await storage.getAllUsers();
+      res.json(allUsers);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch users" });
+    }
+  });
+
+  app.post('/api/users/:id/toggle-block', requireAuth, async (req, res) => {
+    try {
+      const user = req.user as any;
+      if (!user.isAdmin) return res.status(403).json({ message: "Forbidden" });
+      const updatedUser = await storage.toggleUserBlock(req.params.id);
+      res.json(updatedUser);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to toggle block status" });
+    }
+  });
+
+  app.get('/api/admin/stats', requireAuth, async (req, res) => {
+    try {
+      const user = req.user as any;
+      if (!user.isAdmin) return res.status(403).json({ message: "Forbidden" });
+      const allUsers = await storage.getAllUsers();
+      const allRequests = await storage.getAllProjectRequests();
+      res.json({
+        totalUsers: allUsers.length,
+        totalRequests: allRequests.length,
+        pendingRequests: allRequests.filter(r => r.status === 'pending').length,
+        blockedUsers: allUsers.filter(u => u.isBlocked).length
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch stats" });
+    }
+  });
   app.post('/api/project-requests', requireAuth, async (req, res) => {
     try {
       const user = req.user as any;
