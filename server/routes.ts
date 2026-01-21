@@ -25,6 +25,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Admin management routes
   app.post('/api/admin/login', async (req, res) => {
+    const { username: pin, password } = req.body;
+    const bcrypt = await import("bcryptjs");
+    
+    // Check for hardcoded credentials or database credentials
+    const hash = await storage.getAdminPasswordHash();
+    
+    // Default: PIN '1234' and Password 'admin123' if not set
+    const isValidPin = pin === '1234'; 
+    const isValidPassword = hash 
+      ? await bcrypt.default.compare(password, hash)
+      : password === 'admin123';
+
+    if (isValidPin && isValidPassword) {
+      (req.session as any).isAdminLoggedIn = true;
+      res.json({ success: true });
+    } else {
+      res.status(401).json({ message: "Invalid PIN or password" });
+    }
+  });
+
+  app.post('/api/admin/logout', (req, res) => {
+    (req.session as any).isAdminLoggedIn = false;
+    res.json({ success: true });
+  });
+
+  app.get('/api/users', requireAuth, requireAdminPassword, async (req, res) => {
     try {
       const user = req.user as any;
       if (!user.isAdmin) return res.status(403).json({ message: "Forbidden" });

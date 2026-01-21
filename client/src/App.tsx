@@ -18,19 +18,20 @@ import { useToast } from "@/hooks/use-toast";
 
 function AuthLanding() {
   const [pin, setPin] = useState("");
+  const [password, setPassword] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const { toast } = useToast();
 
   const handlePinSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!pin) return;
+    if (!pin || !password) return;
 
     setIsSubmitting(true);
     try {
       const res = await fetch("/api/admin/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password: pin }),
+        body: JSON.stringify({ username: pin, password: password }),
       });
 
       if (res.ok) {
@@ -38,7 +39,7 @@ function AuthLanding() {
       } else {
         toast({
           title: "Access Denied",
-          description: "Invalid PIN code provided.",
+          description: "Invalid PIN or password provided.",
           variant: "destructive",
         });
       }
@@ -63,20 +64,33 @@ function AuthLanding() {
         </div>
         <div className="space-y-2">
           <h1 className="text-2xl font-bold tracking-tight">ProjectHub Access</h1>
-          <p className="text-muted-foreground text-sm">Enter the access PIN to continue to login.</p>
+          <p className="text-muted-foreground text-sm">Enter your Access PIN and Password.</p>
         </div>
 
         <form onSubmit={handlePinSubmit} className="space-y-4">
-          <Input
-            type="password"
-            placeholder="Enter access PIN"
-            value={pin}
-            onChange={(e) => setPin(e.target.value)}
-            className="text-center text-lg tracking-[0.5em]"
-            maxLength={10}
-            required
-            autoFocus
-          />
+          <div className="space-y-2">
+            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider text-left block">Access PIN</label>
+            <Input
+              type="text"
+              placeholder="Enter PIN"
+              value={pin}
+              onChange={(e) => setPin(e.target.value)}
+              className="text-center text-lg"
+              required
+              autoFocus
+            />
+          </div>
+          <div className="space-y-2">
+            <label className="text-xs font-medium text-muted-foreground uppercase tracking-wider text-left block">Confirmation Password</label>
+            <Input
+              type="password"
+              placeholder="Enter Password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              className="text-center text-lg"
+              required
+            />
+          </div>
           <Button 
             type="submit"
             size="lg" 
