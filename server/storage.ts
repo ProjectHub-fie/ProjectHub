@@ -9,7 +9,7 @@ import {
 } from "./../shared/schema.js";
 import { db } from "./db.js";
 import { eq, and, sql } from "drizzle-orm";
-import { users, projectRequests, projectInteractions } from "../drizzle/schema.js";
+import { users, projectRequests, projectInteractions, adminCredentials } from "../drizzle/schema.js";
 
 
 export interface IStorage {
@@ -32,6 +32,10 @@ export interface IStorage {
   getProjectInteractions(projectId: string): Promise<{ likes: number, averageRating: number }>;
   upsertProjectInteraction(interaction: InsertProjectInteraction): Promise<IProjectInteraction>;
   getUserInteraction(projectId: string, userId: string): Promise<IProjectInteraction | null>;
+
+  // Admin credentials
+  getAdminPasswordHash(): Promise<string | null>;
+  setAdminPassword(hash: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -222,6 +226,20 @@ export class DatabaseStorage implements IStorage {
         })
         .returning();
       return result[0];
+    }
+  }
+
+  async getAdminPasswordHash(): Promise<string | null> {
+    const result = await db.select().from(adminCredentials).limit(1);
+    return result[0]?.passwordHash || null;
+  }
+
+  async setAdminPassword(hash: string): Promise<void> {
+    const existing = await db.select().from(adminCredentials).limit(1);
+    if (existing[0]) {
+      await db.update(adminCredentials).set({ passwordHash: hash, updatedAt: new Date() }).where(eq(adminCredentials.id, existing[0].id));
+    } else {
+      await db.insert(adminCredentials).values({ passwordHash: hash });
     }
   }
 }

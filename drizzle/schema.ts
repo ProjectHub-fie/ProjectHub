@@ -50,3 +50,9 @@ export const sessions = pgTable("sessions", {
   sess: text("sess").notNull(),
   expire: timestamp("expire").notNull(),
 });
+
+export const adminCredentials = pgTable("admin_credentials", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  passwordHash: text("password_hash").notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
+});

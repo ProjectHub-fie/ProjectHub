@@ -518,8 +518,37 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  // User management routes
-  app.get('/api/users', requireAuth, async (req, res) => {
+  // Admin management routes
+  app.post('/api/admin/login', async (req, res) => {
+    const { password } = req.body;
+    const hash = await storage.getAdminPasswordHash();
+    
+    // Default password 'admin123' if not set
+    const isValid = hash 
+      ? await bcrypt.compare(password, hash)
+      : password === 'admin123';
+
+    if (isValid) {
+      (req.session as any).isAdminLoggedIn = true;
+      res.json({ success: true });
+    } else {
+      res.status(401).json({ message: "Invalid password" });
+    }
+  });
+
+  app.post('/api/admin/logout', (req, res) => {
+    (req.session as any).isAdminLoggedIn = false;
+    res.json({ success: true });
+  });
+
+  const requireAdminPassword = (req: any, res: any, next: any) => {
+    if ((req.session as any).isAdminLoggedIn) {
+      return next();
+    }
+    res.status(401).json({ message: "Admin password required" });
+  };
+
+  app.get('/api/users', requireAuth, requireAdminPassword, async (req, res) => {
     try {
       const user = req.user as any;
       if (!user.isAdmin) return res.status(403).json({ message: "Forbidden" });
@@ -530,7 +559,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/users/:id/toggle-block', requireAuth, async (req, res) => {
+  app.post('/api/users/:id/toggle-block', requireAuth, requireAdminPassword, async (req, res) => {
     try {
       const user = req.user as any;
       if (!user.isAdmin) return res.status(403).json({ message: "Forbidden" });
@@ -541,7 +570,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/admin/stats', requireAuth, async (req, res) => {
+  app.get('/api/admin/stats', requireAuth, requireAdminPassword, async (req, res) => {
     try {
       const user = req.user as any;
       if (!user.isAdmin) return res.status(403).json({ message: "Forbidden" });
