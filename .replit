@@ -4,7 +4,7 @@ hidden = [".config", ".git", "generated-icon.png", "node_modules", "dist"]
 
 [nix]
 channel = "stable-25_05"
-packages = ["mysql80", "firebase-tools", "dig", "nix-output-monitor", "gccgo13"]
+packages = ["mysql80", "firebase-tools", "dig", "nix-output-monitor", "gccgo13", "python313Packages.nox"]
 
 [deployment]
 deploymentTarget = "autoscale"
