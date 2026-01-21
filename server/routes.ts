@@ -2,7 +2,6 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage.js";
 import { insertProjectRequestSchema } from "./../shared/schema.js";
-import { setupAuth, registerAuthRoutes, isAuthenticated } from "./replit_integrations/auth";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Trust proxy for Vercel
@@ -78,10 +77,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json({ success: true });
   });
 
-  app.get('/api/users', requireAuth, requireAdminPassword, async (req, res) => {
+  app.get('/api/users', requireAuth, async (req, res) => {
     try {
-      const user = req.user as any;
-      if (!user.isAdmin) return res.status(403).json({ message: "Forbidden" });
       const allUsers = await storage.getAllUsers();
       res.json(allUsers);
     } catch (error) {
@@ -89,10 +86,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.post('/api/users/:id/toggle-block', requireAuth, requireAdminPassword, async (req, res) => {
+  app.post('/api/users/:id/toggle-block', requireAuth, async (req, res) => {
     try {
-      const user = req.user as any;
-      if (!user.isAdmin) return res.status(403).json({ message: "Forbidden" });
       const updatedUser = await storage.toggleUserBlock(req.params.id);
       res.json(updatedUser);
     } catch (error) {
@@ -100,10 +95,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
-  app.get('/api/admin/stats', requireAuth, requireAdminPassword, async (req, res) => {
+  app.get('/api/admin/stats', requireAuth, async (req, res) => {
     try {
-      const user = req.user as any;
-      if (!user.isAdmin) return res.status(403).json({ message: "Forbidden" });
       const allUsers = await storage.getAllUsers();
       const allRequests = await storage.getAllProjectRequests();
       res.json({
@@ -118,10 +111,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
   app.post('/api/project-requests', requireAuth, async (req, res) => {
     try {
-      const user = req.user as any;
+      // In PIN auth, we don't have a user object attached to session except the flag
+      // For now, we'll use a dummy ID or handle this differently if user system is needed
       const validatedData = insertProjectRequestSchema.parse({
         ...req.body,
-        userId: user.id
+        userId: "00000000-0000-0000-0000-000000000000" // Placeholder for admin actions
       });
 
       const projectRequest = await storage.createProjectRequest(validatedData);
@@ -134,8 +128,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.get('/api/project-requests', requireAuth, async (req, res) => {
     try {
-      const user = req.user as any;
-      const requests = await storage.getAllProjectRequests(); // Changed to get all for management
+      const requests = await storage.getAllProjectRequests();
       res.json(requests);
     } catch (error) {
       console.error('Project requests fetch error:', error);
@@ -146,7 +139,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.delete('/api/projects/:id', requireAuth, async (req, res) => {
     try {
       const { id } = req.params;
-      // Note: Implement storage.deleteProjectRequest in storage.ts
       await storage.deleteProjectRequest(id);
       res.json({ message: "Project deleted" });
     } catch (error) {
@@ -159,18 +151,10 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { projectId } = req.params;
       const { likes, averageRating } = await storage.getProjectInteractions(projectId);
-      
-      let userInteraction: any = null;
-      // if (req.isAuthenticated()) {
-      //   const user = req.user as any;
-      //   const interaction = await storage.getUserInteraction(projectId, user.id);
-      //   userInteraction = interaction || null;
-      // }
-      
       res.json({ 
         likes, 
         averageRating, 
-        userInteraction 
+        userInteraction: null 
       });
     } catch (error) {
       console.error('Fetch interactions error:', error);
@@ -181,12 +165,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/projects/:projectId/interactions', requireAuth, async (req, res) => {
     try {
       const { projectId } = req.params;
-      const user = req.user as any;
       const { isLiked, rating } = req.body;
 
       const interaction = await storage.upsertProjectInteraction({
         projectId,
-        userId: user.id,
+        userId: "00000000-0000-0000-0000-000000000000",
         isLiked: isLiked?.toString(),
         rating: rating?.toString(),
       });
