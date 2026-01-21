@@ -1,27 +1,22 @@
+export * from "./models/auth";
+
 import { z } from "zod";
 import { createInsertSchema } from "drizzle-zod";
 import {
   users,
   projectRequests,
   projectInteractions,
-  sessions
 } from '../drizzle/schema.js';
 
 // Re-export types from Drizzle schema using $inferSelect/$inferInsert
-export type User = typeof users.$inferSelect;
-export type InsertUser = typeof users.$inferInsert;
 export type ProjectRequest = typeof projectRequests.$inferSelect;
 export type InsertProjectRequest = typeof projectRequests.$inferInsert;
 export type ProjectInteraction = typeof projectInteractions.$inferSelect;
 export type InsertProjectInteraction = typeof projectInteractions.$inferInsert;
-export type Session = typeof sessions.$inferSelect;
 
 // Alias types for backward compatibility
-export type IUser = User;
 export type IProjectRequest = ProjectRequest;
 export type IProjectInteraction = ProjectInteraction;
-export type ISession = Session;
-export type UserType = User;
 export type ProjectRequestType = ProjectRequest;
 export type ProjectInteractionType = ProjectInteraction;
 

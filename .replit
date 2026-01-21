@@ -61,6 +61,7 @@ args = "npm run dev"
 
 [agent]
 expertMode = true
+integrations = ["javascript_log_in_with_replit:2.0.0"]
 
 [userenv]
 
