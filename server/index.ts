@@ -58,7 +58,13 @@ app.use((req, res, next) => {
     }
     
     // For all other routes, serve the React app
-    res.sendFile(path.resolve(import.meta.dirname, '..', 'client', 'index.html'));
+    if (app.get("env") === "development") {
+      res.sendFile(path.resolve(import.meta.dirname, '..', 'client', 'index.html'));
+    } else {
+      // In production, the file is in the same directory as the server build (dist/public/index.html)
+      // and serveStatic already handles it, but we add this as a secondary check
+      res.sendFile(path.resolve(import.meta.dirname, 'public', 'index.html'));
+    }
   });
 
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
