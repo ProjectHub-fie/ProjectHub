@@ -132,19 +132,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
       (req.session as any).adminId = admin.id;
       (req.session as any).adminPin = pin;
       
-      return new Promise((resolve) => {
-        req.session.save((err) => {
-          if (err) {
-            console.error("Session save error:", err);
-            console.log("Session object:", req.session);
-            res.status(500).json({ message: "Session save failed", error: err.message });
-            return resolve(true);
-          }
-          console.log('Session saved successfully, session ID:', req.sessionID);
-          console.log('Session data:', req.session);
-          res.json({ success: true, sessionId: req.sessionID });
-          resolve(true);
-        });
+      req.session.save((err: any) => {
+        if (err) {
+          console.error("Session save error:", err);
+          console.log("Session object:", req.session);
+          return res.status(500).json({ message: "Session save failed", error: err.message });
+        }
+        console.log('Session saved successfully, session ID:', req.sessionID);
+        console.log('Session data:', req.session);
+        res.json({ success: true, sessionId: req.sessionID });
       });
     } catch (error: any) {
       console.error('Login error:', error);
@@ -153,7 +149,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.post('/api/admin/logout', (req, res) => {
-    req.session.destroy((err) => {
+    req.session.destroy((err: any) => {
       if (err) {
         console.error("Session destroy error:", err);
         return res.status(500).json({ message: "Logout failed" });
