@@ -34,7 +34,7 @@ export interface IStorage {
   // Admin credentials
   getAdminByPin(pin: string): Promise<any | null>;
   getAllAdmins(): Promise<any[]>;
-  setAdminPassword(pin: string, hash: string): Promise<void>;
+  setAdminPassword(pin: string, email: string, hash: string): Promise<void>;
   deleteAdmin(id: string): Promise<void>;
 }
 
@@ -238,12 +238,12 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(adminCredentials);
   }
 
-  async setAdminPassword(pin: string, hash: string): Promise<void> {
+  async setAdminPassword(pin: string, email: string, hash: string): Promise<void> {
     const existing = await this.getAdminByPin(pin);
     if (existing) {
-      await db.update(adminCredentials).set({ passwordHash: hash, updatedAt: new Date() }).where(eq(adminCredentials.id, existing.id));
+      await db.update(adminCredentials).set({ email, passwordHash: hash, updatedAt: new Date() }).where(eq(adminCredentials.id, existing.id));
     } else {
-      await db.insert(adminCredentials).values({ pin, passwordHash: hash });
+      await db.insert(adminCredentials).values({ pin, email, passwordHash: hash });
     }
   }
 

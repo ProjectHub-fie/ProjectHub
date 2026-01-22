@@ -53,6 +53,7 @@ export const sessions = pgTable("sessions", {
 
 export const adminCredentials = pgTable("admin_credentials", {
   id: uuid("id").primaryKey().defaultRandom(),
+  email: text("email").unique().notNull(),
   pin: text("pin").unique().notNull(),
   passwordHash: text("password_hash").notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),

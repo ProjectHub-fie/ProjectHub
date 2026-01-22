@@ -54,13 +54,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       if (!(req.session as any).isAdminLoggedIn) {
         return res.status(401).json({ message: "Unauthorized" });
       }
-      const { pin, password } = req.body;
-      if (!pin || !password) {
-        return res.status(400).json({ message: "PIN and password are required" });
+      const { pin, email, password } = req.body;
+      if (!pin || !email || !password) {
+        return res.status(400).json({ message: "PIN, email and password are required" });
       }
       const bcrypt = await import("bcryptjs");
       const hash = await bcrypt.default.hash(password, 10);
-      await storage.setAdminPassword(pin, hash);
+      await storage.setAdminPassword(pin, email, hash);
       res.json({ success: true });
     } catch (error) {
       console.error('Admin creation error:', error);

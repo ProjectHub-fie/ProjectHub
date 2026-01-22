@@ -18,6 +18,7 @@ import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 
 const formSchema = z.object({
+  email: z.string().email("Invalid email address"),
   pin: z.string().min(4, "PIN must be at least 4 characters"),
   password: z.string().min(6, "Password must be at least 6 characters"),
 });
@@ -28,6 +29,7 @@ export default function CreateAdmin() {
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
+      email: "",
       pin: "",
       password: "",
     },
@@ -68,6 +70,19 @@ export default function CreateAdmin() {
         <CardContent>
           <Form {...form}>
             <form onSubmit={form.handleSubmit((data) => mutation.mutate(data))} className="space-y-4">
+              <FormField
+                control={form.control}
+                name="email"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Email</FormLabel>
+                    <FormControl>
+                      <Input placeholder="admin@example.com" type="email" {...field} data-testid="input-new-admin-email" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
               <FormField
                 control={form.control}
                 name="pin"
