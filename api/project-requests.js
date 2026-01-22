@@ -1,4 +1,4 @@
-import { storage } from "../server/storage.js";
+import { storage } from "./lib/storage.js";
 import { insertProjectRequestSchema } from "../shared/schema.js";
 import { parse } from "cookie";
 

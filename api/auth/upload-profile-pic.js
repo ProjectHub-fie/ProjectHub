@@ -1,4 +1,4 @@
-import { storage } from "../../server/storage.js";
+import { storage } from "../lib/storage.js";
 import multer from 'multer';
 
 const upload = multer({ 

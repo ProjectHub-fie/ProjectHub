@@ -1,4 +1,4 @@
-import { storage } from "../../server/storage.js";
+import { storage } from "../lib/storage.js";
 import bcrypt from "bcryptjs";
 
 export default async function handler(req, res) {
