@@ -7,21 +7,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Trust proxy for Vercel
   app.set('trust proxy', 1);
 
-  // Setup replit auth (includes session and passport)
-  // await setupAuth(app);
-  // registerAuthRoutes(app);
-
-  // Use a simple session instead
+  // Use a simple session
   const session = (await import("express-session")).default;
   app.use(session({
     secret: process.env.SESSION_SECRET || 'fallback-secret-key',
-    resave: false,
-    saveUninitialized: false,
+    resave: true,
+    saveUninitialized: true,
+    proxy: true,
     cookie: { 
-      secure: process.env.NODE_ENV === "production",
-      sameSite: process.env.NODE_ENV === "production" ? 'none' : 'lax'
+      secure: true, 
+      sameSite: 'none',
+      maxAge: 24 * 60 * 60 * 1000, // 24 hours
+      httpOnly: true
     }
   }));
+
+  // Setup replit auth (includes session and passport)
 
   // Auth Middlewares
   const requireAuth = (req: any, res: any, next: any) => {
