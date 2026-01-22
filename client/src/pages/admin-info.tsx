@@ -14,15 +14,8 @@ export default function AdminInfo() {
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async (id: number) => {
-      const response = await fetch(`/api/admin/delete/${id}`, {
-        method: "DELETE",
-      });
-      if (!response.ok) {
-        const errorData = await response.json();
-        throw new Error(errorData.message || "Failed to delete admin");
-      }
-      return response.json();
+    mutationFn: async (id: string) => {
+      await apiRequest(`/api/admin/${id}`, "DELETE");
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/list"] });

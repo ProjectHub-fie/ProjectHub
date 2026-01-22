@@ -25,7 +25,7 @@ export default function UsersPage() {
 
   const toggleBlockMutation = useMutation({
     mutationFn: async (id: string) => {
-      await apiRequest("POST", `/api/users/${id}/toggle-block`);
+      await apiRequest(`/api/users/${id}/toggle-block`, "POST");
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/users"] });

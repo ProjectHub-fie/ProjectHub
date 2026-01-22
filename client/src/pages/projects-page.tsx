@@ -29,7 +29,7 @@ export default function ProjectsPage() {
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
-      await apiRequest("DELETE", `/api/projects/${id}`);
+      await apiRequest(`/api/projects/${id}`, "DELETE");
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/project-requests"] });
