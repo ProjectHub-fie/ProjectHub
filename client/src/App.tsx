@@ -38,15 +38,21 @@ function AuthLanding({ onVerified }: { onVerified: () => void }) {
       });
 
       if (res.ok) {
+        const data = await res.json();
+        console.log("Login successful, session:", data);
+        // Verify session was saved by checking
+        await new Promise(resolve => setTimeout(resolve, 500));
         onVerified();
       } else {
+        const error = await res.json();
         toast({
           title: "Access Denied",
-          description: "Invalid PIN or password provided.",
+          description: error.message || "Invalid PIN or password provided.",
           variant: "destructive",
         });
       }
     } catch (error) {
+      console.error("Login error:", error);
       toast({
         title: "Error",
         description: "Failed to connect to the server.",

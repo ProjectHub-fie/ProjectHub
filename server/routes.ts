@@ -85,7 +85,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       res.json({ 
         adminCount: admins.length,
         admins: admins.map(a => ({ id: a.id, pin: a.pin })),
-        isSessionLoggedIn: (req.session as any).isAdminLoggedIn || false
+        isSessionLoggedIn: (req.session as any).isAdminLoggedIn || false,
+        sessionId: req.sessionID,
+        sessionData: {
+          isAdminLoggedIn: (req.session as any).isAdminLoggedIn,
+          adminId: (req.session as any).adminId,
+          adminPin: (req.session as any).adminPin
+        }
       });
     } catch (error: any) {
       res.status(500).json({ message: "Error checking admins", error: error.message });
@@ -97,26 +103,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const bcrypt = await import("bcryptjs");
     
     try {
+      console.log(`Login attempt for PIN: ${pin}`);
       // Check database credentials
       const admin = await storage.getAdminByPin(pin);
       
-      if (admin && await bcrypt.default.compare(password, admin.passwordHash)) {
-        (req.session as any).isAdminLoggedIn = true;
-        return new Promise((resolve) => {
-          req.session.save((err) => {
-            if (err) {
-              console.error("Session save error:", err);
-              res.status(500).json({ message: "Session save failed", error: err.message });
-              return resolve(true);
-            }
-            console.log('Session saved successfully for admin login');
-            res.json({ success: true });
-            resolve(true);
-          });
-        });
-      } else {
-        res.status(401).json({ message: "Invalid PIN or password" });
+      if (!admin) {
+        console.log(`Admin not found for PIN: ${pin}`);
+        return res.status(401).json({ message: "Invalid PIN or password" });
       }
+
+      const isPasswordValid = await bcrypt.default.compare(password, admin.passwordHash);
+      
+      if (!isPasswordValid) {
+        console.log(`Password mismatch for PIN: ${pin}`);
+        return res.status(401).json({ message: "Invalid PIN or password" });
+      }
+
+      console.log(`Password verified for PIN: ${pin}, saving session...`);
+      (req.session as any).isAdminLoggedIn = true;
+      (req.session as any).adminId = admin.id;
+      (req.session as any).adminPin = pin;
+      
+      return new Promise((resolve) => {
+        req.session.save((err) => {
+          if (err) {
+            console.error("Session save error:", err);
+            console.log("Session object:", req.session);
+            res.status(500).json({ message: "Session save failed", error: err.message });
+            return resolve(true);
+          }
+          console.log('Session saved successfully, session ID:', req.sessionID);
+          console.log('Session data:', req.session);
+          res.json({ success: true, sessionId: req.sessionID });
+          resolve(true);
+        });
+      });
     } catch (error: any) {
       console.error('Login error:', error);
       res.status(500).json({ message: "Internal server error", error: error.message });
