@@ -34,6 +34,7 @@ function AuthLanding({ onVerified }: { onVerified: () => void }) {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username: pin, password: password }),
+        credentials: "include",
       });
 
       if (res.ok) {

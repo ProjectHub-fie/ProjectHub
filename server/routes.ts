@@ -82,20 +82,41 @@ export async function registerRoutes(app: Express): Promise<Server> {
     const { username: pin, password } = req.body;
     const bcrypt = await import("bcryptjs");
     
-    // Check database credentials
-    const admin = await storage.getAdminByPin(pin);
-    
-    if (admin && await bcrypt.default.compare(password, admin.passwordHash)) {
-      (req.session as any).isAdminLoggedIn = true;
-      res.json({ success: true });
-    } else {
-      res.status(401).json({ message: "Invalid PIN or password" });
+    try {
+      // Check database credentials
+      const admin = await storage.getAdminByPin(pin);
+      
+      if (admin && await bcrypt.default.compare(password, admin.passwordHash)) {
+        (req.session as any).isAdminLoggedIn = true;
+        return new Promise((resolve) => {
+          req.session.save((err) => {
+            if (err) {
+              console.error("Session save error:", err);
+              res.status(500).json({ message: "Session save failed", error: err.message });
+              return resolve(true);
+            }
+            console.log('Session saved successfully for admin login');
+            res.json({ success: true });
+            resolve(true);
+          });
+        });
+      } else {
+        res.status(401).json({ message: "Invalid PIN or password" });
+      }
+    } catch (error: any) {
+      console.error('Login error:', error);
+      res.status(500).json({ message: "Internal server error", error: error.message });
     }
   });
 
   app.post('/api/admin/logout', (req, res) => {
-    (req.session as any).isAdminLoggedIn = false;
-    res.json({ success: true });
+    req.session.destroy((err) => {
+      if (err) {
+        console.error("Session destroy error:", err);
+        return res.status(500).json({ message: "Logout failed" });
+      }
+      res.json({ success: true });
+    });
   });
 
   app.get('/api/users', requireAuth, async (req, res) => {
