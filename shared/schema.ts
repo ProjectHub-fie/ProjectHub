@@ -43,6 +43,7 @@ export const upsertUserSchema = z.object({
   facebookId: z.string().optional(),
   username: z.string().optional(),
   password: z.string().optional(),
+  isBlocked: z.boolean().optional(),
 });
 
 export const insertProjectRequestSchema = createInsertSchema(projectRequests).omit({

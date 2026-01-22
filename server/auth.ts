@@ -23,6 +23,11 @@ passport.use(new LocalStrategy({
       return done(null, false, { message: 'Invalid email or password' });
     }
 
+    if (user.isBlocked) {
+      console.log('User is blocked:', email);
+      return done(null, false, { message: 'Your account has been blocked. Please contact support.' });
+    }
+
     if (!user.password) {
       console.log('User has no password (social login?):', email);
       return done(null, false, { message: 'Please login using your social account' });

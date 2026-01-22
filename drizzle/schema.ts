@@ -16,6 +16,7 @@ export const users = pgTable('users', {
   facebookId: text('facebook_id').unique(),
   username: text('username').unique(),
   password: text('password'),
+  isBlocked: boolean('is_blocked').default(false).notNull(),
   resetToken: text('reset_token').unique(),
   resetTokenExpiry: timestamp('reset_token_expiry'),
   createdAt: timestamp('created_at').defaultNow().notNull(),
