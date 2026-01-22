@@ -132,7 +132,11 @@ export class DatabaseStorage implements IStorage {
     const user = await this.getUser(id);
     if (!user) throw new Error("User not found");
     const result = await db.update(users)
-      .set({ isBlocked: !user.isBlocked, updatedAt: new Date() })
+      .set({ 
+        isBlocked: !user.isBlocked, 
+        isBlocker: !user.isBlocked, // Sync with isBlocked
+        updatedAt: new Date() 
+      })
       .where(eq(users.id, id))
       .returning();
     return result[0];

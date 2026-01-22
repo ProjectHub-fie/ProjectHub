@@ -69,6 +69,7 @@ export default function UsersPage() {
                 <TableHead>Name</TableHead>
                 <TableHead>Email</TableHead>
                 <TableHead>Status</TableHead>
+                <TableHead>Blocked By</TableHead>
                 <TableHead>Action</TableHead>
               </TableRow>
             </TableHeader>
@@ -78,6 +79,7 @@ export default function UsersPage() {
                   <TableCell>{user.firstName} {user.lastName}</TableCell>
                   <TableCell>{user.email}</TableCell>
                   <TableCell>{user.isBlocked ? "Blocked" : "Active"}</TableCell>
+                  <TableCell>{user.isBlocker ? "System/Admin" : "-"}</TableCell>
                   <TableCell>
                     <Button 
                       variant={user.isBlocked ? "outline" : "destructive"}
