@@ -134,7 +134,6 @@ export class DatabaseStorage implements IStorage {
     const result = await db.update(users)
       .set({ 
         isBlocked: !user.isBlocked, 
-        isBlocker: !user.isBlocked, // Sync with isBlocked
         updatedAt: new Date() 
       })
       .where(eq(users.id, id))

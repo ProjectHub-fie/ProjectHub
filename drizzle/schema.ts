@@ -15,7 +15,6 @@ export const users = pgTable("users", {
   resetToken: text("reset_token"),
   resetTokenExpiry: timestamp("reset_token_expiry"),
   isBlocked: boolean("is_blocked").default(false),
-  isBlocker: boolean("is_blocker").default(false),
   isAdmin: boolean("is_admin").default(false),
   createdAt: timestamp("created_at").defaultNow().notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
