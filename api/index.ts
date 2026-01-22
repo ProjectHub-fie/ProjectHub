@@ -23,6 +23,15 @@ app.use((req, res, next) => {
 // Initialize routes
 const serverPromise = registerRoutes(app);
 
+// Use a simple session
+const session = (await import("express-session")).default;
+app.use(session({
+  secret: process.env.SESSION_SECRET || 'fallback-secret-key',
+  resave: false,
+  saveUninitialized: false,
+  cookie: { secure: true, sameSite: 'none' }
+}));
+
 export default async function handler(req: Request, res: Response) {
   // Ensure routes are registered
   await serverPromise;

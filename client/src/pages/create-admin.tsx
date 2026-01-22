@@ -35,7 +35,16 @@ export default function CreateAdmin() {
 
   const mutation = useMutation({
     mutationFn: async (values: z.infer<typeof formSchema>) => {
-      await apiRequest("POST", "/api/admin/create", values);
+      const response = await fetch("/api/admin/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(values),
+      });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Failed to create admin");
+      }
+      return response.json();
     },
     onSuccess: () => {
       toast({ title: "Admin created successfully" });
