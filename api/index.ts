@@ -29,7 +29,12 @@ app.use(session({
   secret: process.env.SESSION_SECRET || 'fallback-secret-key',
   resave: false,
   saveUninitialized: false,
-  cookie: { secure: true, sameSite: 'none' }
+  proxy: true,
+  cookie: { 
+    secure: true, 
+    sameSite: 'none',
+    maxAge: 24 * 60 * 60 * 1000 // 24 hours
+  }
 }));
 
 export default async function handler(req: Request, res: Response) {

@@ -35,7 +35,7 @@ export interface IStorage {
   getAdminByPin(pin: string): Promise<any | null>;
   getAllAdmins(): Promise<any[]>;
   setAdminPassword(pin: string, hash: string): Promise<void>;
-  deleteAdmin(id: string): Promise<void>;
+  deleteAdmin(id: number): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -247,7 +247,7 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
-  async deleteAdmin(id: string): Promise<void> {
+  async deleteAdmin(id: number): Promise<void> {
     await db.delete(adminCredentials).where(eq(adminCredentials.id, id));
   }
 }
