@@ -11,23 +11,31 @@ export async function registerRoutes(app: Express): Promise<Server> {
   const session = (await import("express-session")).default;
   const PostgresStore = (await import("connect-pg-simple")).default(session);
 
-  app.use(session({
-    store: new PostgresStore({
-      conString: process.env.DATABASE_URL,
-      tableName: 'sessions',
-      createTableIfMissing: false
-    }),
-    secret: process.env.SESSION_SECRET || 'fallback-secret-key',
-    resave: false,
-    saveUninitialized: false,
-    proxy: true,
-    cookie: { 
-      secure: true, 
-      sameSite: 'none',
-      maxAge: 24 * 60 * 60 * 1000, // 24 hours
-      httpOnly: true
-    }
-  }));
+  console.log("Initializing session store with DATABASE_URL:", process.env.DATABASE_URL ? "SET" : "NOT SET");
+  
+  try {
+    app.use(session({
+      store: new PostgresStore({
+        conString: process.env.DATABASE_URL,
+        tableName: 'sessions',
+        createTableIfMissing: true  // Changed to true to auto-create if missing
+      }),
+      secret: process.env.SESSION_SECRET || 'fallback-secret-key',
+      resave: false,
+      saveUninitialized: false,
+      proxy: true,
+      cookie: { 
+        secure: process.env.NODE_ENV === 'production',  // Only secure in production
+        sameSite: 'lax',  // Changed from 'none' to 'lax' for better compatibility
+        maxAge: 24 * 60 * 60 * 1000, // 24 hours
+        httpOnly: true
+      }
+    }));
+    console.log("Session store initialized successfully");
+  } catch (error) {
+    console.error("Failed to initialize session store:", error);
+    throw error;
+  }
 
   // Setup replit auth (includes session and passport)
 
