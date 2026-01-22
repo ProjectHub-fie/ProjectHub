@@ -3,15 +3,29 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { useQuery, useMutation } from "@tanstack/react-query";
 import { ProjectRequest } from "@shared/schema";
 import { Button } from "@/components/ui/button";
-import { Loader2, Trash2 } from "lucide-react";
+import { Input } from "@/components/ui/input";
+import { Loader2, Trash2, Search } from "lucide-react";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { useState, useMemo } from "react";
 
 export default function ProjectsPage() {
   const { toast } = useToast();
+  const [searchTerm, setSearchTerm] = useState("");
   const { data: projects, isLoading } = useQuery<ProjectRequest[]>({
     queryKey: ["/api/project-requests"],
   });
+
+  const filteredProjects = useMemo(() => {
+    if (!projects) return [];
+    if (!searchTerm) return projects;
+    const lowerSearch = searchTerm.toLowerCase();
+    return projects.filter(project => 
+      project.title.toLowerCase().includes(lowerSearch) || 
+      project.description.toLowerCase().includes(lowerSearch) ||
+      project.status.toLowerCase().includes(lowerSearch)
+    );
+  }, [projects, searchTerm]);
 
   const deleteMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -32,7 +46,19 @@ export default function ProjectsPage() {
   }
 
   return (
-    <div className="container mx-auto py-8">
+    <div className="container mx-auto py-8 space-y-4">
+      <div className="flex items-center gap-4 max-w-sm">
+        <div className="relative w-full">
+          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search projects..."
+            className="pl-8"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            data-testid="input-search-projects"
+          />
+        </div>
+      </div>
       <Card>
         <CardHeader>
           <CardTitle>Project Management</CardTitle>
@@ -49,7 +75,7 @@ export default function ProjectsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {projects?.map((project) => (
+              {filteredProjects.map((project) => (
                 <TableRow key={project.id}>
                   <TableCell className="font-medium">{project.title}</TableCell>
                   <TableCell>{project.description}</TableCell>

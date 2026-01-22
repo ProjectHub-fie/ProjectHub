@@ -6,6 +6,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
+import { ArrowLeft } from "lucide-react";
 import {
   Form,
   FormControl,
@@ -62,7 +63,18 @@ export default function CreateAdmin() {
   });
 
   return (
-    <div className="p-6 flex justify-center">
+    <div className="p-6 flex flex-col items-center">
+      <div className="w-full max-w-md mb-6 flex items-center gap-4">
+        <Button 
+          variant="ghost" 
+          size="icon" 
+          onClick={() => setLocation("/admin/info")}
+          data-testid="button-back-to-admin-info"
+        >
+          <ArrowLeft className="h-4 w-4" />
+        </Button>
+        <h1 className="text-2xl font-bold">Create Admin</h1>
+      </div>
       <Card className="w-full max-w-md">
         <CardHeader>
           <CardTitle>Create New Admin</CardTitle>

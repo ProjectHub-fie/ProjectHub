@@ -3,11 +3,25 @@ import { User } from "@shared/schema";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { apiRequest, queryClient } from "@/lib/queryClient";
-import { Loader2, ShieldAlert, ShieldCheck } from "lucide-react";
+import { Loader2, ShieldAlert, ShieldCheck, Search } from "lucide-react";
+import { useState, useMemo } from "react";
 
 export default function UsersPage() {
+  const [searchTerm, setSearchTerm] = useState("");
   const { data: users, isLoading } = useQuery<User[]>({ queryKey: ["/api/users"] });
+
+  const filteredUsers = useMemo(() => {
+    if (!users) return [];
+    if (!searchTerm) return users;
+    const lowerSearch = searchTerm.toLowerCase();
+    return users.filter(user => 
+      user.firstName?.toLowerCase().includes(lowerSearch) || 
+      user.lastName?.toLowerCase().includes(lowerSearch) || 
+      user.email?.toLowerCase().includes(lowerSearch)
+    );
+  }, [users, searchTerm]);
 
   const toggleBlockMutation = useMutation({
     mutationFn: async (id: string) => {
@@ -21,7 +35,19 @@ export default function UsersPage() {
   if (isLoading) return <div className="flex justify-center p-8"><Loader2 className="animate-spin" /></div>;
 
   return (
-    <div className="p-8">
+    <div className="p-8 space-y-4">
+      <div className="flex items-center gap-4 max-w-sm">
+        <div className="relative w-full">
+          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Input
+            placeholder="Search users..."
+            className="pl-8"
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            data-testid="input-search-users"
+          />
+        </div>
+      </div>
       <Card>
         <CardHeader>
           <CardTitle>User Management</CardTitle>
@@ -37,7 +63,7 @@ export default function UsersPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {users?.map((user) => (
+              {filteredUsers.map((user) => (
                 <TableRow key={user.id}>
                   <TableCell>{user.firstName} {user.lastName}</TableCell>
                   <TableCell>{user.email}</TableCell>
