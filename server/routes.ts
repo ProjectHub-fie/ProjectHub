@@ -51,7 +51,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/admin/create', async (req, res) => {
     try {
-      if (!(req.session as any).isAdminLoggedIn) {
+      // Allow creating first admin without authentication
+      const admins = await storage.getAllAdmins();
+      if (admins.length > 0 && !(req.session as any).isAdminLoggedIn) {
         return res.status(401).json({ message: "Unauthorized" });
       }
       const { pin, email, password } = req.body;
