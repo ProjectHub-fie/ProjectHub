@@ -70,6 +70,11 @@ passport.use(new DiscordStrategy({
       });
     }
 
+    if (user.isBlocked) {
+      console.log('Blocked user attempted Discord login:', profile.email);
+      return done(null, false, { message: 'Your account has been blocked. Please contact support.' });
+    }
+
     return done(null, user);
   } catch (error) {
     return done(error);

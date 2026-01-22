@@ -8,9 +8,13 @@ import { insertProjectRequestSchema } from "./../shared/schema.js";
 import pg from "pg";
 import connectPgSimple from "connect-pg-simple";
 
-// Middleware to check if user is authenticated
+// Middleware to check if user is authenticated and not blocked
 function requireAuth(req: any, res: any, next: any) {
   if (req.isAuthenticated()) {
+    if (req.user?.isBlocked) {
+      req.logout(() => {});
+      return res.status(403).json({ message: "Your account has been blocked" });
+    }
     return next();
   }
   res.status(401).json({ message: "Authentication required" });
