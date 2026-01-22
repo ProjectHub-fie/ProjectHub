@@ -1,3 +1,4 @@
+import "dotenv/config";
 import path from "path";
 import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes.js";
