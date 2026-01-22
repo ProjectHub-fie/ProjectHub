@@ -78,6 +78,20 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json({ success: true });
   });
 
+  // Debug endpoint - check if admin exists
+  app.get('/api/admin/check', async (req, res) => {
+    try {
+      const admins = await storage.getAllAdmins();
+      res.json({ 
+        adminCount: admins.length,
+        admins: admins.map(a => ({ id: a.id, pin: a.pin })),
+        isSessionLoggedIn: (req.session as any).isAdminLoggedIn || false
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: "Error checking admins", error: error.message });
+    }
+  });
+
   app.post('/api/admin/login', async (req, res) => {
     const { username: pin, password } = req.body;
     const bcrypt = await import("bcryptjs");
