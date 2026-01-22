@@ -39,14 +39,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.post('/api/admin/create', async (req, res) => {
-    if (!(req.session as any).isAdminLoggedIn) {
-      return res.status(401).json({ message: "Unauthorized" });
+    try {
+      if (!(req.session as any).isAdminLoggedIn) {
+        return res.status(401).json({ message: "Unauthorized" });
+      }
+      const { pin, password } = req.body;
+      if (!pin || !password) {
+        return res.status(400).json({ message: "PIN and password are required" });
+      }
+      const bcrypt = await import("bcryptjs");
+      const hash = await bcrypt.default.hash(password, 10);
+      await storage.setAdminPassword(pin, hash);
+      res.json({ success: true });
+    } catch (error) {
+      console.error('Admin creation error:', error);
+      res.status(500).json({ message: "Failed to create admin" });
     }
-    const { pin, password } = req.body;
-    const bcrypt = await import("bcryptjs");
-    const hash = await bcrypt.default.hash(password, 10);
-    await storage.setAdminPassword(pin, hash);
-    res.json({ success: true });
   });
 
   app.delete('/api/admin/:id', async (req, res) => {
