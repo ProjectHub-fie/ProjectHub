@@ -3,26 +3,47 @@ import { storage } from "../../server/storage.js";
 import bcrypt from "bcryptjs";
 
 export default async function handler(req: Request, res: Response) {
-  if (req.method !== 'POST') return res.status(405).end();
+  console.log('Login attempt received');
+  if (req.method !== 'POST') {
+    console.log(`Method ${req.method} not allowed`);
+    return res.status(405).end();
+  }
   
   const { username: pin, password } = req.body;
-  const admin = await storage.getAdminByPin(pin);
+  console.log(`Attempting login for PIN: ${pin}`);
   
-  if (admin && await bcrypt.compare(password, admin.passwordHash)) {
-    console.log(`Login successful for PIN: ${pin}`);
-    (req.session as any).isAdminLoggedIn = true;
-    return new Promise((resolve) => {
-      req.session.save((err) => {
-        if (err) {
-          console.error("Session save error:", err);
-          return res.status(500).json({ message: "Session save failed" });
-        }
-        res.json({ success: true });
-        resolve(true);
-      });
-    });
-  } else {
-    console.log(`Login failed for PIN: ${pin}. Admin found: ${!!admin}`);
+  try {
+    const admin = await storage.getAdminByPin(pin);
+    
+    if (admin) {
+      console.log('Admin record found in database');
+      const isPasswordValid = await bcrypt.compare(password, admin.passwordHash);
+      
+      if (isPasswordValid) {
+        console.log('Password verified successfully');
+        (req.session as any).isAdminLoggedIn = true;
+        return new Promise((resolve) => {
+          req.session.save((err) => {
+            if (err) {
+              console.error("Session save error:", err);
+              res.status(500).json({ message: "Session save failed", error: err.message });
+              return resolve(true);
+            }
+            console.log('Session saved successfully');
+            res.json({ success: true });
+            resolve(true);
+          });
+        });
+      } else {
+        console.log('Password verification failed');
+      }
+    } else {
+      console.log('No admin record found for this PIN');
+    }
+    
     res.status(401).json({ message: "Invalid PIN or password" });
+  } catch (error: any) {
+    console.error('Database or comparison error during login:', error);
+    res.status(500).json({ message: "Internal server error", error: error.message });
   }
 }
