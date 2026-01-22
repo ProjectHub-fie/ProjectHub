@@ -7,8 +7,10 @@ import { Input } from "@/components/ui/input";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Loader2, ShieldAlert, ShieldCheck, Search } from "lucide-react";
 import { useState, useMemo } from "react";
+import { useToast } from "@/hooks/use-toast";
 
 export default function UsersPage() {
+  const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
   const { data: users, isLoading } = useQuery<User[]>({ queryKey: ["/api/users"] });
 
@@ -25,10 +27,18 @@ export default function UsersPage() {
 
   const toggleBlockMutation = useMutation({
     mutationFn: async (id: string) => {
-      await apiRequest(`/api/users/${id}/toggle-block`, "POST");
+      await apiRequest(`/api/users/${id}/toggle-block`, "POST", {});
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/users"] });
+      toast({ title: "User status updated" });
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Error",
+        description: error.message,
+        variant: "destructive",
+      });
     },
   });
 
