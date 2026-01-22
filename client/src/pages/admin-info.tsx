@@ -8,21 +8,36 @@ import { Link } from "wouter";
 
 export default function AdminInfo() {
   const { toast } = useToast();
-  const { data: admins, isLoading } = useQuery<any[]>({
+  const { data: admins, isLoading, error } = useQuery<any[]>({
     queryKey: ["/api/admin/list"],
   });
 
   const deleteMutation = useMutation({
-    mutationFn: async (id: string) => {
-      await apiRequest("DELETE", `/api/admin/${id}`);
+    mutationFn: async (id: number) => {
+      const response = await fetch(`/api/admin/delete/${id}`, {
+        method: "DELETE",
+      });
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Failed to delete admin");
+      }
+      return response.json();
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/list"] });
       toast({ title: "Admin deleted successfully" });
     },
+    onError: (error: Error) => {
+      toast({
+        title: "Failed to delete admin",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
   });
 
-  if (isLoading) return <div>Loading...</div>;
+  if (isLoading) return <div className="p-6">Loading admins...</div>;
+  if (error) return <div className="p-6 text-destructive">Error loading admins: {(error as Error).message}</div>;
 
   return (
     <div className="p-6 space-y-6">
@@ -37,27 +52,37 @@ export default function AdminInfo() {
       </div>
 
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-        {admins?.map((admin) => (
-          <Card key={admin.id} className="hover-elevate">
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">PIN: {admin.pin}</CardTitle>
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => deleteMutation.mutate(admin.id)}
-                disabled={admins.length <= 1}
-                data-testid={`button-delete-admin-${admin.id}`}
-              >
-                <Trash2 className="h-4 w-4 text-destructive" />
-              </Button>
-            </CardHeader>
-            <CardContent>
-              <p className="text-xs text-muted-foreground">
-                Last updated: {new Date(admin.updatedAt).toLocaleString()}
-              </p>
-            </CardContent>
-          </Card>
-        ))}
+        {(!admins || admins.length === 0) ? (
+          <div className="col-span-full text-center py-10 text-muted-foreground">
+            No administrators found.
+          </div>
+        ) : (
+          admins.map((admin) => (
+            <Card key={admin.id} className="hover-elevate">
+              <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">PIN: {admin.pin}</CardTitle>
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  onClick={() => {
+                    if (window.confirm(`Are you sure you want to delete admin with PIN ${admin.pin}?`)) {
+                      deleteMutation.mutate(admin.id);
+                    }
+                  }}
+                  disabled={admins.length <= 1 || deleteMutation.isPending}
+                  data-testid={`button-delete-admin-${admin.id}`}
+                >
+                  <Trash2 className="h-4 w-4 text-destructive" />
+                </Button>
+              </CardHeader>
+              <CardContent>
+                <p className="text-xs text-muted-foreground">
+                  Last updated: {admin.updatedAt ? new Date(admin.updatedAt).toLocaleString() : 'Never'}
+                </p>
+              </CardContent>
+            </Card>
+          ))
+        )}
       </div>
     </div>
   );
