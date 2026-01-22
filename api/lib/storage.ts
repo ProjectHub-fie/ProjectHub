@@ -7,7 +7,7 @@ import {
   type InsertProjectRequest,
   type InsertProjectInteraction,
 } from "../../shared/schema.js";
-import { db } from "./db.js";
+import { db } from "./db";
 import { eq, and, sql } from "drizzle-orm";
 import { users, projectRequests, projectInteractions } from "../../drizzle/schema.js";
 
