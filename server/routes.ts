@@ -9,10 +9,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   // Use a simple session
   const session = (await import("express-session")).default;
+  const PostgresStore = (await import("connect-pg-simple")).default(session);
+
   app.use(session({
+    store: new PostgresStore({
+      conString: process.env.DATABASE_URL,
+      tableName: 'sessions',
+      createTableIfMissing: false
+    }),
     secret: process.env.SESSION_SECRET || 'fallback-secret-key',
-    resave: true,
-    saveUninitialized: true,
+    resave: false,
+    saveUninitialized: false,
     proxy: true,
     cookie: { 
       secure: true, 
