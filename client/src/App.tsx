@@ -30,13 +30,19 @@ function AuthLanding({ onVerified }: { onVerified: () => void }) {
 
     setIsSubmitting(true);
     try {
-      const res = await fetch("/api/admin/login", {
+      console.log("Attempting login to /api/admin/login");
+      // Use window.location.origin to ensure we're hitting the right host
+      const loginUrl = `${window.location.origin}/api/admin/login`;
+      console.log("Full login URL:", loginUrl);
+      
+      const res = await fetch(loginUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ username: pin, password: password }),
         credentials: "include",
       });
 
+      console.log("Login response status:", res.status);
       if (res.ok) {
         const data = await res.json();
         console.log("Login successful, session:", data);

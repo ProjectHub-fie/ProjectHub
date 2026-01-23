@@ -8,6 +8,19 @@ app.use(express.urlencoded({ extended: false }));
 // Trust proxy for Vercel
 app.set('trust proxy', 1);
 
+// Add CORS headers for Vercel
+app.use((req, res, next) => {
+  res.header('Access-Control-Allow-Credentials', 'true');
+  res.header('Access-Control-Allow-Origin', req.headers.origin);
+  res.header('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
+  res.header('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version');
+  if (req.method === 'OPTIONS') {
+    res.status(200).end();
+    return;
+  }
+  next();
+});
+
 // Use a simple session
 const session = (await import("express-session")).default;
 const PostgresStore = (await import("connect-pg-simple")).default(session);
@@ -33,9 +46,10 @@ app.use(session({
 // Add request logging for debugging
 app.use((req, res, next) => {
   const start = Date.now();
+  console.log(`[Vercel API] Incoming request: ${req.method} ${req.path}`);
   res.on('finish', () => {
     const duration = Date.now() - start;
-    console.log(`${req.method} ${req.path} ${res.statusCode} ${duration}ms`);
+    console.log(`[Vercel API] Finished request: ${req.method} ${req.path} ${res.statusCode} ${duration}ms`);
   });
   next();
 });
