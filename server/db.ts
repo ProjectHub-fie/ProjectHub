@@ -10,7 +10,7 @@ if (!databaseUrl) {
 
 // Create the connection
 const client = postgres(databaseUrl, {
-  ssl: 'require', // Standard for Vercel/Neon/Replit managed DBs
+  ssl: { rejectUnauthorized: false }, // Improved for Vercel
   max: 10,
 });
 
