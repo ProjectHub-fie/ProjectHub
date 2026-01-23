@@ -1,16 +1,18 @@
 
-export default async function handler(req, res) {
-  // Configure CORS
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+import nc from "next-connect";
 
-  if (req.method === 'OPTIONS') {
+const handler = nc()
+  .use((req, res, next) => {
+    // Configure CORS
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    next();
+  })
+  .options((req, res) => {
     res.status(200).end();
-    return;
-  }
-
-  if (req.method === 'POST') {
+  })
+  .post(async (req, res) => {
     try {
       const { email } = req.body;
 
@@ -39,3 +41,13 @@ export default async function handler(req, res) {
       } else if (req.body.captchaToken) {
         console.log('Skipping Turnstile verification in development');
       }
+
+      // TODO: Implement forgot password logic here
+      res.json({ message: "Password reset email sent" });
+    } catch (error) {
+      console.error('Forgot password error:', error);
+      res.status(500).json({ message: "Failed to send reset email" });
+    }
+  });
+
+export default handler;

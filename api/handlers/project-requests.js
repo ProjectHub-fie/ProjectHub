@@ -1,13 +1,14 @@
 import { storage } from "./lib/storage.js";
 import { insertProjectRequestSchema } from "../shared/schema.js";
 import { parse } from "cookie";
+import nc from "next-connect";
 
-export default async function handler(req, res) {
-  if (req.method === 'POST') {
+const handler = nc()
+  .post(async (req, res) => {
     try {
       const cookies = parse(req.headers.cookie || '');
       const sessionToken = cookies['connect.sid'];
-      
+
       let userId = req.body.userId;
       if (!userId && sessionToken) {
         try {
@@ -30,11 +31,12 @@ export default async function handler(req, res) {
     } catch (error) {
       res.status(500).json({ message: "Failed to create project request" });
     }
-  } else if (req.method === 'GET') {
+  })
+  .get(async (req, res) => {
     try {
       const cookies = parse(req.headers.cookie || '');
       const sessionToken = cookies['connect.sid'];
-      
+
       let userId = req.query.userId;
       if (!userId && sessionToken) {
         try {
@@ -52,7 +54,6 @@ export default async function handler(req, res) {
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch project requests" });
     }
-  } else {
-    res.status(405).json({ message: "Method not allowed" });
-  }
-}
+  });
+
+export default handler;

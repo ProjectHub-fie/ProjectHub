@@ -1,18 +1,19 @@
 import { parse } from "cookie";
 import { storage } from "../lib/storage.js";
+import nc from "next-connect";
 
-export default async function handler(req, res) {
-  // Configure CORS
-  res.setHeader('Access-Control-Allow-Origin', '*');
-  res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-User-Session');
-
-  if (req.method === 'OPTIONS') {
+const handler = nc()
+  .use((req, res, next) => {
+    // Configure CORS
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-User-Session');
+    next();
+  })
+  .options((req, res) => {
     res.status(200).end();
-    return;
-  }
-
-  if (req.method === 'GET') {
+  })
+  .get(async (req, res) => {
     const cookies = parse(req.headers.cookie || '');
     const sessionToken = cookies['connect.sid'];
 
@@ -49,7 +50,6 @@ export default async function handler(req, res) {
       console.error('Session parsing error:', e);
       res.status(401).json({ user: null, message: "Invalid session" });
     }
-  } else {
-    res.status(405).json({ message: "Method not allowed" });
-  }
-}
+  });
+
+export default handler;

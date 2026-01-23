@@ -1,13 +1,14 @@
 import { storage } from "../../lib/storage.js";
 import { parse } from "cookie";
+import nc from "next-connect";
 
-export default async function handler(req, res) {
-  const { projectId } = req.query;
+const handler = nc()
+  .get(async (req, res) => {
+    const { projectId } = req.query;
 
-  if (req.method === 'GET') {
     try {
       const { likes, averageRating } = await storage.getProjectInteractions(projectId);
-      
+
       let userInteraction = null;
       const cookies = parse(req.headers.cookie || '');
       const sessionToken = cookies['connect.sid'];
@@ -19,12 +20,15 @@ export default async function handler(req, res) {
           userInteraction = interaction || null;
         } catch (e) {}
       }
-      
+
       res.json({ likes, averageRating, userInteraction });
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch interactions" });
     }
-  } else if (req.method === 'POST') {
+  })
+  .post(async (req, res) => {
+    const { projectId } = req.query;
+
     try {
       const cookies = parse(req.headers.cookie || '');
       const sessionToken = cookies['connect.sid'];
@@ -47,7 +51,6 @@ export default async function handler(req, res) {
     } catch (error) {
       res.status(500).json({ message: "Failed to update interaction" });
     }
-  } else {
-    res.status(405).json({ message: "Method not allowed" });
-  }
-}
+  });
+
+export default handler;
