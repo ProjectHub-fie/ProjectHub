@@ -31,12 +31,12 @@ export function useAuth() {
   }, []);
 
   const loginMutation = useMutation({
-    mutationFn: async (credentials: { email: string; password: string }) => {
-      const response = await fetch("/api/auth/login", {
+    mutationFn: async (credentials: { email: string; password: string; captchaToken?: string }) => {
+      const response = await fetch("/api/auth", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify(credentials),
+        body: JSON.stringify({ action: 'login', ...credentials }),
       });
 
       const data = await response.json();
@@ -61,12 +61,13 @@ export function useAuth() {
       password: string;
       firstName: string;
       lastName: string;
+      captchaToken?: string;
     }) => {
-      const response = await fetch("/api/auth/register", {
+      const response = await fetch("/api/auth", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
-        body: JSON.stringify(userData),
+        body: JSON.stringify({ action: 'register', ...userData }),
       });
 
       const data = await response.json();
@@ -86,9 +87,11 @@ export function useAuth() {
 
   const logoutMutation = useMutation({
     mutationFn: async () => {
-      const response = await fetch("/api/auth/logout", {
+      const response = await fetch("/api/auth", {
         method: "POST",
+        headers: { "Content-Type": "application/json" },
         credentials: "include",
+        body: JSON.stringify({ action: 'logout' }),
       });
       if (!response.ok) {
         const data = await response.json();
