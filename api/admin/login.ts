@@ -10,13 +10,13 @@ export default async function handler(req: Request, res: Response) {
   }
   
   const { username: pin, password } = req.body;
-  console.log(`Attempting login for PIN: ${pin}`);
+  console.log(`[Vercel Login] Attempting login for PIN: ${pin}`);
   
   try {
     const admin = await storage.getAdminByPin(pin);
     
     if (admin) {
-      console.log('Admin record found in database');
+      console.log(`[Vercel Login] Admin record found in admin_credentials table for PIN: ${pin}`);
       const isPasswordValid = await bcrypt.compare(password, admin.passwordHash);
       
       if (isPasswordValid) {

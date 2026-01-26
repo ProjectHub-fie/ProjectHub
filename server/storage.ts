@@ -233,7 +233,13 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getAdminByPin(pin: string): Promise<any | null> {
+    console.log(`[Storage] Querying admin_credentials for PIN: ${pin}`);
     const result = await db.select().from(adminCredentials).where(eq(adminCredentials.pin, pin)).limit(1);
+    if (result.length > 0) {
+      console.log(`[Storage] Found admin: ${result[0].email}`);
+    } else {
+      console.log(`[Storage] No admin found for PIN: ${pin}`);
+    }
     return result[0] || null;
   }
 
