@@ -2,30 +2,6 @@
   "version": 2,
   "routes": [
     {
-      "src": "/api/admin/list",
-      "dest": "api/admin/list.ts"
-    },
-    {
-      "src": "/api/admin/create",
-      "dest": "api/admin/create.ts"
-    },
-    {
-      "src": "/api/admin/login",
-      "dest": "api/admin/login.ts"
-    },
-    {
-      "src": "/api/admin/logout",
-      "dest": "api/admin/logout.ts"
-    },
-    {
-      "src": "/api/admin/stats",
-      "dest": "api/admin/stats.ts"
-    },
-    {
-      "src": "/api/admin/delete/(?<id>[^/]+)",
-      "dest": "api/admin/delete.ts?id=$id"
-    },
-    {
       "src": "/api/(.*)",
       "dest": "api/index.ts"
     },
