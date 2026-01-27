@@ -43,6 +43,11 @@ app.use((req, res, next) => {
 
   const server = await registerRoutes(app);
 
+  // API 404 handler
+  app.use('/api/*', (req, res) => {
+    res.status(404).json({ message: 'API endpoint not found' });
+  });
+
   // Setup vite BEFORE catch-all handler in development
   if (app.get("env") === "development") {
     await setupVite(app, server);

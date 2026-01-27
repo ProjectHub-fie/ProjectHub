@@ -43,6 +43,7 @@ function Router() {
       <Route path="/dashboard" component={ProjectRequest} />
       <Route path="/project/:id" component={ProjectPage} />
       <Route path="/error" component={ErrorPage} />
+      <Route path="/404" component={NotFound} />
       <Route component={NotFound} />
     </Switch>
   );

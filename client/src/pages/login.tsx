@@ -212,6 +212,11 @@ export default function LoginPage() {
         resetPasswordForm.reset();
       } else {
         const error = await response.json();
+        // If token is invalid or expired, redirect to 404 page
+        if (error.message && (error.message.toLowerCase().includes('token') || error.message.toLowerCase().includes('expired') || error.message.toLowerCase().includes('invalid'))) {
+          setLocation('/404');
+          return;
+        }
         throw new Error(error.message || "Failed to reset password");
       }
     } catch (error: any) {
