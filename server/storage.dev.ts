@@ -5,10 +5,11 @@ import {
   type InsertProjectInteraction,
 } from "./../shared/schema.js";
 import { type User as IUser, type UpsertUser } from "@shared/models/auth.js";
-import { db } from "./db.js";
 import { eq, and, sql } from "drizzle-orm";
 import { users, projectRequests, projectInteractions, adminCredentials } from "../drizzle/schema.js";
 
+// Import the dev database
+import { db } from './db.dev.js';
 
 export interface IStorage {
   // User operations
@@ -34,7 +35,7 @@ export interface IStorage {
   // Admin credentials
   getAdminByPin(pin: string): Promise<any | null>;
   getAllAdmins(): Promise<any[]>;
-  setAdminPassword(pin: string, email: string, hash: string): Promise<void>;
+  setAdminPassword(pin: string, email: string | null, hash: string): Promise<void>;
   deleteAdmin(id: string): Promise<void>;
 }
 
@@ -162,7 +163,7 @@ export class DatabaseStorage implements IStorage {
   async updateProjectRequestStatus(id: string, status: string): Promise<IProjectRequest | null> {
     const result = await db.update(projectRequests)
       .set({ 
-        status: sql`${status}::project_request_status`, 
+        status: status as any, // Simplified for SQLite
         updatedAt: new Date() 
       })
       .where(eq(projectRequests.id, id))
@@ -183,7 +184,7 @@ export class DatabaseStorage implements IStorage {
         eq(projectInteractions.isLiked, true)
       ));
 
-    const ratingResult = await db.select({ average: sql<string>`avg(${projectInteractions.rating})` })
+    const ratingResult = await db.select({ average: sql<number | null>`avg(cast(${projectInteractions.rating} as REAL))` })
       .from(projectInteractions)
       .where(and(
         eq(projectInteractions.projectId, projectId),
@@ -192,7 +193,7 @@ export class DatabaseStorage implements IStorage {
 
     return {
       likes: parseInt(likesResult[0]?.count || "0", 10),
-      averageRating: parseFloat(ratingResult[0]?.average || "0"),
+      averageRating: parseFloat(ratingResult[0]?.average?.toString() || "0"),
     };
   }
 
@@ -236,7 +237,7 @@ export class DatabaseStorage implements IStorage {
     console.log(`[Storage] Querying admin_credentials for PIN: ${pin}`);
     const result = await db.select().from(adminCredentials).where(eq(adminCredentials.pin, pin)).limit(1);
     if (result.length > 0) {
-      console.log(`[Storage] Found admin: ${result[0].email}`);
+      console.log(`[Storage] Found admin: ${result[0].email || 'No email'}`);
     } else {
       console.log(`[Storage] No admin found for PIN: ${pin}`);
     }
@@ -250,17 +251,9 @@ export class DatabaseStorage implements IStorage {
   async setAdminPassword(pin: string, email: string | null, hash: string): Promise<void> {
     const existing = await this.getAdminByPin(pin);
     if (existing) {
-      await db.update(adminCredentials).set({ 
-        email: email || null, 
-        passwordHash: hash, 
-        updatedAt: new Date() 
-      }).where(eq(adminCredentials.id, existing.id));
+      await db.update(adminCredentials).set({ email: email || null, passwordHash: hash, updatedAt: new Date() }).where(eq(adminCredentials.id, existing.id));
     } else {
-      await db.insert(adminCredentials).values({ 
-        pin, 
-        email: email || null, 
-        passwordHash: hash 
-      });
+      await db.insert(adminCredentials).values({ pin, email: email || null, passwordHash: hash, updatedAt: new Date() });
     }
   }
 

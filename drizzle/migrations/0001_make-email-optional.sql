@@ -1,0 +1,1 @@
+ALTER TABLE "admin_credentials" ALTER COLUMN "email" DROP NOT NULL;

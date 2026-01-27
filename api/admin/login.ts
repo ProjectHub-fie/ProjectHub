@@ -22,26 +22,27 @@ export default async function handler(req: Request, res: Response) {
       if (isPasswordValid) {
         console.log('Password verified successfully');
         (req.session as any).isAdminLoggedIn = true;
-        return new Promise((resolve) => {
-          req.session.save((err) => {
-            if (err) {
-              console.error("Session save error:", err);
-              res.status(500).json({ message: "Session save failed", error: err.message });
-              return resolve(true);
-            }
-            console.log('Session saved successfully');
-            res.json({ success: true });
-            resolve(true);
-          });
+        (req.session as any).adminId = admin.id;
+        (req.session as any).adminPin = pin;
+        
+        req.session.save((err) => {
+          if (err) {
+            console.error("Session save error:", err);
+            res.status(500).json({ message: "Session save failed", error: err.message });
+            return;
+          }
+          console.log('Session saved successfully');
+          res.json({ success: true });
         });
       } else {
         console.log('Password verification failed');
+        res.status(401).json({ message: "Invalid PIN or password" });
       }
     } else {
       console.log('No admin record found for this PIN');
+      res.status(401).json({ message: "Invalid PIN or password" });
     }
     
-    res.status(401).json({ message: "Invalid PIN or password" });
   } catch (error: any) {
     console.error('Database or comparison error during login:', error);
     res.status(500).json({ message: "Internal server error", error: error.message });

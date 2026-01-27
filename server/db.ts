@@ -2,6 +2,12 @@ import { drizzle } from 'drizzle-orm/neon-http';
 import { neon, neonConfig } from '@neondatabase/serverless';
 import * as schema from '../drizzle/schema.js';
 
+// Fix for Neon connection issue
+neonConfig.wsProxy = (host) => {
+  return `wss://${host}`;
+};
+neonConfig.useSecureWebSocket = true;
+
 const databaseUrl = process.env.DATABASE_URL;
 
 if (!databaseUrl) {

@@ -134,7 +134,18 @@ function Router() {
               <Button 
                 variant="ghost" 
                 size="sm"
-                onClick={() => setIsAdmin(false)}
+                onClick={() => {
+                  // Clear session and redirect to login
+                  fetch("/api/admin/logout", {
+                    method: "POST",
+                    credentials: "include",
+                  }).then(() => {
+                    setIsAdmin(false); // This triggers re-render to show login screen
+                  }).catch(error => {
+                    console.error("Logout error:", error);
+                    setIsAdmin(false); // Still redirect to login screen
+                  });
+                }}
               >
                 Log Out
               </Button>

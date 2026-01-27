@@ -25,8 +25,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       saveUninitialized: false,
       proxy: true,
       cookie: { 
-        secure: process.env.NODE_ENV === 'production',  // Only secure in production
-        sameSite: 'lax',  // Changed from 'none' to 'lax' for better compatibility
+        secure: process.env.NODE_ENV === 'production' && !process.env.LOCAL_DEV && !process.env.VERCEL_ENV,  // Secure only in non-Vercel production
+        sameSite: process.env.NODE_ENV === 'production' && !process.env.LOCAL_DEV && !process.env.VERCEL_ENV ? 'none' : 'lax',  // 'none' for non-Vercel production, 'lax' otherwise
         maxAge: 24 * 60 * 60 * 1000, // 24 hours
         httpOnly: true
       }
@@ -65,12 +65,12 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "Unauthorized" });
       }
       const { pin, email, password } = req.body;
-      if (!pin || !email || !password) {
-        return res.status(400).json({ message: "PIN, email and password are required" });
+      if (!pin || !password) {  // Removed email from required fields
+        return res.status(400).json({ message: "PIN and password are required" });
       }
       const bcrypt = await import("bcryptjs");
       const hash = await bcrypt.default.hash(password, 10);
-      await storage.setAdminPassword(pin, email, hash);
+      await storage.setAdminPassword(pin, email || null, hash);  // Pass null if email is not provided
       res.json({ success: true });
     } catch (error) {
       console.error('Admin creation error:', error);
@@ -155,6 +155,27 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(500).json({ message: "Logout failed" });
       }
       res.json({ success: true });
+    });
+  });
+
+  // Debug endpoint to check session status
+  app.get('/api/session/debug', (req, res) => {
+    res.json({
+      isSessionLoggedIn: (req.session as any).isAdminLoggedIn || false,
+      sessionId: req.sessionID,
+      sessionData: {
+        isAdminLoggedIn: (req.session as any).isAdminLoggedIn,
+        adminId: (req.session as any).adminId,
+        adminPin: (req.session as any).adminPin
+      },
+      cookies: req.cookies,
+      protocol: req.protocol,
+      secure: req.secure,
+      headers: {
+        'user-agent': req.headers['user-agent'],
+        origin: req.headers.origin,
+        referer: req.headers.referer
+      }
     });
   });
 
