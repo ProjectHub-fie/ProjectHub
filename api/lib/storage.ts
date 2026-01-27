@@ -155,7 +155,7 @@ export class DatabaseStorage implements IStorage {
         eq(projectInteractions.isLiked, true)
       ));
 
-    const ratingResult = await db.select({ average: sql<string>`avg(${projectInteractions.rating})` })
+    const ratingResult = await db.select({ average: sql<string>`avg(${projectInteractions.rating}::numeric)` })
       .from(projectInteractions)
       .where(and(
         eq(projectInteractions.projectId, projectId),
