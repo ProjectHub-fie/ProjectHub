@@ -27,7 +27,14 @@ const handler = nc()
   .get(async (req, res) => {
     // me/user logic
     const cookies = parse(req.headers.cookie || '');
-    const sessionToken = cookies['connect.sid'] || req.headers['x-user-session'];
+    let sessionToken = cookies['connect.sid'] || req.headers['x-user-session'];
+
+    if (!sessionToken && req.headers.authorization) {
+      const authHeader = req.headers.authorization;
+      if (authHeader.startsWith('Bearer ')) {
+        sessionToken = authHeader.substring(7);
+      }
+    }
 
     if (!sessionToken) return res.status(401).json({ user: null, message: "Authentication required" });
 

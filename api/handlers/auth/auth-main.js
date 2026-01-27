@@ -31,7 +31,7 @@ const handler = nc()
         const user = await storage.upsertUser({ email, firstName, lastName, password: hashedPassword });
         const userData = { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName };
         const sessionToken = Buffer.from(JSON.stringify(userData)).toString('base64');
-        const isProd = process.env.NODE_ENV === 'production';
+        const isProd = process.env.NODE_ENV === 'production' || !!process.env.VERCEL;
         res.setHeader('Set-Cookie', `connect.sid=${sessionToken}; Path=/; HttpOnly; SameSite=${isProd ? 'None' : 'Lax'}; ${isProd ? 'Secure;' : ''} Max-Age=86400`);
         return res.json({ user: userData, sessionToken });
       } catch (error) {
@@ -61,7 +61,7 @@ const handler = nc()
         }
         const userData = { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, profileImageUrl: user.profileImageUrl };
         const sessionToken = Buffer.from(JSON.stringify(userData)).toString('base64');
-        const isProd = process.env.NODE_ENV === 'production';
+        const isProd = process.env.NODE_ENV === 'production' || !!process.env.VERCEL;
         res.setHeader('Set-Cookie', `connect.sid=${sessionToken}; Path=/; HttpOnly; SameSite=${isProd ? 'None' : 'Lax'}; ${isProd ? 'Secure;' : ''} Max-Age=86400`);
         return res.json({ user: userData, sessionToken });
       } catch (error) {
