@@ -1,5 +1,7 @@
 {
   "version": 2,
+  "public": true,
+  "cleanUrls": true,
   "routes": [
     {
       "src": "/api/(.*)",
@@ -7,11 +9,11 @@
     },
     {
       "src": "/assets/(.*)",
-      "dest": "/assets/$1"
+      "dest": "/public/assets/$1"
     },
     {
       "src": "/(.*)",
-      "dest": "/index.html"
+      "dest": "/public/index.html"
     }
   ]
 }
