@@ -2,10 +2,10 @@
   "version": 2,
   "builds": [
     {
-      "src": "api/index.ts",
+      "src": "package.json",
       "use": "@vercel/node",
-      "config": { 
-        "includeFiles": ["dist/**/*"] 
+      "config": {
+        "buildsCommand": "npm run build"
       }
     }
   ],

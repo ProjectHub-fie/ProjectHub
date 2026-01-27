@@ -1,5 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { registerRoutes } from '../server/routes.js';
+import { registerRoutes } from '../../server/routes.js';
 import path from 'path';
 import { promises as fs } from 'fs';
 
@@ -63,7 +63,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   // Check if this is an API request
   if (req.url?.startsWith('/api/')) {
     // Handle API requests
-    return app(req as any, res as any);
+    return app(req, res);
   } else {
     // Serve the React app for all other requests
     try {
