@@ -9,15 +9,12 @@ export default async function handler(req: Request, res: Response) {
   }
   
   const url = new URL(req.url || '', `http://${req.headers.host}`);
-  const idStr = url.searchParams.get('id') || url.pathname.split('/').pop();
+  const id = url.searchParams.get('id') || url.pathname.split('/').pop();
   
-  if (idStr) {
-    const id = parseInt(idStr, 10);
-    if (!isNaN(id)) {
-      await storage.deleteAdmin(id);
-      res.json({ success: true });
-      return;
-    }
+  if (id) {
+    await storage.deleteAdmin(id);
+    res.json({ success: true });
+    return;
   }
   
   res.status(400).json({ message: "Valid ID required" });
