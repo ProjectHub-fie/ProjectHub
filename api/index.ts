@@ -67,15 +67,18 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   } else if (req.url?.startsWith('/assets/')) {
     // Serve static assets directly from dist/public/assets
     try {
-      const assetPath = path.join(process.cwd(), 'dist', 'public', req.url);
+      const assetUrl = req.url.split('?')[0]; // Remove query params
+      const assetPath = path.join(process.cwd(), 'dist', 'public', assetUrl);
       const assetData = await fs.readFile(assetPath);
       
       // Basic content-type mapping
-      if (req.url.endsWith('.js')) res.setHeader('Content-Type', 'application/javascript');
-      else if (req.url.endsWith('.css')) res.setHeader('Content-Type', 'text/css');
-      else if (req.url.endsWith('.jpg') || req.url.endsWith('.jpeg')) res.setHeader('Content-Type', 'image/jpeg');
-      else if (req.url.endsWith('.png')) res.setHeader('Content-Type', 'image/png');
-      else if (req.url.endsWith('.gif')) res.setHeader('Content-Type', 'image/gif');
+      if (assetUrl.endsWith('.js')) res.setHeader('Content-Type', 'application/javascript');
+      else if (assetUrl.endsWith('.css')) res.setHeader('Content-Type', 'text/css');
+      else if (assetUrl.endsWith('.jpg') || assetUrl.endsWith('.jpeg')) res.setHeader('Content-Type', 'image/jpeg');
+      else if (assetUrl.endsWith('.png')) res.setHeader('Content-Type', 'image/png');
+      else if (assetUrl.endsWith('.gif')) res.setHeader('Content-Type', 'image/gif');
+      else if (assetUrl.endsWith('.svg')) res.setHeader('Content-Type', 'image/svg+xml');
+      else if (assetUrl.endsWith('.ico')) res.setHeader('Content-Type', 'image/x-icon');
       
       res.send(assetData);
     } catch (error) {
