@@ -60,18 +60,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   // Initialize routes
   await registerRoutes(app);
 
-  // Check if this is an API request
-  if (req.url?.startsWith('/api/')) {
-    // Handle API requests
-    return app(req as any, res as any);
-  } else if (req.url?.startsWith('/assets/')) {
-    // Serve static assets directly from dist/public/assets
+  // Serve static assets from dist/public/assets
+  if (req.url?.startsWith('/assets/')) {
     try {
-      const assetUrl = req.url.split('?')[0]; // Remove query params
+      const assetUrl = req.url.split('?')[0];
       const assetPath = path.join(process.cwd(), 'dist', 'public', assetUrl);
       const assetData = await fs.readFile(assetPath);
       
-      // Basic content-type mapping
       if (assetUrl.endsWith('.js')) res.setHeader('Content-Type', 'application/javascript');
       else if (assetUrl.endsWith('.css')) res.setHeader('Content-Type', 'text/css');
       else if (assetUrl.endsWith('.jpg') || assetUrl.endsWith('.jpeg')) res.setHeader('Content-Type', 'image/jpeg');
@@ -79,24 +74,15 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       else if (assetUrl.endsWith('.gif')) res.setHeader('Content-Type', 'image/gif');
       else if (assetUrl.endsWith('.svg')) res.setHeader('Content-Type', 'image/svg+xml');
       else if (assetUrl.endsWith('.ico')) res.setHeader('Content-Type', 'image/x-icon');
+      else res.setHeader('Content-Type', 'application/octet-stream');
       
-      res.send(assetData);
+      return res.send(assetData);
     } catch (error) {
       console.error(`Error serving asset ${req.url}:`, error);
-      res.status(404).send('Not Found');
-    }
-  } else {
-    // Serve the React app for all other requests
-    try {
-      // Read the built index.html file
-      const indexPath = path.join(process.cwd(), 'dist', 'public', 'index.html');
-      const indexHtml = await fs.readFile(indexPath, 'utf8');
-      
-      res.setHeader('Content-Type', 'text/html');
-      res.send(indexHtml);
-    } catch (error) {
-      console.error('Error serving index.html:', error);
-      res.status(500).send('Internal Server Error');
+      return res.status(404).send('Not Found');
     }
   }
+
+  // Handle all other requests (API and Pages)
+  return app(req as any, res as any);
 }

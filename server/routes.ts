@@ -2,6 +2,7 @@ import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage.js";
 import { insertProjectRequestSchema } from "./../shared/schema.js";
+import path from "path";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Trust proxy for Vercel
@@ -280,6 +281,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Update interaction error:', error);
       res.status(500).json({ message: "Failed to update project interaction" });
+    }
+  });
+
+  // Handle all other requests (API and Pages)
+  app.get('*', (req, res) => {
+    try {
+      // For Vercel, index.html is in dist/public
+      const indexPath = process.env.NODE_ENV === 'production' 
+        ? path.join(process.cwd(), 'dist', 'public', 'index.html')
+        : path.join(process.cwd(), 'public', 'index.html');
+      
+      res.sendFile(indexPath);
+    } catch (error) {
+      console.error('Error serving index.html:', error);
+      res.status(500).send('Internal Server Error');
     }
   });
 
