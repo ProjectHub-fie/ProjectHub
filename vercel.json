@@ -3,15 +3,15 @@
   "routes": [
     {
       "src": "/api/(.*)",
-      "dest": "/api/index.ts"
+      "dest": "/pages/api/index.ts"
     },
     {
       "src": "/assets/(.*)",
-      "dest": "/api/index.ts"
+      "dest": "/pages/api/index.ts"
     },
     {
       "src": "/(.*)",
-      "dest": "/api/index.ts"
+      "dest": "/pages/api/index.ts"
     }
   ]
 }
