@@ -2,17 +2,17 @@ import { drizzle } from 'drizzle-orm/neon-http';
 import { neon, neonConfig } from '@neondatabase/serverless';
 import * as schema from '../drizzle/schema.js';
 
-// Fix for Neon connection issue
-neonConfig.wsProxy = (host) => {
-  return `wss://${host}`;
-};
-neonConfig.useSecureWebSocket = true;
-
 const databaseUrl = process.env.DATABASE_URL;
 
 if (!databaseUrl) {
   throw new Error("DATABASE_URL must be set");
 }
+
+// Fix for Neon connection issue
+neonConfig.wsProxy = (host) => {
+  return `wss://${host}`;
+};
+neonConfig.useSecureWebSocket = true;
 
 // Enable connection pooling for serverless environments like Vercel
 neonConfig.fetchConnectionCache = true;
