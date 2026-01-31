@@ -64,6 +64,24 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.url?.startsWith('/api/')) {
     // Handle API requests
     return app(req as any, res as any);
+  } else if (req.url?.startsWith('/assets/')) {
+    // Serve static assets directly from dist/public/assets
+    try {
+      const assetPath = path.join(process.cwd(), 'dist', 'public', req.url);
+      const assetData = await fs.readFile(assetPath);
+      
+      // Basic content-type mapping
+      if (req.url.endsWith('.js')) res.setHeader('Content-Type', 'application/javascript');
+      else if (req.url.endsWith('.css')) res.setHeader('Content-Type', 'text/css');
+      else if (req.url.endsWith('.jpg') || req.url.endsWith('.jpeg')) res.setHeader('Content-Type', 'image/jpeg');
+      else if (req.url.endsWith('.png')) res.setHeader('Content-Type', 'image/png');
+      else if (req.url.endsWith('.gif')) res.setHeader('Content-Type', 'image/gif');
+      
+      res.send(assetData);
+    } catch (error) {
+      console.error(`Error serving asset ${req.url}:`, error);
+      res.status(404).send('Not Found');
+    }
   } else {
     // Serve the React app for all other requests
     try {
