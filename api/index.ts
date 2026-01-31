@@ -61,9 +61,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   await registerRoutes(app);
 
   // Serve static assets from dist/public/assets
-  if (req.url?.startsWith('/assets/')) {
+  const assetUrl = req.url?.split('?')[0] || '';
+  if (assetUrl.startsWith('/assets/')) {
     try {
-      const assetUrl = req.url.split('?')[0];
       const assetPath = path.join(process.cwd(), 'dist', 'public', assetUrl);
       const assetData = await fs.readFile(assetPath);
       
@@ -84,5 +84,19 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   // Handle all other requests (API and Pages)
+  app.get('*', async (req: any, res: any) => {
+    try {
+      // Use absolute path for Vercel environment
+      const indexPath = path.resolve(process.cwd(), 'dist', 'public', 'index.html');
+      const indexHtml = await fs.readFile(indexPath, 'utf8');
+      res.setHeader('Content-Type', 'text/html');
+      res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+      res.send(indexHtml);
+    } catch (error) {
+      console.error('Error serving index.html:', error);
+      res.status(500).send('Internal Server Error');
+    }
+  });
+
   return app(req as any, res as any);
 }

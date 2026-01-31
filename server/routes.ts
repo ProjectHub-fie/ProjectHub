@@ -290,7 +290,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // For Vercel, index.html is in dist/public
       const indexPath = process.env.NODE_ENV === 'production' 
         ? path.join(process.cwd(), 'dist', 'public', 'index.html')
-        : path.join(process.cwd(), 'public', 'index.html');
+        : path.join(process.cwd(), 'client', 'index.html');
       
       res.sendFile(indexPath);
     } catch (error) {
