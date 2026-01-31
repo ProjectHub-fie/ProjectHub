@@ -152,33 +152,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       console.log(`Login attempt for PIN: ${pin}`);
       
-      const admins = await storage.getAllAdmins();
-      console.log(`Current admin count: ${admins.length}`);
-
-      // Initial setup logic
-      if (admins.length === 0) {
-        if (pin === '1234' && password === 'admin123') {
-          console.log("No admins found, allowing default setup login");
-          (req.session as any).isAdminLoggedIn = true;
-          (req.session as any).adminId = "setup";
-          (req.session as any).adminPin = pin;
-          return req.session.save(() => res.json({ success: true, setup: true }));
-        } else {
-          console.log("No admins found, but default credentials not used");
-          return res.status(401).json({ message: "No admins configured. Use 1234 / admin123 for initial setup." });
-        }
-      }
-
       const admin = await storage.getAdminByPin(pin);
       if (!admin) {
         console.log(`Admin not found for PIN: ${pin}`);
-        return res.status(401).json({ message: "Incorrect PIN" });
+        return res.status(401).json({ message: "Invalid PIN or password" });
       }
 
       const isPasswordValid = await bcrypt.compare(password, admin.passwordHash);
       if (!isPasswordValid) {
         console.log(`Password mismatch for PIN: ${pin}`);
-        return res.status(401).json({ message: "Incorrect password" });
+        return res.status(401).json({ message: "Invalid PIN or password" });
       }
 
       console.log(`Password verified for PIN: ${pin}, saving session...`);
