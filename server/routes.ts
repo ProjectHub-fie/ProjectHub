@@ -1,8 +1,9 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage.js";
-import { insertProjectRequestSchema } from "./../shared/schema.js";  // Fixed the typo here
+import { insertProjectRequestSchema } from "./../shared/schema.js";
 import path from "path";
+import bcrypt from "bcryptjs";
 
 export async function registerRoutes(app: Express): Promise<Server> {
   // Trust proxy for Vercel
@@ -108,11 +109,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.post('/api/admin/login', async (req, res) => {
-    const { username: pin, password } = req.body;
-    const bcrypt = await import("bcryptjs");
+    const { pin, password } = req.body;
     
     try {
       console.log(`Login attempt for PIN: ${pin}`);
+      
+      // If no admin exists, and they use default credentials, allow it once to create admin
+      const admins = await storage.getAllAdmins();
+      if (admins.length === 0 && pin === '1234' && password === 'admin123') {
+        console.log("No admins found, allowing default setup login");
+        (req.session as any).isAdminLoggedIn = true;
+        (req.session as any).adminId = "setup";
+        (req.session as any).adminPin = pin;
+        return req.session.save(() => res.json({ success: true, setup: true }));
+      }
+
       // Check database credentials
       const admin = await storage.getAdminByPin(pin);
       
@@ -121,7 +132,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "Invalid PIN or password" });
       }
 
-      const isPasswordValid = await bcrypt.default.compare(password, admin.passwordHash);
+      const isPasswordValid = await bcrypt.compare(password, admin.passwordHash);
       
       if (!isPasswordValid) {
         console.log(`Password mismatch for PIN: ${pin}`);
@@ -136,16 +147,13 @@ export async function registerRoutes(app: Express): Promise<Server> {
       req.session.save((err: any) => {
         if (err) {
           console.error("Session save error:", err);
-          console.log("Session object:", req.session);
-          return res.status(500).json({ message: "Session save failed", error: err.message });
+          return res.status(500).json({ message: "Session save failed" });
         }
-        console.log('Session saved successfully, session ID:', req.sessionID);
-        console.log('Session data:', req.session);
-        res.json({ success: true, sessionId: req.sessionID });
+        res.json({ success: true });
       });
     } catch (error: any) {
       console.error('Login error:', error);
-      res.status(500).json({ message: "Internal server error", error: error.message });
+      res.status(500).json({ message: "Internal server error" });
     }
   });
 

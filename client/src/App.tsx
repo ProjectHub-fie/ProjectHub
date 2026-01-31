@@ -33,22 +33,29 @@ function AuthLanding({ onVerified }: { onVerified: () => void }) {
       console.log("Attempting login to /api/admin/login");
       const res = await fetch("/api/admin/login", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ username: pin, password: password }),
+        headers: { 
+          "Content-Type": "application/json",
+          "Accept": "application/json"
+        },
+        body: JSON.stringify({ pin: pin, password: password }),
         credentials: "include",
       });
 
       if (res.ok) {
         const data = await res.json();
         console.log("Login successful, session:", data);
-        // Verify session was saved by checking
-        await new Promise(resolve => setTimeout(resolve, 500));
         onVerified();
       } else {
-        const error = await res.json();
+        const errorText = await res.text();
+        let errorMessage = "Invalid PIN or password provided.";
+        try {
+          const errorJson = JSON.parse(errorText);
+          errorMessage = errorJson.message || errorMessage;
+        } catch (e) {}
+        
         toast({
           title: "Access Denied",
-          description: error.message || "Invalid PIN or password provided.",
+          description: errorMessage,
           variant: "destructive",
         });
       }
