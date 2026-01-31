@@ -9,10 +9,38 @@ export default async function handler(req: Request, res: Response) {
     return res.status(405).end();
   }
   
-  const { username: pin, password } = req.body;
+  const { pin, password } = req.body;
   console.log(`[Vercel Login] Attempting login for PIN: ${pin}`);
   
   try {
+    // Check if any admins exist
+    const allAdmins = await storage.getAllAdmins();
+    console.log(`[Vercel Login] Current admin count: ${allAdmins.length}`);
+
+    // Initial setup logic - allow default credentials when no admins exist
+    if (allAdmins.length === 0) {
+      if (pin === '1234' && password === 'admin123') {
+        console.log("[Vercel Login] No admins found, allowing default setup login");
+        (req.session as any).isAdminLoggedIn = true;
+        (req.session as any).adminId = "setup";
+        (req.session as any).adminPin = pin;
+        
+        req.session.save((err) => {
+          if (err) {
+            console.error("Session save error:", err);
+            res.status(500).json({ message: "Session save failed", error: err.message });
+            return;
+          }
+          console.log('Session saved successfully for setup');
+          res.json({ success: true, setup: true });
+        });
+        return;
+      } else {
+        console.log("[Vercel Login] No admins found, but default credentials not used");
+        return res.status(401).json({ message: "No admins configured. Use PIN: 1234 and Password: admin123 for initial setup." });
+      }
+    }
+
     const admin = await storage.getAdminByPin(pin);
     
     if (admin) {

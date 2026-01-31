@@ -87,6 +87,45 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json({ success: true });
   });
 
+  // Change admin password endpoint
+  app.post('/api/admin/change-password', async (req, res) => {
+    if (!(req.session as any).isAdminLoggedIn) {
+      return res.status(401).json({ message: "Unauthorized" });
+    }
+
+    try {
+      const { id, currentPin, newPassword } = req.body;
+      
+      if (!id || !currentPin || !newPassword) {
+        return res.status(400).json({ message: "Admin ID, current PIN, and new password are required" });
+      }
+
+      // Get the admin by ID to confirm it exists
+      const allAdmins = await storage.getAllAdmins();
+      const targetAdmin = allAdmins.find(admin => admin.id === id);
+      
+      if (!targetAdmin) {
+        return res.status(404).json({ message: "Admin not found" });
+      }
+
+      // Verify the current PIN matches
+      if (targetAdmin.pin !== currentPin) {
+        return res.status(400).json({ message: "Current PIN does not match" });
+      }
+
+      // Hash the new password
+      const hash = await bcrypt.hash(newPassword, 10);
+      
+      // Update the admin password using the PIN to identify the record
+      await storage.setAdminPassword(currentPin, targetAdmin.email, hash);
+      
+      res.json({ success: true });
+    } catch (error: any) {
+      console.error('Change password error:', error);
+      res.status(500).json({ message: "Internal server error" });
+    }
+  });
+
   // Debug endpoint - check if admin exists
   app.get('/api/admin/check', async (req, res) => {
     try {

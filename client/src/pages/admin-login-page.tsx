@@ -9,13 +9,14 @@ import { useLocation } from "wouter";
 import { ShieldCheck, Loader2 } from "lucide-react";
 
 export default function AdminLoginPage() {
+  const [pin, setPin] = useState("");
   const [password, setPassword] = useState("");
   const { toast } = useToast();
   const [, setLocation] = useLocation();
 
   const loginMutation = useMutation({
-    mutationFn: async (password: string) => {
-      const res = await apiRequest("POST", "/api/admin/login", { password });
+    mutationFn: async ({ pin, password }: { pin: string; password: string }) => {
+      const res = await apiRequest("/api/admin/login", "POST", { pin, password });
       return res.json();
     },
     onSuccess: () => {
@@ -40,18 +41,25 @@ export default function AdminLoginPage() {
           </div>
           <CardTitle className="text-2xl font-bold text-gray-900">Admin Portal</CardTitle>
           <p className="text-sm text-muted-foreground mt-2">
-            Please enter the administrator password to continue.
+            Please enter your PIN and password to continue.
           </p>
         </CardHeader>
         <CardContent>
           <form 
             onSubmit={(e) => {
               e.preventDefault();
-              loginMutation.mutate(password);
+              loginMutation.mutate({ pin, password });
             }}
             className="space-y-4"
           >
             <div className="space-y-2">
+              <Input
+                type="text"
+                placeholder="Enter PIN"
+                value={pin}
+                onChange={(e) => setPin(e.target.value)}
+                required
+              />
               <Input
                 type="password"
                 placeholder="Enter admin password"
@@ -72,7 +80,7 @@ export default function AdminLoginPage() {
             </Button>
           </form>
           <div className="mt-6 text-center text-xs text-muted-foreground">
-            <p>Hint: Default password is admin123</p>
+            <p>Hint: Default PIN is 1234, default password is admin123</p>
           </div>
         </CardContent>
       </Card>
