@@ -27,8 +27,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       saveUninitialized: false,
       proxy: true,
       cookie: { 
-        secure: process.env.NODE_ENV === 'production',  // Adjusted for Vercel
-        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',  // Changed for cross-site requests
+        secure: process.env.NODE_ENV === 'production',  // Secure in production (including Vercel)
+        sameSite: 'none',  // Required for cross-origin requests (like Vercel deployments)
         maxAge: 24 * 60 * 60 * 1000, // 24 hours
         httpOnly: true
       }
