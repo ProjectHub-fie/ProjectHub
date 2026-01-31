@@ -39,23 +39,31 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   // Use a simple session
   const PostgresStore = PostgresStoreModule.default(session);
 
-  app.use(session({
-    store: new PostgresStore({
-      conString: process.env.DATABASE_URL,
-      tableName: 'sessions',
-      createTableIfMissing: false
-    }),
-    secret: process.env.SESSION_SECRET || 'fallback-secret-key',
-    resave: false,
-    saveUninitialized: false,
-    proxy: true,
-    cookie: { 
-      secure: process.env.NODE_ENV === 'production', 
-      sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
-      maxAge: 24 * 60 * 60 * 1000, // 24 hours
-      httpOnly: true
-    }
-  }));
+  try {
+    app.use(session({
+      store: new PostgresStore({
+        conString: process.env.DATABASE_URL,
+        tableName: 'sessions',
+        createTableIfMissing: true  // Changed to true to auto-create if missing
+      }),
+      secret: process.env.SESSION_SECRET || 'fallback-secret-key-for-vercel',
+      resave: false,
+      saveUninitialized: false,
+      proxy: true,
+      cookie: { 
+        secure: process.env.NODE_ENV === 'production', 
+        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',
+        maxAge: 24 * 60 * 60 * 1000, // 24 hours
+        httpOnly: true
+      }
+    }));
+  } catch (error) {
+    console.error("Failed to initialize session store:", error);
+    return res.status(500).json({ 
+      message: "Session store initialization failed", 
+      error: process.env.NODE_ENV === 'development' ? (error as Error).message : undefined
+    });
+  }
 
   // Initialize routes
   await registerRoutes(app);
@@ -125,8 +133,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
                 <p>Make sure you have:</p>
                 <ol style="text-align: left; margin: 15px 0;">
                   <li>Set DATABASE_URL in your Vercel environment variables</li>
+                  <li>Set SESSION_SECRET in your Vercel environment variables</li>
                   <li>Run database migrations with 'npm run db:push'</li>
-                  <li>Created an admin account</li>
+                  <li>Created an admin account in your production database</li>
                 </ol>
               </div>
               
