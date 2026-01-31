@@ -67,12 +67,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(401).json({ message: "Unauthorized" });
       }
       const { pin, email, password } = req.body;
-      if (!pin || !password) {  // Removed email from required fields
+      if (!pin || !password) {
         return res.status(400).json({ message: "PIN and password are required" });
       }
-      const bcrypt = await import("bcryptjs");
-      const hash = await bcrypt.default.hash(password, 10);
-      await storage.setAdminPassword(pin, email || null, hash);  // Pass null if email is not provided
+      const hash = await bcrypt.hash(password, 10);
+      await storage.setAdminPassword(pin, email || null, hash);
       res.json({ success: true });
     } catch (error) {
       console.error('Admin creation error:', error);
@@ -114,29 +113,33 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       console.log(`Login attempt for PIN: ${pin}`);
       
-      // If no admin exists, and they use default credentials, allow it once to create admin
       const admins = await storage.getAllAdmins();
-      if (admins.length === 0 && pin === '1234' && password === 'admin123') {
-        console.log("No admins found, allowing default setup login");
-        (req.session as any).isAdminLoggedIn = true;
-        (req.session as any).adminId = "setup";
-        (req.session as any).adminPin = pin;
-        return req.session.save(() => res.json({ success: true, setup: true }));
+      console.log(`Current admin count: ${admins.length}`);
+
+      // Initial setup logic
+      if (admins.length === 0) {
+        if (pin === '1234' && password === 'admin123') {
+          console.log("No admins found, allowing default setup login");
+          (req.session as any).isAdminLoggedIn = true;
+          (req.session as any).adminId = "setup";
+          (req.session as any).adminPin = pin;
+          return req.session.save(() => res.json({ success: true, setup: true }));
+        } else {
+          console.log("No admins found, but default credentials not used");
+          return res.status(401).json({ message: "No admins configured. Use 1234 / admin123 for initial setup." });
+        }
       }
 
-      // Check database credentials
       const admin = await storage.getAdminByPin(pin);
-      
       if (!admin) {
         console.log(`Admin not found for PIN: ${pin}`);
-        return res.status(401).json({ message: "Invalid PIN or password" });
+        return res.status(401).json({ message: "Incorrect PIN" });
       }
 
       const isPasswordValid = await bcrypt.compare(password, admin.passwordHash);
-      
       if (!isPasswordValid) {
         console.log(`Password mismatch for PIN: ${pin}`);
-        return res.status(401).json({ message: "Invalid PIN or password" });
+        return res.status(401).json({ message: "Incorrect password" });
       }
 
       console.log(`Password verified for PIN: ${pin}, saving session...`);
