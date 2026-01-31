@@ -1,4 +1,4 @@
-import type { NextApiRequest, NextApiResponse } from 'next';
+import type { IncomingMessage, ServerResponse } from 'http';
 import { registerRoutes } from '../server/routes.js';
 import path from 'path';
 import { promises as fs } from 'fs';
@@ -9,7 +9,7 @@ export const config = {
   },
 };
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+export default async function handler(req: IncomingMessage, res: ServerResponse) {
   // Dynamic import for Node.js specific modules
   const express = (await import('express')).default;
   const session = (await import('express-session')).default;
@@ -64,7 +64,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const assetUrl = req.url?.split('?')[0] || '';
   if (assetUrl.startsWith('/assets/')) {
     try {
-      const assetPath = path.join(process.cwd(), 'dist', 'public', assetUrl);
+      const assetPath = path.resolve(process.cwd(), 'dist', 'public', assetUrl);
       const assetData = await fs.readFile(assetPath);
       
       if (assetUrl.endsWith('.js')) res.setHeader('Content-Type', 'application/javascript');
@@ -76,10 +76,13 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       else if (assetUrl.endsWith('.ico')) res.setHeader('Content-Type', 'image/x-icon');
       else res.setHeader('Content-Type', 'application/octet-stream');
       
-      return res.send(assetData);
+      res.end(assetData);
+      return;
     } catch (error) {
       console.error(`Error serving asset ${req.url}:`, error);
-      return res.status(404).send('Not Found');
+      res.statusCode = 404;
+      res.end('Not Found');
+      return;
     }
   }
 
