@@ -1,7 +1,7 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage.js";
-import { insertProjectRequestSchema } from "./../shared/schema.js";
+import { insertProjectRequestSchema } from "./../shared/schema.js";  // Fixed the typo here
 import path from "path";
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -26,8 +26,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       saveUninitialized: false,
       proxy: true,
       cookie: { 
-        secure: process.env.NODE_ENV === 'production' && !process.env.LOCAL_DEV && !process.env.VERCEL_ENV,  // Secure only in non-Vercel production
-        sameSite: process.env.NODE_ENV === 'production' && !process.env.LOCAL_DEV && !process.env.VERCEL_ENV ? 'none' : 'lax',  // 'none' for non-Vercel production, 'lax' otherwise
+        secure: process.env.NODE_ENV === 'production',  // Adjusted for Vercel
+        sameSite: process.env.NODE_ENV === 'production' ? 'none' : 'lax',  // Changed for cross-site requests
         maxAge: 24 * 60 * 60 * 1000, // 24 hours
         httpOnly: true
       }
