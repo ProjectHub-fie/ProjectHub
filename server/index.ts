@@ -51,22 +51,6 @@ app.use((req, res, next) => {
     serveStatic(app);
   }
 
-  // Catch-all handler for client-side routing - AFTER vite setup
-  app.get('*', (req, res, next) => {
-    // Skip API routes
-    if (req.path.startsWith('/api')) {
-      return next();
-    }
-    
-    // For all other routes, serve the React app
-    if (app.get("env") === "development") {
-      res.sendFile(path.resolve(import.meta.dirname, '..', 'client', 'index.html'));
-    } else {
-      // In production, the file is in dist/public/index.html
-      res.sendFile(path.resolve(import.meta.dirname, '..', 'public', 'index.html'));
-    }
-  });
-
   app.use((err: any, _req: Request, res: Response, _next: NextFunction) => {
     const status = err.status || err.statusCode || 500;
     const message = err.message || "Internal Server Error";
@@ -75,10 +59,6 @@ app.use((req, res, next) => {
     throw err;
   });
 
-  // ALWAYS serve the app on the port specified in the environment variable PORT
-  // Other ports are firewalled. Default to 5000 if not specified.
-  // this serves both the API and the client.
-  // It is the only port that is not firewalled.
   const port = parseInt(process.env.PORT || '5000', 10);
   server.listen({
     port,

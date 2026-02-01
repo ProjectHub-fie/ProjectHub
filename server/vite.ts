@@ -45,6 +45,11 @@ export async function setupVite(app: Express, server: Server) {
   app.use("*", async (req, res, next) => {
     const url = req.originalUrl;
 
+    // Skip API routes
+    if (url.startsWith("/api")) {
+      return next();
+    }
+
     try {
       const clientTemplate = path.resolve(
         import.meta.dirname,
@@ -62,14 +67,15 @@ export async function setupVite(app: Express, server: Server) {
       const page = await vite.transformIndexHtml(url, template);
       res.status(200).set({ "Content-Type": "text/html" }).end(page);
     } catch (e) {
-      vite.ssrFixStacktrace(e as Error);
+      if (vite) {
+        vite.ssrFixStacktrace(e as Error);
+      }
       next(e);
     }
   });
 }
 
 export function serveStatic(app: Express) {
-  // In production, the dist/public folder is in the parent directory relative to the server build
   const distPath = path.resolve(import.meta.dirname, "..", "public");
 
   if (!fs.existsSync(distPath)) {
@@ -80,8 +86,10 @@ export function serveStatic(app: Express) {
 
   app.use(express.static(distPath));
 
-  // fall through to index.html if the file doesn't exist
-  app.use("*", (_req, res) => {
+  app.use("*", (req, res, next) => {
+    if (req.path.startsWith("/api")) {
+      return next();
+    }
     res.sendFile(path.resolve(distPath, "index.html"));
   });
 }
