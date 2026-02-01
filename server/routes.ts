@@ -82,8 +82,9 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.post('/api/admin/login', async (req, res) => {
-    const { pin, password } = req.body;
-    console.log(`[Login] PIN: ${pin}, Password provided: ${!!password}`);
+    try {
+      const { pin, password } = req.body;
+      console.log(`[Login] PIN: ${pin}, Password provided: ${!!password}`);
       const admins = await storage.getAllAdmins();
       if (admins.length === 0 && pin === '1234' && password === 'admin123') {
         (req.session as any).isAdminLoggedIn = true;
