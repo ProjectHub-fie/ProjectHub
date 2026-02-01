@@ -80,7 +80,6 @@ export default function AdminLoginPage() {
             </Button>
           </form>
           <div className="mt-6 text-center text-xs text-muted-foreground">
-            <p>Hint: Default PIN is 1234, default password is admin123</p>
           </div>
         </CardContent>
       </Card>
