@@ -15,11 +15,11 @@
       "destination": "/pages/api/index.ts"
     },
     {
-      "source": "/assets/:path*",
-      "destination": "/pages/api/index.ts"
+      "source": "/assets/(.*)",
+      "destination": "/assets/$1"
     },
     {
-      "source": "/:path*",
+      "source": "/(.*)",
       "destination": "/pages/api/index.ts"
     }
   ]
