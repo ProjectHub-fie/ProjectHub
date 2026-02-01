@@ -16,8 +16,13 @@ export default function AdminLoginPage() {
 
   const loginMutation = useMutation({
     mutationFn: async ({ pin, password }: { pin: string; password: string }) => {
+      console.log("Submitting login:", { pin });
       const res = await apiRequest("/api/admin/login", "POST", { pin, password });
-      return res.json();
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.message || "Login failed");
+      }
+      return data;
     },
     onSuccess: () => {
       toast({ title: "Admin access granted" });
