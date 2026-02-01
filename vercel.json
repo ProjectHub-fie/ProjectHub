@@ -11,6 +11,10 @@
   ],
   "rewrites": [
     {
+      "source": "/api/admin/login",
+      "destination": "/api/admin/login"
+    },
+    {
       "source": "/api/:path*",
       "destination": "/pages/api/index.ts"
     },
