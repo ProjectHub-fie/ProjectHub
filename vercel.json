@@ -15,44 +15,11 @@
   ],
   "routes": [
     {
-      "src": "/api/admin/login",
-      "dest": "pages/api/index.ts"
-    },
-    {
-      "src": "/api/admin/create",
-      "dest": "pages/api/index.ts"
-    },
-    {
-      "src": "/api/admin/logout",
-      "dest": "pages/api/index.ts"
-    },
-    {
-      "src": "/api/admin/list",
-      "dest": "pages/api/index.ts"
-    },
-    {
-      "src": "/api/admin/stats",
-      "dest": "pages/api/index.ts"
-    },
-    {
-      "src": "/api/users",
-      "dest": "pages/api/index.ts"
-    },
-    {
-      "src": "/api/project-requests",
-      "dest": "pages/api/index.ts"
-    },
-    {
-      "src": "/api/projects/(.*)",
-      "dest": "pages/api/index.ts"
-    },
-    {
       "src": "/api/(.*)",
       "dest": "pages/api/index.ts"
     },
     {
-      "src": "/assets/(.*)",
-      "dest": "/assets/$1"
+      "handle": "filesystem"
     },
     {
       "src": "/(.*)",

@@ -1,7 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next';
 import { registerRoutes } from '../../server/routes.js';
-import path from 'path';
-import { promises as fs } from 'fs';
 
 export const config = {
   api: {
@@ -11,60 +9,6 @@ export const config = {
 };
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  // Check if this is a static file request (not API)
-  const url = req.url || '/';
-  
-  // If it's not an API route, serve static files
-  if (!url.startsWith('/api/')) {
-    try {
-      // Build the path to the static file
-      const filePath = path.join(process.cwd(), 'dist', 'public', url === '/' ? 'index.html' : url);
-      
-      // Check if file exists
-      await fs.access(filePath);
-      
-      // Get file extension to set proper content type
-      const ext = path.extname(filePath).toLowerCase();
-      const contentTypeMap: { [key: string]: string } = {
-        '.html': 'text/html',
-        '.js': 'application/javascript',
-        '.css': 'text/css',
-        '.json': 'application/json',
-        '.png': 'image/png',
-        '.jpg': 'image/jpeg',
-        '.jpeg': 'image/jpeg',
-        '.gif': 'image/gif',
-        '.svg': 'image/svg+xml',
-        '.ico': 'image/x-icon',
-        '.woff': 'font/woff',
-        '.woff2': 'font/woff2',
-        '.ttf': 'font/ttf',
-        '.eot': 'application/vnd.ms-fontobject',
-      };
-      
-      const contentType = contentTypeMap[ext] || 'application/octet-stream';
-      res.setHeader('Content-Type', contentType);
-      
-      // Serve the file
-      const fileContent = await fs.readFile(filePath);
-      res.status(200).send(fileContent);
-      return;
-    } catch (error) {
-      // File not found, serve index.html for SPA routing
-      try {
-        const indexPath = path.join(process.cwd(), 'dist', 'public', 'index.html');
-        const indexContent = await fs.readFile(indexPath);
-        res.setHeader('Content-Type', 'text/html');
-        res.status(200).send(indexContent);
-        return;
-      } catch (indexError) {
-        console.error('Failed to serve index.html:', indexError);
-        res.status(500).json({ message: "Failed to serve application" });
-        return;
-      }
-    }
-  }
-
   // Handle API requests with Express
   const express = (await import('express')).default;
   const session = (await import('express-session')).default;
