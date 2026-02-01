@@ -17,7 +17,13 @@ test-*.ts
 .replit
 components.json
 
-# Scripts (not needed in production)
+# Scripts output/logs
+setup-admin-131313.ts
+Code Citations.md
+vs.md
+replit.md
+
+# Development-only files
 scripts/
 
 # Source code (Vercel will build from source)
@@ -29,8 +35,29 @@ drizzle/
 dataconnect/
 dataconnect-generated/
 
-# Other
+# Built files (exclude from deployment since Vercel builds them)
+dist/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.DS_Store
+
+# Test files
+test-*.ts
+*.test.ts
+*.spec.ts
+
+# Configuration files
+.drizzle/
+.replit
+components.json
+
+# Scripts output/logs
 setup-admin-131313.ts
 Code Citations.md
 vs.md
 replit.md
+
+# Development-only files
+node_modules/
