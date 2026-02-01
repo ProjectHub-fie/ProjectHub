@@ -102,7 +102,7 @@ export default function CreateAdmin() {
                   <FormItem>
                     <FormLabel>PIN (Identity)</FormLabel>
                     <FormControl>
-                      <Input placeholder="1234" {...field} data-testid="input-new-admin-pin" />
+                      <Input placeholder="131313" {...field} data-testid="input-new-admin-pin" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
