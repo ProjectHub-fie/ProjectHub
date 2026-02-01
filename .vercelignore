@@ -1,0 +1,36 @@
+# Development files
+node_modules/
+dist/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.DS_Store
+
+# Test files
+test-*.ts
+*.test.ts
+*.spec.ts
+
+# Configuration files
+.drizzle/
+.replit
+components.json
+
+# Scripts (not needed in production)
+scripts/
+
+# Source code (Vercel will build from source)
+client/
+server/
+shared/
+api/
+drizzle/
+dataconnect/
+dataconnect-generated/
+
+# Other
+setup-admin-131313.ts
+Code Citations.md
+vs.md
+replit.md

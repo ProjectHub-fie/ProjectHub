@@ -9,35 +9,21 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Trust proxy for Vercel
   app.set('trust proxy', 1);
 
-  // Use a simple session
+  // Simple in-memory session for Vercel compatibility
   const session = (await import("express-session")).default;
-  const PostgresStore = (await import("connect-pg-simple")).default(session);
-
-  console.log("Initializing session store with DATABASE_URL:", process.env.DATABASE_URL ? "SET" : "NOT SET");
   
-  try {
-    app.use(session({
-      store: new PostgresStore({
-        conString: process.env.DATABASE_URL,
-        tableName: 'sessions',
-        createTableIfMissing: true
-      }),
-      secret: process.env.SESSION_SECRET || 'fallback-secret-key',
-      resave: false,
-      saveUninitialized: false,
-      proxy: true,
-      cookie: { 
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'none',
-        maxAge: 24 * 60 * 60 * 1000, // 24 hours
-        httpOnly: true
-      }
-    }));
-    console.log("Session store initialized successfully");
-  } catch (error) {
-    console.error("Failed to initialize session store:", error);
-    throw error;
-  }
+  app.use(session({
+    secret: process.env.SESSION_SECRET || 'fallback-secret-key',
+    resave: false,
+    saveUninitialized: false,
+    proxy: true,
+    cookie: { 
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'none',
+      maxAge: 24 * 60 * 60 * 1000, // 24 hours
+      httpOnly: true
+    }
+  }));
 
   // Auth Middlewares
   const requireAuth = (req: any, res: any, next: any) => {
@@ -85,12 +71,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
     try {
       const { pin, password } = req.body;
       console.log(`[Login] PIN: ${pin}, Password provided: ${!!password}`);
-      const admins = await storage.getAllAdmins();
-      if (admins.length === 0 && pin === '1234' && password === 'admin123') {
-        (req.session as any).isAdminLoggedIn = true;
-        return req.session.save(() => res.json({ success: true, setup: true }));
-      }
-
       const admin = await storage.getAdminByPin(pin);
       if (!admin) {
         return res.status(401).json({ message: "Invalid PIN or password" });
