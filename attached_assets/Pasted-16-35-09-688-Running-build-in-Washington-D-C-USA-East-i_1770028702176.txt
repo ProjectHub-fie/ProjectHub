@@ -1,0 +1,51 @@
+16:35:09.688 Running build in Washington, D.C., USA (East) – iad1
+16:35:09.689 Build machine configuration: 2 cores, 8 GB
+16:35:09.825 Cloning github.com/ProjectHub-fie/ProjectHub (Branch: administration, Commit: d30fa2e)
+16:35:10.172 Cloning completed: 347.000ms
+16:35:10.212 Found .vercelignore
+16:35:10.256 Removed 130 ignored files defined in .vercelignore
+16:35:10.256   /.replit
+16:35:10.257   /api/admin/change-password.ts
+16:35:10.257   /api/admin/create.ts
+16:35:10.257   /api/admin/delete.ts
+16:35:10.257   /api/admin/list.ts
+16:35:10.257   /api/admin/login.ts
+16:35:10.258   /api/admin/logout.ts
+16:35:10.258   /api/admin/stats.ts
+16:35:10.258   /api/index.ts
+16:35:10.258   /client/index.html
+16:35:13.789 Restored build cache from previous deployment (FZH1wcSw9ECxeUCpYWbwy9VYBu9g)
+16:35:14.059 Running "vercel build"
+16:35:14.931 Vercel CLI 50.9.6
+16:35:15.076 WARN! Due to `builds` existing in your configuration file, the Build and Development Settings defined in your Project Settings will not apply. Learn More: https://vercel.link/unused-build-settings
+16:35:15.466 Installing dependencies...
+16:35:16.694 npm warn EBADENGINE Unsupported engine {
+16:35:16.695 npm warn EBADENGINE   package: 'hawk@0.10.2',
+16:35:16.696 npm warn EBADENGINE   required: { node: '0.8.x' },
+16:35:16.696 npm warn EBADENGINE   current: { node: 'v24.13.0', npm: '11.6.2' }
+16:35:16.696 npm warn EBADENGINE }
+16:35:16.697 npm warn EBADENGINE Unsupported engine {
+16:35:16.697 npm warn EBADENGINE   package: 'hoek@0.7.6',
+16:35:16.698 npm warn EBADENGINE   required: { node: '0.8.x' },
+16:35:16.698 npm warn EBADENGINE   current: { node: 'v24.13.0', npm: '11.6.2' }
+16:35:16.699 npm warn EBADENGINE }
+16:35:17.372 
+16:35:17.373 changed 1 package in 2s
+16:35:17.373 
+16:35:17.373 85 packages are looking for funding
+16:35:17.373   run `npm fund` for details
+16:35:17.410 Running "npm run build"
+16:35:17.505 
+16:35:17.505 > rest-express@1.0.0 build
+16:35:17.506 > vite build && esbuild server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist --alias:@shared=./shared
+16:35:17.506 
+16:35:17.764 [36mvite v5.4.21 [32mbuilding for production...[36m[39m
+16:35:17.800 [32m✓[39m 0 modules transformed.
+16:35:17.801 [31mx[39m Build failed in 9ms
+16:35:17.802 [31merror during build:
+16:35:17.802 [31mCould not resolve entry module "client/index.html".[31m
+16:35:17.802     at getRollupError (file:///vercel/path0/node_modules/rollup/dist/es/shared/parseAst.js:401:41)
+16:35:17.802     at error (file:///vercel/path0/node_modules/rollup/dist/es/shared/parseAst.js:397:42)
+16:35:17.802     at ModuleLoader.loadEntryModule (file:///vercel/path0/node_modules/rollup/dist/es/shared/node-entry.js:21730:20)
+16:35:17.802     at async Promise.all (index 0)[39m
+16:35:17.817 Error: Command "npm run build" exited with 1
