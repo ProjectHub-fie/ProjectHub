@@ -37,9 +37,13 @@ app.use((req, res, next) => {
     if (req.path.startsWith('/api')) {
       return next();
     }
-    const indexPath = app.get("env") === "development"
-      ? path.resolve(import.meta.dirname, '..', 'client', 'index.html')
-      : path.resolve(import.meta.dirname, '..', 'public', 'index.html');
+    
+    // In production, files are in dist/public
+    // In development, handled by vite middleware or served from client/
+    const indexPath = process.env.NODE_ENV === 'production'
+      ? path.resolve(process.cwd(), 'dist', 'public', 'index.html')
+      : path.resolve(process.cwd(), 'client', 'index.html');
+      
     res.sendFile(indexPath);
   });
 
