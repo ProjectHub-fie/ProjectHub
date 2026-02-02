@@ -1,0 +1,30 @@
+{
+  "version": 2,
+  "builds": [
+    {
+      "src": "package.json",
+      "use": "@vercel/static-build",
+      "config": {
+        "distDir": "dist/public"
+      }
+    }
+  ],
+  "rewrites": [
+    {
+      "source": "/api/admin/login",
+      "destination": "/api/admin/login"
+    },
+    {
+      "source": "/api/:path*",
+      "destination": "/pages/api/index.ts"
+    },
+    {
+      "source": "/assets/(.*)",
+      "destination": "/assets/$1"
+    },
+    {
+      "source": "/((?!api|assets).*)",
+      "destination": "/index.html"
+    }
+  ]
+}
