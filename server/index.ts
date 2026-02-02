@@ -32,19 +32,23 @@ app.use((req, res, next) => {
     serveStatic(app);
   }
 
-  // Final catch-all for React app
+  // Final catch-all for Single Page Application (SPA) routing
   app.get('*', (req, res, next) => {
+    // If it's an API request that wasn't handled, let it go to 404
     if (req.path.startsWith('/api')) {
-      return next();
+      return res.status(404).json({ message: "API route not found" });
     }
     
-    // In production, files are in dist/public
-    // In development, handled by vite middleware or served from client/
+    // Serve index.html for all other routes to support deep linking
     const indexPath = process.env.NODE_ENV === 'production'
       ? path.resolve(process.cwd(), 'dist', 'public', 'index.html')
       : path.resolve(process.cwd(), 'client', 'index.html');
       
-    res.sendFile(indexPath);
+    res.sendFile(indexPath, (err) => {
+      if (err) {
+        next(err);
+      }
+    });
   });
 
   // Error handling
