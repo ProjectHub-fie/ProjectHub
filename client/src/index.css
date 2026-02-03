@@ -97,3 +97,59 @@
     transform: translateY(-10px);
   }
 }
+
+/* Theme-specific sidebar styles */
+.theme-light .sidebar {
+  --sidebar-background: 0 0% 100%;
+  --sidebar-foreground: 222.2 84% 4.9%;
+  --sidebar-primary: 221.2 83.2% 53.3%;
+  --sidebar-primary-foreground: 210 40% 98%;
+  --sidebar-accent: 210 40% 96.1%;
+  --sidebar-accent-foreground: 222.2 47.4% 11.2%;
+  --sidebar-border: 214.3 31.8% 91.4%;
+  --sidebar-radius: calc(var(--radius) - 2px);
+}
+
+.theme-dark .sidebar {
+  --sidebar-background: 222.2 84% 4.9%;
+  --sidebar-foreground: 210 40% 98%;
+  --sidebar-primary: 217.2 91.2% 59.8%;
+  --sidebar-primary-foreground: 222.2 47.4% 11.2%;
+  --sidebar-accent: 217.2 32.6% 17.5%;
+  --sidebar-accent-foreground: 210 40% 98%;
+  --sidebar-border: 217.2 32.6% 17.5%;
+  --sidebar-radius: calc(var(--radius) - 2px);
+}
+
+.sidebar {
+  background-color: hsl(var(--sidebar-background));
+  color: hsl(var(--sidebar-foreground));
+  border-right: 1px solid hsl(var(--sidebar-border));
+}
+
+.sidebar .sidebar-header {
+  background-color: hsl(var(--sidebar-background));
+}
+
+.sidebar .sidebar-footer {
+  background-color: hsl(var(--sidebar-background));
+  border-top: 1px solid hsl(var(--sidebar-border));
+}
+
+.sidebar .sidebar-group-label {
+  color: hsl(var(--sidebar-foreground));
+}
+
+.sidebar .sidebar-menu-button {
+  color: hsl(var(--sidebar-foreground));
+}
+
+.sidebar .sidebar-menu-button:hover {
+  background-color: hsl(var(--sidebar-accent));
+  color: hsl(var(--sidebar-accent-foreground));
+}
+
+.sidebar .sidebar-menu-button[data-active] {
+  background-color: hsl(var(--sidebar-primary));
+  color: hsl(var(--sidebar-primary-foreground));
+}
