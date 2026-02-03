@@ -25,24 +25,24 @@ export function AppSidebar() {
   const [location] = useLocation();
 
   return (
-    <Sidebar className="border-r data-[state=collapsed]:w-20 data-[state=expanded]:w-64">
+    <Sidebar className="border-r data-[state=collapsed]:w-20 data-[state=expanded]:w-64 bg-background">
       <SidebarHeader className="p-4 border-b">
         <div className="flex items-center gap-2 font-bold text-xl text-primary">
           <ShieldCheck className="h-6 w-6" />
-          <span className="truncate">Admin Hub</span>
+          <span className="truncate group-data-[collapsible=icon]:!hidden">Admin Hub</span>
         </div>
       </SidebarHeader>
       <SidebarContent className="py-2">
         <SidebarGroup>
-          <SidebarGroupLabel className="sr-only hidden">Management</SidebarGroupLabel>
+          <SidebarGroupLabel className="group-data-[collapsible=icon]:!hidden">Management</SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {items.map((item) => (
                 <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild isActive={location === item.url}>
+                  <SidebarMenuButton asChild isActive={location === item.url || (item.url === '/' && location.startsWith('/admin') && location !== '/admin')}>
                     <Link href={item.url}>
                       <item.icon className="h-4 w-4" />
-                      <span className={!location.includes(item.url) ? "group-data-[collapsible=icon]:!block sr-only" : ""}>{item.title}</span>
+                      <span className="group-data-[collapsible=icon]:!hidden">{item.title}</span>
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
@@ -52,10 +52,7 @@ export function AppSidebar() {
         </SidebarGroup>
       </SidebarContent>
       <SidebarFooter className="border-t p-4">
-        <div className="flex items-center justify-between">
-          <span className="text-xs text-muted-foreground">Theme</span>
-          <ThemeToggle />
-        </div>
+        <ThemeToggle />
       </SidebarFooter>
     </Sidebar>
   );

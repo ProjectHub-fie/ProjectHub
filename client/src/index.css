@@ -125,6 +125,7 @@
   background-color: hsl(var(--sidebar-background));
   color: hsl(var(--sidebar-foreground));
   border-right: 1px solid hsl(var(--sidebar-border));
+  opacity: 1; /* Remove any transparency */
 }
 
 .sidebar .sidebar-header {
