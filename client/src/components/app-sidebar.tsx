@@ -29,20 +29,28 @@ export function AppSidebar() {
       <SidebarHeader className="p-4 border-b">
         <div className="flex items-center gap-2 font-bold text-xl text-primary">
           <ShieldCheck className="h-6 w-6" />
-          <span className="truncate group-data-[collapsible=icon]:!hidden">Admin Hub</span>
+          <span className="truncate group-data-[collapsible=icon]:!hidden md:group-data-[collapsible=icon]:hidden">Admin Hub</span>
         </div>
       </SidebarHeader>
       <SidebarContent className="py-2">
         <SidebarGroup>
-          <SidebarGroupLabel className="group-data-[collapsible=icon]:!hidden">Management</SidebarGroupLabel>
+          <SidebarGroupLabel className="group-data-[collapsible=icon]:!hidden md:group-data-[collapsible=icon]:hidden">
+            Management
+          </SidebarGroupLabel>
           <SidebarGroupContent>
             <SidebarMenu>
               {items.map((item) => (
-                <SidebarMenuItem key={item.title}>
-                  <SidebarMenuButton asChild isActive={location === item.url || (item.url === '/' && location.startsWith('/admin') && location !== '/admin')}>
-                    <Link href={item.url}>
+                <SidebarMenuItem key={item.title} className="mb-1">
+                  <SidebarMenuButton 
+                    asChild 
+                    isActive={location === item.url || (item.url === '/' && location.startsWith('/admin') && location !== '/admin')}
+                    className="rounded-lg px-3 py-2"
+                  >
+                    <Link href={item.url} className="flex items-center gap-3">
                       <item.icon className="h-4 w-4" />
-                      <span className="group-data-[collapsible=icon]:!hidden">{item.title}</span>
+                      <span className="group-data-[collapsible=icon]:!hidden md:group-data-[collapsible=icon]:hidden truncate">
+                        {item.title}
+                      </span>
                     </Link>
                   </SidebarMenuButton>
                 </SidebarMenuItem>

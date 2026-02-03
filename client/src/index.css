@@ -123,34 +123,64 @@
 
 .sidebar {
   background-color: hsl(var(--sidebar-background));
-  color: hsl(var(--sidebar-foreground));
+  color: #ffffff; /* Always use white text */
   border-right: 1px solid hsl(var(--sidebar-border));
   opacity: 1; /* Remove any transparency */
 }
 
 .sidebar .sidebar-header {
   background-color: hsl(var(--sidebar-background));
+  color: #ffffff; /* Ensure header text is white */
 }
 
 .sidebar .sidebar-footer {
   background-color: hsl(var(--sidebar-background));
   border-top: 1px solid hsl(var(--sidebar-border));
+  color: #ffffff; /* Ensure footer text is white */
 }
 
 .sidebar .sidebar-group-label {
-  color: hsl(var(--sidebar-foreground));
+  color: #ffffff; /* Force white color for labels */
 }
 
 .sidebar .sidebar-menu-button {
-  color: hsl(var(--sidebar-foreground));
+  color: #ffffff; /* Force white color for menu buttons */
+  margin: 0.25rem 0; /* Add spacing for mobile touch targets */
 }
 
 .sidebar .sidebar-menu-button:hover {
   background-color: hsl(var(--sidebar-accent));
-  color: hsl(var(--sidebar-accent-foreground));
+  color: #ffffff; /* Keep text white on hover */
 }
 
 .sidebar .sidebar-menu-button[data-active] {
   background-color: hsl(var(--sidebar-primary));
-  color: hsl(var(--sidebar-primary-foreground));
+  color: #ffffff; /* Keep text white when active */
+}
+
+/* Mobile-specific optimizations */
+@media (max-width: 768px) {
+  .sidebar {
+    width: 240px; /* Wider sidebar on mobile for better touch targets */
+  }
+  
+  .sidebar .sidebar-menu-button {
+    padding: 0.75rem 1rem;
+    font-size: 1rem;
+    margin: 0.25rem 0.5rem;
+    border-radius: 0.5rem;
+  }
+  
+  .sidebar .sidebar-header {
+    padding: 1rem 1.25rem;
+  }
+  
+  .sidebar .sidebar-group-label {
+    padding: 0.5rem 1rem;
+    font-size: 0.85rem;
+  }
+  
+  .sidebar .sidebar-footer {
+    padding: 1rem;
+  }
 }
