@@ -17,6 +17,7 @@ import { Input } from "@/components/ui/input";
 import { Loader2, Lock } from "lucide-react";
 import { useState } from "react";
 import { useToast } from "@/hooks/use-toast";
+import { ThemeToggle } from "@/components/ui/theme-toggle";
 
 function AuthLanding({ onVerified }: { onVerified: () => void }) {
   const [pin, setPin] = useState("");
@@ -156,6 +157,7 @@ function Router() {
               >
                 Log Out
               </Button>
+              <ThemeToggle />
             </div>
           </div>
           <Switch>

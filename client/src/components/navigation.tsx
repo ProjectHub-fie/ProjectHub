@@ -56,22 +56,6 @@ export default function Navigation() {
           </div>
 
           <div className="flex items-center space-x-4">
-            {/* Theme Toggle */}
-            <Button
-              variant="outline"
-              size="icon"
-              onClick={() => {
-                const nextTheme = theme === "dark" ? "light" : "dark";
-                setTheme(nextTheme);
-              }}
-              className="hidden md:flex bg-secondary hover:bg-secondary/80 border-border"
-              data-testid="theme-toggle"
-            >
-              <Sun className="h-4 w-4 rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0 text-yellow-500" />
-              <Moon className="absolute h-4 w-4 rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100 text-primary" />
-              <span className="sr-only">Toggle theme</span>
-            </Button>
-
             {/* Mobile Menu */}
             <Sheet open={isOpen} onOpenChange={setIsOpen}>
               <SheetTrigger asChild>
