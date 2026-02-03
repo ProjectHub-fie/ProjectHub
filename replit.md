@@ -59,11 +59,17 @@ Preferred communication style: Simple, everyday language.
 - **SendGrid**: Alternative email integration available in dependencies
 
 ### Third-Party Services
+- **Cloudflare Turnstile**: Used for admin login security verification
 - **Firebase Data Connect**: Configuration present for potential Firebase integration
 - **Vercel**: Deployment platform with serverless API routes in `/api` directory
 
 ### Required Environment Variables
 - `DATABASE_URL`: PostgreSQL connection string (required)
 - `SESSION_SECRET`: Secret for session encryption
-- `RESEND_API_KEY`: For email functionality
-- `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`: For Discord OAuth
+- `CF_TURNSTILE_SITE_KEY`: Cloudflare Turnstile site key for frontend
+- `CF_TURNSTILE_SECRET_KEY`: Cloudflare Turnstile secret key for backend verification
+
+### Optional Environment Variables
+- `RESEND_API_KEY`: For email functionality (if needed in future)
+- `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`: For Discord OAuth (if implemented)
+- `CONTACT_EMAIL`: Email address to receive contact form submissions (optional, defaults to dev.projecthub.fie@gmail.com)

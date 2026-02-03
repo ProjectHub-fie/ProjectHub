@@ -122,8 +122,9 @@ These are usually provided automatically by the Replit environment, but ensure t
 
 ## Recent Updates
 
-- **Security Enhancements**: Integrated Cloudflare Turnstile with manual verification to prevent bot submissions while maintaining a smooth user experience.
-- **Improved Feedback System**: Implemented a new emerald green notification system for successful user actions (message sent, login, project request), optimized for both mobile and desktop visibility.
+- **Security Enhancement**: Integrated Cloudflare Turnstile for admin login protection to prevent bot attacks
+- **Feature Removal**: Removed contact form as per requirements - focusing on core portfolio functionality
+- **Improved Feedback System**: Implemented a new emerald green notification system for successful user actions (login, project requests), optimized for both mobile and desktop visibility.
 - **Mobile Optimization**: Fixed notification positioning for mobile devices, ensuring critical feedback is always visible at the top-center of the screen.
 - **Local Development Guide**: Added a dedicated guide (`vs.md`) for setting up the project locally in VS Code.
 

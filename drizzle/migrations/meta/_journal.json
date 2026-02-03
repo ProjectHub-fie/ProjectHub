@@ -15,6 +15,13 @@
       "when": 1769511665981,
       "tag": "0001_make-email-optional",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1770131415852,
+      "tag": "0002_flashy_pete_wisdom",
+      "breakpoints": true
     }
   ]
 }

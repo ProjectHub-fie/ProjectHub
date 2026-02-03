@@ -7,17 +7,24 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
 import { ShieldCheck, Loader2 } from "lucide-react";
+import { Turnstile } from "@marsidev/react-turnstile";
 
 export default function AdminLoginPage() {
   const [pin, setPin] = useState("");
   const [password, setPassword] = useState("");
+  const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const { toast } = useToast();
   const [, setLocation] = useLocation();
 
   const loginMutation = useMutation({
-    mutationFn: async ({ pin, password }: { pin: string; password: string }) => {
+    mutationFn: async ({ pin, password, captchaToken }: { pin: string; password: string; captchaToken: string | null }) => {
+      // Validate CAPTCHA token
+      if (!captchaToken) {
+        throw new Error("Please complete the security verification");
+      }
+      
       console.log("Submitting login:", { pin });
-      const res = await apiRequest("/api/admin/login", "POST", { pin, password });
+      const res = await apiRequest("/api/admin/login", "POST", { pin, password, captchaToken });
       const data = await res.json();
       if (!res.ok) {
         throw new Error(data.message || "Login failed");
@@ -34,8 +41,12 @@ export default function AdminLoginPage() {
         description: error.message,
         variant: "destructive" 
       });
+      // Reset CAPTCHA on failure
+      setCaptchaToken(null);
     }
   });
+
+  const siteKey = import.meta.env.VITE_TURNSTILE_SITE_KEY || "1x00000000000000000000AA";
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
@@ -53,7 +64,7 @@ export default function AdminLoginPage() {
           <form 
             onSubmit={(e) => {
               e.preventDefault();
-              loginMutation.mutate({ pin, password });
+              loginMutation.mutate({ pin, password, captchaToken });
             }}
             className="space-y-4"
           >
@@ -73,10 +84,25 @@ export default function AdminLoginPage() {
                 required
               />
             </div>
+            
+            {/* Cloudflare Turnstile Widget */}
+            <div className="flex justify-center my-4">
+              <Turnstile
+                siteKey={siteKey}
+                onSuccess={(token) => setCaptchaToken(token)}
+                onExpire={() => setCaptchaToken(null)}
+                onError={() => setCaptchaToken(null)}
+                options={{
+                  theme: "light",
+                  appearance: "always"
+                }}
+              />
+            </div>
+            
             <Button 
               type="submit" 
               className="w-full"
-              disabled={loginMutation.isPending}
+              disabled={loginMutation.isPending || !captchaToken}
             >
               {loginMutation.isPending ? (
                 <Loader2 className="h-4 w-4 animate-spin mr-2" />

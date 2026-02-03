@@ -52,7 +52,6 @@ export default function Navigation() {
             </button>
             <NavLink href="skills">Skills</NavLink>
             <NavLink href="about">About</NavLink>
-            <NavLink href="contact">Contact</NavLink>
           </div>
 
           <div className="flex items-center space-x-4">
@@ -84,7 +83,6 @@ export default function Navigation() {
                   </button>
                   <NavLink href="skills">Skills</NavLink>
                   <NavLink href="about">About</NavLink>
-                  <NavLink href="contact">Contact</NavLink>
                   <div className="px-3 py-2 space-y-2">
                   <Button
                     variant="ghost"

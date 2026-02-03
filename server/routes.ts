@@ -1,9 +1,13 @@
 import type { Express, Request } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage.js";
-import { insertProjectRequestSchema } from "./../shared/schema.js";
-import path from "path";
 import bcrypt from "bcryptjs";
+
+
+// Validate required environment variables
+if (!process.env.CF_TURNSTILE_SECRET_KEY) {
+  console.warn('Warning: CF_TURNSTILE_SECRET_KEY is not set. CAPTCHA verification will not work.');
+}
 
 // Extend Express Request type to include session properties
 declare global {
@@ -27,6 +31,35 @@ export async function registerRoutes(app: Express): Promise<Server> {
     if (req.session?.isAdminLoggedIn) return next();
     res.status(401).json({ message: "Authentication required" });
   };
+
+  // Validate Cloudflare Turnstile token
+  const validateTurnstileToken = async (token: string, ip: string) => {
+    if (!process.env.CF_TURNSTILE_SECRET_KEY) {
+      console.error('CF_TURNSTILE_SECRET_KEY is not configured');
+      return false;
+    }
+
+    const formData = new FormData();
+    formData.append('secret', process.env.CF_TURNSTILE_SECRET_KEY);
+    formData.append('response', token);
+    formData.append('remoteip', ip);
+
+    try {
+      const response = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+        method: 'POST',
+        body: formData,
+      });
+
+      const data = await response.json();
+      return data.success;
+    } catch (error) {
+      console.error('Turnstile verification error:', error);
+      return false;
+    }
+  };
+
+  // Removed contact form endpoint as per requirement
+  // Cloudflare Turnstile will be used for login protection instead
 
   // Admin management routes
   app.get('/api/admin/list', async (req: Request, res: any) => {
@@ -66,7 +99,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/admin/login', async (req: Request, res: any) => {
     try {
-      const { pin, password } = req.body;
+      const { pin, password, captchaToken } = req.body;
+      
+      // Validate CAPTCHA token
+      if (!captchaToken) {
+        return res.status(400).json({ message: "Security verification is required" });
+      }
+
+      // Verify the CAPTCHA token with Cloudflare
+      const ip = req.ip || req.connection.remoteAddress || '';
+      const isValidCaptcha = await validateTurnstileToken(captchaToken, ip);
+
+      if (!isValidCaptcha) {
+        return res.status(400).json({ 
+          message: "Security verification failed. Please try again." 
+        });
+      }
+
       console.log(`[Login] PIN: ${pin}, Password provided: ${!!password}`);
       const admin = await storage.getAdminByPin(pin);
       if (!admin) {

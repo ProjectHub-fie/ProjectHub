@@ -103,35 +103,16 @@ export default function HeroSection() {
         </div>
 
         {/* CTA Buttons */}
-        <div className="flex flex-col sm:flex-row gap-3 md:gap-4 justify-center items-center mb-8 md:mb-12 px-4"> &nbsp;
-          <Button
-            variant="outline"
-           
-            className="w-full sm:w-auto bg-green-600 text-white px-6 md:px-8 py-3 md:py-4 rounded-xl font-medium hover:bg-green-700 hover:shadow-lg transition-all duration-300 hover:-translate-y-1 text-sm md:text-base min-h-[48px]"
-
-            onClick={() => setLocation("/dashboard")}
+        <div className="flex flex-col sm:flex-row gap-4 justify-center mb-12">
+          <Button 
+            onClick={() => window.location.href = "/dashboard"} 
+            size="lg" 
+            className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-3 rounded-lg font-medium transition-all duration-300 hover:shadow-lg hover:-translate-y-1"
+            data-testid="button-projects"
           >
-            Request your project
+            View Projects
           </Button>
-          <Button
-            variant="outline"
-            onClick={() => handleScroll("projects")}
-            className="w-full sm:w-auto bg-blue-600 text-white px-6 md:px-8 py-3 md:py-4 rounded-xl font-medium hover:bg-green-700 hover:shadow-lg transition-all duration-300 hover:-translate-y-1 text-sm md:text-base min-h-[48px]"
-
-
-            data-testid="button-view-work"
-          >
-            View our Work
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => handleScroll("contact")}
-            className="w-full sm:w-auto bg-violet-600 text-white px-6 md:px-8 py-3 md:py-4 rounded-xl font-medium hover:bg-green-700 hover:shadow-lg transition-all duration-300 hover:-translate-y-1 text-sm md:text-base min-h-[48px]"
-
-            data-testid="button-contact"
-          >
-            Get In Touch
-          </Button>
+          {/* Get In Touch button removed as per requirement */}
         </div>
 
         {/* Social Links */}

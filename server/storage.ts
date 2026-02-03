@@ -9,7 +9,6 @@ import { db } from "./db.js";
 import { eq, and, sql } from "drizzle-orm";
 import { users, projectRequests, projectInteractions, adminCredentials } from "../drizzle/schema.js";
 
-
 export interface IStorage {
   // User operations
   getUser(id: string): Promise<IUser | null>;
@@ -267,6 +266,8 @@ export class DatabaseStorage implements IStorage {
   async deleteAdmin(id: string): Promise<void> {
     await db.delete(adminCredentials).where(eq(adminCredentials.id, id));
   }
+
+  // Contact request operations
 }
 
 export const storage = new DatabaseStorage();
