@@ -86,6 +86,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.json(allUsers);
   });
 
+  // Endpoint to toggle user block status
+  app.post('/api/users/:id/toggle-block', requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const updatedUser = await storage.toggleUserBlock(id);
+      res.json(updatedUser);
+    } catch (error: any) {
+      console.error('Toggle user block error:', error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
   app.get('/api/admin/stats', requireAuth, async (req, res) => {
     const allUsers = await storage.getAllUsers();
     const allRequests = await storage.getAllProjectRequests();
