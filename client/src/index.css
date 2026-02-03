@@ -181,6 +181,26 @@
   }
   
   .sidebar .sidebar-footer {
-    padding: 1rem;
+    padding: 0.75rem;
+  }
+  
+  .sidebar .sidebar-footer .flex {
+    padding: 0.25rem;
+  }
+  
+  /* Ensure theme toggle is visible and usable on mobile */
+  [data-sidebar="sidebar"] {
+    background-color: hsl(var(--sidebar-background));
+  }
+  
+  /* Override for theme toggle in mobile sidebar */
+  .sidebar .sidebar-footer button {
+    background-color: transparent;
+    border: 1px solid hsl(var(--sidebar-border)/0.3);
+  }
+  
+  /* Make sure theme toggle icons are visible in mobile sidebar */
+  .sidebar .sidebar-footer .theme-toggle svg {
+    color: #ffffff;
   }
 }

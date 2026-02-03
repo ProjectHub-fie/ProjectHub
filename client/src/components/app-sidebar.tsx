@@ -44,7 +44,7 @@ export function AppSidebar() {
                   <SidebarMenuButton 
                     asChild 
                     isActive={location === item.url || (item.url === '/' && location.startsWith('/admin') && location !== '/admin')}
-                    className="rounded-lg px-3 py-2"
+                    className="rounded-lg px-3 py-2 data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
                   >
                     <Link href={item.url} className="flex items-center gap-3">
                       <item.icon className="h-4 w-4" />
@@ -59,8 +59,10 @@ export function AppSidebar() {
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
-      <SidebarFooter className="border-t p-4">
-        <ThemeToggle />
+      <SidebarFooter className="border-t p-2 md:p-4">
+        <div className="flex items-center justify-between px-2">
+          <ThemeToggle />
+        </div>
       </SidebarFooter>
     </Sidebar>
   );
