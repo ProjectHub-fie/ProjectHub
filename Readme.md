@@ -128,3 +128,54 @@ These are usually provided automatically by the Replit environment, but ensure t
 - **Local Development Guide**: Added a dedicated guide (`vs.md`) for setting up the project locally in VS Code.
 
 ---
+
+## Deploying to Vercel
+
+To deploy this application to Vercel, follow these steps:
+
+1. **Prepare your project**:
+   - Ensure your code is committed to a Git repository
+   - Make sure you have the PostgreSQL database ready (Neon recommended)
+
+2. **Create a Vercel account** and connect it to your GitHub/GitLab account
+
+3. **Import your project** into Vercel from your Git provider
+
+4. **Configure Environment Variables** in Vercel:
+   - Go to your project settings in Vercel
+   - Navigate to "Environment Variables" section
+   - Add the following variables:
+   
+   | Variable Name | Description |
+   | :--- | :--- |
+   | `DATABASE_URL` | Your PostgreSQL connection string |
+   | `SESSION_SECRET` | A long, random string for signing session cookies |
+   | `CLIENT_ORIGIN` | Your deployed URL (e.g., `https://your-app.vercel.app`) |
+
+5. **Build Configuration**:
+   - Framework Preset: Select "Other"
+   - Build Command: `npm run build`
+   - Output Directory: `dist/public` (if applicable)
+   - Install Command: `npm install`
+   - Development Command: `npm run dev`
+
+6. **Deploy** the project and wait for the build to complete
+
+7. **Post-Deployment Steps**:
+   - After deployment, run the health check script to ensure everything is set up correctly:
+   ```
+   DATABASE_URL="your_db_url" npx tsx scripts/check-db-health.ts
+   ```
+   - If no admin account exists yet, create one using:
+   ```
+   npx tsx scripts/create-admin.ts
+   ```
+
+8. **Troubleshooting Login Issues**:
+   - If you're experiencing login issues after deployment, ensure that:
+     - The `CLIENT_ORIGIN` environment variable is set to your Vercel deployment URL
+     - Your database connection is working properly
+     - The sessions table was created during initialization
+     - The `SESSION_SECRET` is consistent across all deployments
+
+---

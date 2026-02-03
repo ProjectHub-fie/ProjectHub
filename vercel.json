@@ -7,24 +7,23 @@
       "config": {
         "distDir": "dist/public"
       }
+    },
+    {
+      "src": "pages/api/index.ts",
+      "use": "@vercel/node"
     }
   ],
-  "rewrites": [
+  "routes": [
     {
-      "source": "/api/admin/login",
-      "destination": "/api/admin/login"
+      "src": "/api/(.*)",
+      "dest": "pages/api/index.ts"
     },
     {
-      "source": "/api/:path*",
-      "destination": "/pages/api/index.ts"
+      "handle": "filesystem"
     },
     {
-      "source": "/assets/(.*)",
-      "destination": "/assets/$1"
-    },
-    {
-      "source": "/((?!api|assets).*)",
-      "destination": "/index.html"
+      "src": "/(.*)",
+      "dest": "/index.html"
     }
   ]
 }

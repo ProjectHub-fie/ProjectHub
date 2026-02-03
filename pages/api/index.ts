@@ -21,10 +21,25 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   // Trust proxy for Vercel
   app.set('trust proxy', 1);
 
-  // CORS middleware
+  // CORS middleware - Fixed to allow specific origins instead of wildcard with credentials
+  const allowedOrigins = [
+    'http://localhost:5173',  // Vite dev server
+    'http://localhost:3000',  // Next.js dev server
+    'https://projecthub-fie.vercel.app',  // Replace with your actual Vercel domain
+    'https://www.projecthub-fie.vercel.app',  // With www subdomain
+    // Add your Vercel project domain here
+  ];
+  
   app.use((expressReq: any, expressRes: any, next: any) => {
+    const origin = expressReq.headers.origin;
+    if (!origin || allowedOrigins.includes(origin)) {
+      expressRes.header('Access-Control-Allow-Origin', origin || allowedOrigins[0]);
+    } else {
+      // If origin is not in the allowed list, use the first allowed origin as fallback
+      expressRes.header('Access-Control-Allow-Origin', allowedOrigins[0]);
+    }
+    
     expressRes.header('Access-Control-Allow-Credentials', 'true');
-    expressRes.header('Access-Control-Allow-Origin', expressReq.headers.origin || '*');
     expressRes.header('Access-Control-Allow-Methods', 'GET,OPTIONS,PATCH,DELETE,POST,PUT');
     expressRes.header('Access-Control-Allow-Headers', 'X-CSRF-Token, X-Requested-With, Accept, Accept-Version, Content-Length, Content-MD5, Content-Type, Date, X-Api-Version');
     if (expressReq.method === 'OPTIONS') {
@@ -48,8 +63,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       saveUninitialized: false,
       proxy: true,
       cookie: { 
-        secure: true, 
-        sameSite: 'none',
+        secure: process.env.NODE_ENV === 'production', // Only secure in production
+        sameSite: 'none', // Required for cross-origin requests
         maxAge: 24 * 60 * 60 * 1000,
         httpOnly: true
       }

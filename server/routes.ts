@@ -9,22 +9,6 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Trust proxy for Vercel
   app.set('trust proxy', 1);
 
-  // Simple in-memory session for Vercel compatibility
-  const session = (await import("express-session")).default;
-  
-  app.use(session({
-    secret: process.env.SESSION_SECRET || 'fallback-secret-key',
-    resave: false,
-    saveUninitialized: false,
-    proxy: true,
-    cookie: { 
-      secure: process.env.NODE_ENV === 'production',
-      sameSite: 'none',
-      maxAge: 24 * 60 * 60 * 1000, // 24 hours
-      httpOnly: true
-    }
-  }));
-
   // Auth Middlewares
   const requireAuth = (req: any, res: any, next: any) => {
     if ((req.session as any).isAdminLoggedIn) return next();
