@@ -14,6 +14,7 @@ import {
 import { Link, useLocation } from "wouter";
 import { useAuth } from "@/hooks/useAuth";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { cn } from "@/lib/utils";
 
 const items = [
   {
@@ -33,12 +34,12 @@ const items = [
   },
 ];
 
-export function AppSidebar() {
+export function AppSidebar({ className }: { className?: string }) {
   const [location] = useLocation();
   const { user, isAuthenticated } = useAuth();
 
   return (
-    <Sidebar className="border-r border-border bg-sidebar">
+    <Sidebar className={cn("border-r border-border bg-sidebar", className)}>
       <SidebarHeader className="p-4 border-b border-border">
         <div className="flex items-center gap-2 font-bold text-primary text-xl">
           <span className="font-mono">&lt;</span>ProjectHub<span className="font-mono">/&gt;</span>
