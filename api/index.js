@@ -26,6 +26,10 @@ export default async function handler(req, res) {
   if (path.startsWith('/projects/')) {
     const parts = path.split('/');
     if (parts.length >= 3) {
+      if (parts[parts.length - 1] === 'interactions') {
+        req.query.projectId = parts[2];
+        return projectsMain(req, res);
+      }
       req.query.projectId = parts[2];
       return projectsMain(req, res);
     }

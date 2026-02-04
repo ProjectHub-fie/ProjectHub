@@ -70,7 +70,8 @@ const handler = nc()
     }
 
     if (action === 'logout') {
-      res.setHeader('Set-Cookie', 'connect.sid=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT');
+      const isProd = process.env.NODE_ENV === 'production' || !!process.env.VERCEL;
+      res.setHeader('Set-Cookie', `connect.sid=; Path=/; Expires=Thu, 01 Jan 1970 00:00:00 GMT; HttpOnly; SameSite=${isProd ? 'None' : 'Lax'}; ${isProd ? 'Secure;' : ''}`);
       return res.json({ message: "Logged out successfully" });
     }
 
