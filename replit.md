@@ -1,3 +1,56 @@
+# ProjectHub - Developer Portfolio Platform
+
+## 🚀 Quick Start
+
+### Environment Variables
+Create a `.env` file with the following variables:
+
+```
+SESSION_SECRET="your-session-secret-key"
+DATABASE_URL="your-postgresql-connection-string"
+```
+
+### Development Commands
+
+```bash
+# Install dependencies
+npm install
+
+# Run development server
+npm run dev
+
+# Build for production
+npm run build
+
+# Type checking
+npm run check
+
+# Database migrations
+npm run db:push
+```
+
+### Deployment
+
+The application can be deployed to various platforms:
+- Vercel (recommended)
+- Replit
+- Any Node.js hosting platform
+
+### Features
+- Modern React frontend with TypeScript
+- Express.js backend API
+- PostgreSQL database with Drizzle ORM
+- Responsive design with Tailwind CSS
+- Admin dashboard for content management
+- User authentication and session management
+- Project showcase functionality
+
+### Tech Stack
+- **Frontend**: React 18, TypeScript, Vite, Tailwind CSS, shadcn/ui
+- **Backend**: Node.js, Express.js, TypeScript
+- **Database**: PostgreSQL with Drizzle ORM
+- **Deployment**: Vercel, Replit compatible
+
 # ProjectHub Portfolio Web Application
 
 ## Overview
@@ -66,8 +119,6 @@ Preferred communication style: Simple, everyday language.
 ### Required Environment Variables
 - `DATABASE_URL`: PostgreSQL connection string (required)
 - `SESSION_SECRET`: Secret for session encryption
-- `CF_TURNSTILE_SITE_KEY`: Cloudflare Turnstile site key for frontend
-- `CF_TURNSTILE_SECRET_KEY`: Cloudflare Turnstile secret key for backend verification
 
 ### Optional Environment Variables
 - `RESEND_API_KEY`: For email functionality (if needed in future)

@@ -25,10 +25,6 @@ export default defineConfig(({ mode }) => {
       rollupOptions: {
         input: path.resolve(__dirname, "client/index.html"),
       },
-    },
-    define: {
-      // Make environment variables available to client-side code
-      'import.meta.env.VITE_TURNSTILE_SITE_KEY': JSON.stringify(env.VITE_TURNSTILE_SITE_KEY || env.CF_TURNSTILE_SITE_KEY),
     }
   };
 });
