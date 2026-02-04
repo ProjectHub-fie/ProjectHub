@@ -9,5 +9,11 @@ export default async function handler(req: Request, res: Response) {
   }
   
   const admins = await storage.getAllAdmins();
-  res.json(admins.map(a => ({ id: a.id, pin: a.pin, updatedAt: a.updatedAt })));
+  res.json(admins.map(a => ({ 
+    id: a.id, 
+    pin: a.pin, 
+    email: a.email,
+    role: a.role,
+    updatedAt: a.updatedAt 
+  })));
 }

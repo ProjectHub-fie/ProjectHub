@@ -10,10 +10,23 @@ declare global {
       session?: {
         isAdminLoggedIn?: boolean;
         adminId?: string;
+        adminRole?: string;
         [key: string]: any;
       };
     }
   }
+}
+
+// Role-based permissions
+const PERMISSIONS = {
+  owner: ['create_admin', 'delete_admin', 'manage_moderators', 'manage_projects', 'view_users', 'change_roles'],
+  admin: ['create_moderator', 'manage_projects', 'view_users'],
+  moderator: ['manage_projects', 'view_users']
+};
+
+function hasPermission(role: string, permission: string): boolean {
+  if (role === 'owner') return true; // Owner has all permissions
+  return PERMISSIONS[role as keyof typeof PERMISSIONS]?.includes(permission) || false;
 }
 
 export async function registerRoutes(app: Express): Promise<Server> {
@@ -26,44 +39,119 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.status(401).json({ message: "Authentication required" });
   };
 
+  const requireRole = (requiredRole: string) => {
+    return (req: Request, res: any, next: any) => {
+      if (!req.session?.isAdminLoggedIn) {
+        return res.status(401).json({ message: "Authentication required" });
+      }
+      
+      const userRole = req.session.adminRole;
+      if (!userRole) {
+        return res.status(403).json({ message: "Insufficient permissions" });
+      }
 
-  // Removed contact form endpoint as per requirement
-  // Cloudflare Turnstile will be used for login protection instead
+      // Check role hierarchy
+      const roleHierarchy = ['moderator', 'admin', 'owner'];
+      const userLevel = roleHierarchy.indexOf(userRole);
+      const requiredLevel = roleHierarchy.indexOf(requiredRole);
+      
+      if (userLevel < requiredLevel) {
+        return res.status(403).json({ message: "Insufficient permissions for this operation" });
+      }
+      
+      next();
+    };
+  };
 
   // Admin management routes
-  app.get('/api/admin/list', async (req: Request, res: any) => {
-    if (!req.session?.isAdminLoggedIn) {
-      return res.status(401).json({ message: "Unauthorized" });
-    }
-    const admins = await storage.getAllAdmins();
-    res.json(admins.map(a => ({ id: a.id, pin: a.pin, updatedAt: a.updatedAt })));
-  });
-
-  app.post('/api/admin/create', async (req: Request, res: any) => {
+  app.get('/api/admin/list', requireAuth, async (req: Request, res: any) => {
     try {
       const admins = await storage.getAllAdmins();
-      if (admins.length > 0 && !req.session?.isAdminLoggedIn) {
-        return res.status(401).json({ message: "Unauthorized" });
-      }
-      const { pin, email, password } = req.body;
+      res.json(admins.map(a => ({ 
+        id: a.id, 
+        pin: a.pin, 
+        email: a.email,
+        role: a.role,
+        updatedAt: a.updatedAt 
+      })));
+    } catch (error) {
+      console.error('Error fetching admins:', error);
+      res.status(500).json({ message: "Failed to fetch admins" });
+    }
+  });
+
+  app.post('/api/admin/create', requireRole('admin'), async (req: Request, res: any) => {
+    try {
+      const { pin, email, password, role = 'moderator' } = req.body;
+      
       if (!pin || !password) {
         return res.status(400).json({ message: "PIN and password are required" });
       }
+
+      // Validate role assignment permissions
+      const creatorRole = req.session!.adminRole;
+      if (creatorRole === 'admin' && role !== 'moderator') {
+        return res.status(403).json({ message: "Admins can only create moderators" });
+      }
+
+      // Check if PIN already exists
+      const existingAdmin = await storage.getAdminByPin(pin);
+      if (existingAdmin) {
+        return res.status(400).json({ message: "PIN already exists" });
+      }
+
       const hash = await bcrypt.hash(password, 10);
-      await storage.setAdminPassword(pin, email || null, hash);
-      res.json({ success: true });
+      await storage.setAdminPassword(pin, email || null, hash, role);
+      res.json({ success: true, message: "Admin created successfully" });
     } catch (error) {
       console.error('Admin creation error:', error);
       res.status(500).json({ message: "Failed to create admin" });
     }
   });
 
-  app.delete('/api/admin/:id', async (req: Request, res: any) => {
-    if (!req.session?.isAdminLoggedIn) {
-      return res.status(401).json({ message: "Unauthorized" });
+  app.put('/api/admin/:id/role', requireRole('owner'), async (req: Request, res: any) => {
+    try {
+      const { id } = req.params;
+      const { role } = req.body;
+      
+      if (!['owner', 'admin', 'moderator'].includes(role)) {
+        return res.status(400).json({ message: "Invalid role" });
+      }
+
+      // Prevent owner from demoting themselves
+      if (id === req.session!.adminId && role !== 'owner') {
+        return res.status(400).json({ message: "Cannot change your own role" });
+      }
+
+      await storage.updateAdminRole(id, role);
+      res.json({ success: true, message: "Role updated successfully" });
+    } catch (error) {
+      console.error('Role update error:', error);
+      res.status(500).json({ message: "Failed to update role" });
     }
-    await storage.deleteAdmin(req.params.id);
-    res.json({ success: true });
+  });
+
+  app.delete('/api/admin/:id', requireRole('admin'), async (req: Request, res: any) => {
+    try {
+      const { id } = req.params;
+      
+      // Prevent users from deleting themselves
+      if (id === req.session!.adminId) {
+        return res.status(400).json({ message: "Cannot delete your own account" });
+      }
+
+      // Check if trying to delete an owner (only owners can delete other owners)
+      const adminToDelete = await storage.getAdminByPin(id);
+      if (adminToDelete?.role === 'owner' && req.session!.adminRole !== 'owner') {
+        return res.status(403).json({ message: "Only owners can delete other owners" });
+      }
+
+      await storage.deleteAdmin(id);
+      res.json({ success: true, message: "Admin deleted successfully" });
+    } catch (error) {
+      console.error('Admin deletion error:', error);
+      res.status(500).json({ message: "Failed to delete admin" });
+    }
   });
 
   app.post('/api/admin/login', async (req: Request, res: any) => {
@@ -83,10 +171,15 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
       req.session!.isAdminLoggedIn = true;
       req.session!.adminId = admin.id;
+      req.session!.adminRole = admin.role;
       
       req.session!.save((err: any) => {
         if (err) return res.status(500).json({ message: "Session save failed" });
-        res.json({ success: true });
+        res.json({ 
+          success: true,
+          role: admin.role,
+          message: "Login successful"
+        });
       });
     } catch (error: any) {
       res.status(500).json({ message: "Internal server error" });
@@ -97,13 +190,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
     req.session!.destroy(() => res.json({ success: true }));
   });
 
-  app.get('/api/users', requireAuth, async (req: Request, res: any) => {
-    const allUsers = await storage.getAllUsers();
-    res.json(allUsers);
+  app.get('/api/users', requireRole('moderator'), async (req: Request, res: any) => {
+    try {
+      const allUsers = await storage.getAllUsers();
+      res.json(allUsers);
+    } catch (error) {
+      console.error('Error fetching users:', error);
+      res.status(500).json({ message: "Failed to fetch users" });
+    }
   });
 
   // Endpoint to toggle user block status
-  app.post('/api/users/:id/toggle-block', requireAuth, async (req: Request, res: any) => {
+  app.post('/api/users/:id/toggle-block', requireRole('moderator'), async (req: Request, res: any) => {
     try {
       const { id } = req.params;
       const updatedUser = await storage.toggleUserBlock(id);
@@ -115,24 +213,60 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.get('/api/admin/stats', requireAuth, async (req: Request, res: any) => {
-    const allUsers = await storage.getAllUsers();
-    const allRequests = await storage.getAllProjectRequests();
-    res.json({
-      totalUsers: allUsers.length,
-      totalRequests: allRequests.length,
-      pendingRequests: allRequests.filter(r => r.status === 'pending').length,
-      blockedUsers: allUsers.filter(u => u.isBlocked).length
-    });
+    try {
+      const allUsers = await storage.getAllUsers();
+      const allRequests = await storage.getAllProjectRequests();
+      res.json({
+        totalUsers: allUsers.length,
+        totalRequests: allRequests.length,
+        pendingRequests: allRequests.filter(r => r.status === 'pending').length,
+        blockedUsers: allUsers.filter(u => u.isBlocked).length
+      });
+    } catch (error) {
+      console.error('Error fetching stats:', error);
+      res.status(500).json({ message: "Failed to fetch statistics" });
+    }
   });
 
-  app.get('/api/project-requests', requireAuth, async (req: Request, res: any) => {
-    const requests = await storage.getAllProjectRequests();
-    res.json(requests);
+  app.get('/api/project-requests', requireRole('moderator'), async (req: Request, res: any) => {
+    try {
+      const requests = await storage.getAllProjectRequests();
+      res.json(requests);
+    } catch (error) {
+      console.error('Error fetching project requests:', error);
+      res.status(500).json({ message: "Failed to fetch project requests" });
+    }
   });
 
-  app.delete('/api/projects/:id', requireAuth, async (req: Request, res: any) => {
-    await storage.deleteProjectRequest(req.params.id);
-    res.json({ message: "Project deleted" });
+  app.put('/api/projects/:id/status', requireRole('moderator'), async (req: Request, res: any) => {
+    try {
+      const { id } = req.params;
+      const { status } = req.body;
+      
+      if (!['pending', 'in_review', 'approved', 'rejected', 'completed'].includes(status)) {
+        return res.status(400).json({ message: "Invalid status" });
+      }
+
+      const updatedRequest = await storage.updateProjectRequestStatus(id, status);
+      if (!updatedRequest) {
+        return res.status(404).json({ message: "Project request not found" });
+      }
+      
+      res.json(updatedRequest);
+    } catch (error: any) {
+      console.error('Project status update error:', error);
+      res.status(500).json({ message: error.message });
+    }
+  });
+
+  app.delete('/api/projects/:id', requireRole('admin'), async (req: Request, res: any) => {
+    try {
+      await storage.deleteProjectRequest(req.params.id);
+      res.json({ message: "Project deleted" });
+    } catch (error) {
+      console.error('Project deletion error:', error);
+      res.status(500).json({ message: "Failed to delete project" });
+    }
   });
 
   const httpServer = createServer(app);

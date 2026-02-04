@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
-import { ShieldCheck, Loader2 } from "lucide-react";
+import { ShieldCheck, Loader2, Crown, User, Eye } from "lucide-react";
 
 export default function AdminLoginPage() {
   const [pin, setPin] = useState("");
@@ -24,8 +24,11 @@ export default function AdminLoginPage() {
       }
       return data;
     },
-    onSuccess: () => {
-      toast({ title: "Admin access granted" });
+    onSuccess: (data) => {
+      toast({ 
+        title: "Admin access granted",
+        description: `Logged in as ${data.role}`
+      });
       setLocation("/admin");
     },
     onError: (error: Error) => {
@@ -37,8 +40,24 @@ export default function AdminLoginPage() {
     }
   });
 
-  // Use your actual site key
-  
+  const getRoleIcon = (role: string) => {
+    switch (role) {
+      case 'owner': return <Crown className="h-4 w-4 text-yellow-500" />;
+      case 'admin': return <User className="h-4 w-4 text-blue-500" />;
+      case 'moderator': return <Eye className="h-4 w-4 text-green-500" />;
+      default: return null;
+    }
+  };
+
+  const getRoleDescription = (role: string) => {
+    switch (role) {
+      case 'owner': return 'Full system access - can manage all administrators and settings';
+      case 'admin': return 'Can create moderators and manage projects';
+      case 'moderator': return 'Can review projects and manage users';
+      default: return '';
+    }
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
       <Card className="w-full max-w-md">
@@ -88,8 +107,26 @@ export default function AdminLoginPage() {
             </Button>
           </form>
           
+          <div className="mt-6 p-4 bg-gray-50 rounded-lg">
+            <h3 className="text-sm font-medium text-gray-900 mb-2">Role Permissions:</h3>
+            <div className="space-y-2 text-xs text-gray-600">
+              <div className="flex items-center gap-2">
+                <Crown className="h-4 w-4 text-yellow-500" />
+                <span><strong>Owner (131313):</strong> Full system control</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <User className="h-4 w-4 text-blue-500" />
+                <span><strong>Admin:</strong> Manage moderators and projects</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Eye className="h-4 w-4 text-green-500" />
+                <span><strong>Moderator:</strong> Review projects and users</span>
+              </div>
+            </div>
+          </div>
+          
           <div className="mt-4 text-center text-xs text-muted-foreground">
-            <p>Hint: Default PIN is 1234, default password is admin123</p>
+            <p>Default Owner PIN: 131313, Password: adminpassword</p>
           </div>
         </CardContent>
       </Card>

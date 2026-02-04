@@ -11,12 +11,12 @@ export default async function handler(req: Request, res: Response) {
   }
   
   try {
-    const { pin, email, password } = req.body;
+    const { pin, email, password, role = 'moderator' } = req.body;
     if (!pin || !password) {
       return res.status(400).json({ message: "PIN and password are required" });
     }
     const hash = await bcrypt.hash(password, 10);
-    await storage.setAdminPassword(pin, email || null, hash);
+    await storage.setAdminPassword(pin, email || null, hash, role);
     res.json({ success: true });
   } catch (error) {
     console.error('Admin creation error:', error);

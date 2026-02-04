@@ -14,8 +14,13 @@ export default async function handler(req: Request, res: Response) {
 
     (req.session as any).isAdminLoggedIn = true;
     (req.session as any).adminId = admin.id;
+    (req.session as any).adminRole = admin.role;
     
-    req.session.save(() => res.json({ success: true }));
+    req.session.save(() => res.json({ 
+      success: true,
+      role: admin.role,
+      message: "Login successful"
+    }));
   } catch (error) {
     res.status(500).json({ message: "Internal server error" });
   }

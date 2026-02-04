@@ -22,6 +22,8 @@ export const users = pgTable("users", {
 
 export const projectRequestStatusEnum = pgEnum("project_request_status", ["pending", "in_review", "approved", "rejected", "completed"]);
 
+export const adminRoleEnum = pgEnum("admin_role", ["owner", "admin", "moderator"]);
+
 export const projectRequests = pgTable("project_requests", {
   id: uuid("id").primaryKey().defaultRandom(),
   userId: uuid("user_id").references(() => users.id).notNull(),
@@ -56,5 +58,6 @@ export const adminCredentials = pgTable("admin_credentials", {
   email: text("email").unique(), // Made optional by removing .notNull()
   pin: text("pin").unique().notNull(),
   passwordHash: text("password_hash").notNull(),
+  role: adminRoleEnum("role").default("moderator").notNull(),
   updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });

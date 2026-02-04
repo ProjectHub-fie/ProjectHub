@@ -33,8 +33,9 @@ export interface IStorage {
   // Admin credentials
   getAdminByPin(pin: string): Promise<any | null>;
   getAllAdmins(): Promise<any[]>;
-  setAdminPassword(pin: string, email: string, hash: string): Promise<void>;
+  setAdminPassword(pin: string, email: string, hash: string, role?: string): Promise<void>;
   deleteAdmin(id: string): Promise<void>;
+  updateAdminRole(id: string, role: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -232,13 +233,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getAdminByPin(pin: string): Promise<any | null> {
-    console.log(`[Storage] Querying admin_credentials for PIN: ${pin}`);
     const result = await db.select().from(adminCredentials).where(eq(adminCredentials.pin, pin)).limit(1);
-    if (result.length > 0) {
-      console.log(`[Storage] Found admin: ${result[0].email}`);
-    } else {
-      console.log(`[Storage] No admin found for PIN: ${pin}`);
-    }
     return result[0] || null;
   }
 
@@ -246,25 +241,21 @@ export class DatabaseStorage implements IStorage {
     return await db.select().from(adminCredentials);
   }
 
-  async setAdminPassword(pin: string, email: string | null, hash: string): Promise<void> {
-    const existing = await this.getAdminByPin(pin);
-    if (existing) {
-      await db.update(adminCredentials).set({ 
-        email: email || null, 
-        passwordHash: hash, 
-        updatedAt: new Date() 
-      }).where(eq(adminCredentials.id, existing.id));
-    } else {
-      await db.insert(adminCredentials).values({ 
-        pin, 
-        email: email || null, 
-        passwordHash: hash 
-      });
-    }
+  async setAdminPassword(pin: string, email: string, hash: string, role: string = "moderator"): Promise<void> {
+    await db.insert(adminCredentials).values({
+      pin,
+      email: email || null,
+      passwordHash: hash,
+      role: role as any
+    });
   }
 
   async deleteAdmin(id: string): Promise<void> {
     await db.delete(adminCredentials).where(eq(adminCredentials.id, id));
+  }
+
+  async updateAdminRole(id: string, role: string): Promise<void> {
+    await db.update(adminCredentials).set({ role: role as any }).where(eq(adminCredentials.id, id));
   }
 
   // Contact request operations
