@@ -51,6 +51,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
       });
 
       const data = await response.json();
+      
+      // Log validation result for debugging
+      console.log('Turnstile validation result:', {
+        success: data.success,
+        challenge_ts: data.challenge_ts,
+        hostname: data.hostname,
+        action: data.action,
+        cdata: data.cdata
+      });
+
       return data.success;
     } catch (error) {
       console.error('Turnstile verification error:', error);
@@ -111,6 +121,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const isValidCaptcha = await validateTurnstileToken(captchaToken, ip);
 
       if (!isValidCaptcha) {
+        console.log('Turnstile validation failed for IP:', ip);
         return res.status(400).json({ 
           message: "Security verification failed. Please try again." 
         });

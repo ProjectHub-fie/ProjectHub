@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { Card, CardContent, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
@@ -46,7 +46,13 @@ export default function AdminLoginPage() {
     }
   });
 
-  const siteKey = import.meta.env.VITE_TURNSTILE_SITE_KEY || "1x00000000000000000000AA";
+  // Use your actual site key
+  const siteKey = import.meta.env.CF_TURNSTILE_SITE_KEY || "0x4AAAAAACMs4uviDJ_b45X9";
+
+  // Simple widget reset function
+  const resetWidget = () => {
+    setCaptchaToken(null);
+  };
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
@@ -64,6 +70,14 @@ export default function AdminLoginPage() {
           <form 
             onSubmit={(e) => {
               e.preventDefault();
+              if (!captchaToken) {
+                toast({
+                  title: "Security Verification Required",
+                  description: "Please complete the CAPTCHA verification",
+                  variant: "destructive"
+                });
+                return;
+              }
               loginMutation.mutate({ pin, password, captchaToken });
             }}
             className="space-y-4"
@@ -85,32 +99,63 @@ export default function AdminLoginPage() {
               />
             </div>
             
-            {/* Cloudflare Turnstile Widget */}
-            <div className="flex justify-center my-4">
-              <Turnstile
-                siteKey={siteKey}
-                onSuccess={(token) => setCaptchaToken(token)}
-                onExpire={() => setCaptchaToken(null)}
-                onError={() => setCaptchaToken(null)}
-                options={{
-                  theme: "light",
-                  appearance: "always"
-                }}
-              />
+            {/* Cloudflare Turnstile Widget - Using your actual keys */}
+            <div className="my-6 p-4 border-2 border-dashed border-gray-300 rounded-lg bg-gray-50 flex flex-col items-center">
+              <p className="text-sm text-gray-600 mb-3">Security Verification</p>
+              <div className="w-full max-w-xs">
+                <Turnstile
+                  siteKey={siteKey}
+                  onSuccess={(token) => {
+                    console.log("Turnstile success:", token);
+                    setCaptchaToken(token);
+                  }}
+                  onExpire={() => {
+                    console.log("Turnstile expired");
+                    setCaptchaToken(null);
+                  }}
+                  onError={(error) => {
+                    console.log("Turnstile error:", error);
+                    setCaptchaToken(null);
+                  }}
+                  options={{
+                    theme: "light",
+                    appearance: "always",
+                    refreshExpired: "manual",
+                    retry: "never"
+                  }}
+                />
+              </div>
+              {captchaToken && (
+                <p className="text-xs text-green-600 mt-2 flex items-center">
+                  ✓ Verification completed
+                </p>
+              )}
             </div>
             
             <Button 
               type="submit" 
               className="w-full"
-              disabled={loginMutation.isPending || !captchaToken}
+              disabled={loginMutation.isPending}
             >
               {loginMutation.isPending ? (
                 <Loader2 className="h-4 w-4 animate-spin mr-2" />
               ) : null}
-              Access Dashboard
+              {captchaToken ? "Access Dashboard" : "Complete Verification First"}
             </Button>
           </form>
-          <div className="mt-6 text-center text-xs text-muted-foreground">
+          
+          <div className="mt-6 text-center">
+            <Button 
+              onClick={resetWidget}
+              variant="outline" 
+              size="sm"
+              className="text-xs"
+            >
+              Reset Security Verification
+            </Button>
+          </div>
+          
+          <div className="mt-4 text-center text-xs text-muted-foreground">
             <p>Hint: Default PIN is 1234, default password is admin123</p>
           </div>
         </CardContent>
