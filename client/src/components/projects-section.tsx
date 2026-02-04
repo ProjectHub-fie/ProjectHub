@@ -22,19 +22,11 @@ function ProjectInteractions({ projectId }: { projectId: string }) {
       return apiRequest(`/api/projects/${projectId}/interactions`, "POST", data);
     },
     onSuccess: () => {
-<<<<<<< HEAD
-      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "interactions"], exact: false });
-      toast({
-        title: "Success!",
-        description: "Your interaction has been recorded.",
-        variant: "success",
-=======
       queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "interactions"] });
       toast({
         title: "Success",
         description: "Your interaction has been recorded.",
         className: "bg-emerald-500 border-emerald-600 text-white",
->>>>>>> 8130364 (Update application notifications to use consistent green styling)
       });
     },
     onError: (error: any) => {
