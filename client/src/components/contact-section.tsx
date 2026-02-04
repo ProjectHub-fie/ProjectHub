@@ -29,7 +29,7 @@ export default function ContactSection() {
       toast({
         title: "Captcha Required",
         description: "Please complete the Turnstile verification to send your message.",
-        variant: "destructive",
+        className: "bg-emerald-500 border-emerald-600 text-white",
       });
       return;
     }
@@ -58,7 +58,7 @@ export default function ContactSection() {
       toast({
         title: "Submission Failed",
         description: error.message || "Something went wrong. Please try again later.",
-        variant: "destructive",
+        className: "bg-emerald-500 border-emerald-600 text-white",
       });
     } finally {
       setIsSubmitting(false);

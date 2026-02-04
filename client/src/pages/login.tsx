@@ -98,7 +98,11 @@ export default function LoginPage() {
 
   const onLogin = async (values: z.infer<typeof loginSchema>) => {
     if (!captchaToken) {
-      toast({ title: "Captcha Required", description: "Please complete the Turnstile verification.", variant: "destructive" });
+      toast({ 
+        title: "Captcha Required", 
+        description: "Please complete the Turnstile verification.", 
+        className: "bg-emerald-500 border-emerald-600 text-white" 
+      });
       return;
     }
     try {
@@ -113,7 +117,7 @@ export default function LoginPage() {
       toast({
         title: "Login Failed",
         description: error.message || "Please check your credentials and try again.",
-        variant: "destructive",
+        className: "bg-emerald-500 border-emerald-600 text-white",
       });
       // Reset captcha on failure
       setCaptchaToken(null);
@@ -123,7 +127,11 @@ export default function LoginPage() {
 
   const onRegister = async (values: z.infer<typeof registerSchema>) => {
     if (!captchaToken) {
-      toast({ title: "Captcha Required", description: "Please complete the Turnstile verification.", variant: "destructive" });
+      toast({ 
+        title: "Captcha Required", 
+        description: "Please complete the Turnstile verification.", 
+        className: "bg-emerald-500 border-emerald-600 text-white" 
+      });
       return;
     }
     try {
@@ -138,7 +146,7 @@ export default function LoginPage() {
       toast({
         title: "Registration Failed",
         description: error.message || "Please try again.",
-        variant: "destructive",
+        className: "bg-emerald-500 border-emerald-600 text-white",
       });
       // Reset captcha on failure
       setCaptchaToken(null);
@@ -148,7 +156,11 @@ export default function LoginPage() {
 
   const onForgotPassword = async (values: z.infer<typeof forgotPasswordSchema>) => {
     if (!captchaToken) {
-      toast({ title: "Captcha Required", description: "Please complete the Turnstile verification.", variant: "destructive" });
+      toast({ 
+        title: "Captcha Required", 
+        description: "Please complete the Turnstile verification.", 
+        className: "bg-emerald-500 border-emerald-600 text-white" 
+      });
       return;
     }
     setIsSendingReset(true);
@@ -175,7 +187,7 @@ export default function LoginPage() {
       toast({
         title: "Reset Failed",
         description: error.message || "Please try again.",
-        variant: "destructive",
+        className: "bg-emerald-500 border-emerald-600 text-white",
       });
       // Reset captcha on failure
       setCaptchaToken(null);
@@ -187,7 +199,11 @@ export default function LoginPage() {
 
   const onResetPassword = async (values: z.infer<typeof resetPasswordSchema>) => {
     if (!captchaToken) {
-      toast({ title: "Captcha Required", description: "Please complete the Turnstile verification.", variant: "destructive" });
+      toast({ 
+        title: "Captcha Required", 
+        description: "Please complete the Turnstile verification.", 
+        className: "bg-emerald-500 border-emerald-600 text-white" 
+      });
       return;
     }
     setIsResettingPassword(true);
@@ -223,7 +239,7 @@ export default function LoginPage() {
       toast({
         title: "Reset Failed",
         description: error.message || "Please try again.",
-        variant: "destructive",
+        className: "bg-emerald-500 border-emerald-600 text-white",
       });
     } finally {
       setIsResettingPassword(false);
