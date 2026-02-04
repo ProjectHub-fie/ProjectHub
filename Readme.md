@@ -128,5 +128,5 @@ These are usually provided automatically by the Replit environment, but ensure t
 - **Local Development Guide**: Added a dedicated guide (`vs.md`) for setting up the project locally in VS Code.
 
 ---
-## LTAI5tKD4zjmBrbos4D2JVGI)
-## (HImi9QjSUa3hhZYoSYyxEpP5k6wrqe)
+##LTAI5tKD4zjmBrbos4D2JVGi)
+##(HImi9QjSUa3hhZYoSYyxEpP5k6wrqE)
