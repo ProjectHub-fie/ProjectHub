@@ -25,7 +25,6 @@ const handler = nc()
     res.status(200).end();
   })
   .get(async (req, res) => {
-    // me/user logic
     const cookies = parse(req.headers.cookie || '');
     let sessionToken = cookies['connect.sid'] || req.headers['x-user-session'];
 
@@ -51,17 +50,52 @@ const handler = nc()
   })
   .use(upload.single('file'))
   .post(async (req, res) => {
-    // upload-profile-pic logic
     try {
       if (!req.file) return res.status(400).json({ message: "No file uploaded" });
-      const { userId } = req.body;
-      if (!userId) return res.status(401).json({ message: "Authentication required" });
+      
+      const cookies = parse(req.headers.cookie || '');
+      let sessionToken = cookies['connect.sid'] || req.headers['x-user-session'];
+      
+      if (!sessionToken) return res.status(401).json({ message: "Authentication required" });
+      
+      const decodedSession = Buffer.from(sessionToken, 'base64').toString();
+      const userData = JSON.parse(decodedSession);
 
-      const base64Image = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
-      const updatedUser = await storage.upsertUser({ id: userId, profileImageUrl: base64Image });
+      const base64Image = `data:\${req.file.mimetype};base64,\${req.file.buffer.toString('base64')}`;
+      const updatedUser = await storage.upsertUser({ id: userData.id, profileImageUrl: base64Image });
       res.json({ user: { id: updatedUser.id, profileImageUrl: updatedUser.profileImageUrl } });
     } catch (error) {
       res.status(500).json({ message: "Failed to upload image" });
+    }
+  })
+  .patch(async (req, res) => {
+    try {
+      const cookies = parse(req.headers.cookie || '');
+      let sessionToken = cookies['connect.sid'] || req.headers['x-user-session'];
+      
+      if (!sessionToken) return res.status(401).json({ message: "Authentication required" });
+      
+      const decodedSession = Buffer.from(sessionToken, 'base64').toString();
+      const userData = JSON.parse(decodedSession);
+      const { firstName, lastName } = req.body;
+
+      const updatedUser = await storage.upsertUser({ 
+        id: userData.id, 
+        firstName: firstName || undefined, 
+        lastName: lastName || undefined 
+      });
+      
+      res.json({ 
+        user: { 
+          id: updatedUser.id, 
+          email: updatedUser.email, 
+          firstName: updatedUser.firstName, 
+          lastName: updatedUser.lastName,
+          profileImageUrl: updatedUser.profileImageUrl 
+        } 
+      });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to update profile" });
     }
   });
 
