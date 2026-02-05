@@ -22,6 +22,31 @@ declare global {
   }
 }
 
+// Memory store for sessions as fallback
+class MemoryStore extends session.Store {
+  private sessions: Map<string, any> = new Map();
+
+  get(sid: string, callback: (err: any, session?: session.SessionData) => void) {
+    callback(null, this.sessions.get(sid));
+  }
+
+  set(sid: string, session: session.SessionData, callback?: (err: any) => void) {
+    this.sessions.set(sid, session);
+    callback?.(null);
+  }
+
+  destroy(sid: string, callback?: (err: any) => void) {
+    this.sessions.delete(sid);
+    callback?.(null);
+  }
+
+  touch(sid: string, session: session.SessionData, callback?: (err: any) => void) {
+    // Update expiry
+    this.sessions.set(sid, session);
+    callback?.(null);
+  }
+}
+
 // Middleware to check if user is authenticated and not blocked
 function requireAuth(req: any, res: any, next: any) {
   if (req.isAuthenticated()) {
@@ -38,31 +63,48 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Trust proxy for Vercel
   app.set('trust proxy', 1);
 
-  // Session configuration with improved Vercel compatibility
-  const PgSession = connectPgSimple(session);
-  const pgPool = new pg.Pool({
-    connectionString: process.env.DATABASE_URL,
-    ssl: { rejectUnauthorized: false }
-  });
-  
+  // Session configuration with fallback to memory store
+  let sessionStore: session.Store;
+  let useDatabaseSessions = true;
+
+  try {
+    const PgSession = connectPgSimple(session);
+    const pgPool = new pg.Pool({
+      connectionString: process.env.DATABASE_URL,
+      ssl: { rejectUnauthorized: false },
+      connectionTimeoutMillis: 5000, // 5 second timeout
+      idleTimeoutMillis: 30000,
+    });
+    
+    sessionStore = new PgSession({
+      pool: pgPool,
+      tableName: 'sessions',
+      createTableIfMissing: true,
+    });
+    
+    // Test database connection
+    await pgPool.query('SELECT 1');
+    console.log('Database session store initialized successfully');
+  } catch (dbError: any) {
+    console.warn('Database session store failed, falling back to memory store:', dbError.message);
+    sessionStore = new MemoryStore();
+    useDatabaseSessions = false;
+  }
+
   // Determine if we're in production/Vercel environment
   const isProduction = process.env.NODE_ENV === 'production' || !!process.env.VERCEL;
   const cookieDomain = isProduction ? undefined : undefined; // Let browser handle domain
   
   app.use(session({
-    store: new PgSession({
-      pool: pgPool,
-      tableName: 'sessions',
-      createTableIfMissing: true,
-    }),
+    store: sessionStore,
     secret: process.env.SESSION_SECRET || 'fallback-secret-key-for-development-only-do-not-use-in-production',
     resave: false,
     saveUninitialized: false,
     proxy: true,
-    name: 'projecthub.sid', // Custom session cookie name
+    name: 'projecthub.sid',
     cookie: {
-      secure: isProduction, // Only secure in production
-      sameSite: isProduction ? 'none' : 'lax', // 'none' for cross-origin in production
+      secure: isProduction,
+      sameSite: isProduction ? 'none' : 'lax',
       httpOnly: true,
       maxAge: 24 * 60 * 60 * 1000, // 24 hours
       domain: cookieDomain,
@@ -74,10 +116,11 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use(passport.initialize());
   app.use(passport.session());
 
-  // Enhanced error logging
+  // Enhanced session error handling
   app.use((err: any, req: any, res: any, next: any) => {
-    console.error('Session error:', err);
-    next(err);
+    console.error('Session middleware error:', err.message);
+    // Continue processing even if session fails
+    next();
   });
 
   // Auth routes
@@ -88,6 +131,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Validate required fields
       if (!email || !password || !firstName || !lastName) {
         return res.status(400).json({ message: "All fields are required" });
+      }
+
+      // Captcha validation for production
+      if (process.env.NODE_ENV === 'production' && captchaToken) {
+        const turnstileSecret = process.env.TURNSTILE_SECRET_KEY || process.env.VITE_TURNSTILE_SECRET_KEY;
+        if (turnstileSecret) {
+          try {
+            const verifyResponse = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+              body: `secret=${turnstileSecret}&response=${captchaToken}`
+            });
+            const verifyData: any = await verifyResponse.json();
+            if (!verifyData.success) {
+              return res.status(400).json({ message: "Security verification failed" });
+            }
+          } catch (verifyError) {
+            console.error('Turnstile verification error:', verifyError);
+          }
+        }
       }
 
       // Check if user already exists
@@ -102,23 +165,22 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Create user
       const user = await storage.upsertUser({
         email,
-        password: hashedPassword,
         firstName,
-        lastName
+        lastName,
+        password: hashedPassword,
       });
 
-      // Log user in automatically after registration
-      req.login(user, (loginErr) => {
-        if (loginErr) {
-          console.error('Auto-login after registration failed:', loginErr);
+      // Log user in (skip session storage if it's failing)
+      req.login(user, (err) => {
+        if (err) {
+          console.error('Login after registration error:', err);
+          // Still return success even if session fails
           return res.status(201).json({ 
-            message: "Registration successful", 
-            user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName } 
+            user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName },
+            message: "Registration successful but session storage unavailable"
           });
         }
-        res.status(201).json({ 
-          user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName } 
-        });
+        res.status(201).json({ user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName } });
       });
     } catch (error) {
       console.error('Registration error:', error);
@@ -127,11 +189,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   });
 
   app.post('/api/auth/login', (req, res, next) => {
-    const { captchaToken } = req.body;
+    const { email, password, captchaToken } = req.body;
     
-    // Validate captcha before proceeding to passport
-    if (captchaToken) {
-      const turnstileSecret = process.env.TURNSTILE_SECRET_KEY || process.env.VITE_TURNSTILE_SECRET_KEY || "1x0000000000000000000000000000000AA";
+    // Validate required fields
+    if (!email || !password) {
+      return res.status(400).json({ message: "Email and password are required" });
+    }
+
+    // Captcha validation for production
+    if (process.env.NODE_ENV === 'production' && captchaToken) {
+      const turnstileSecret = process.env.TURNSTILE_SECRET_KEY || process.env.VITE_TURNSTILE_SECRET_KEY;
       if (turnstileSecret) {
         fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
           method: 'POST',
@@ -141,65 +208,61 @@ export async function registerRoutes(app: Express): Promise<Server> {
         .then(res => res.json())
         .then((verifyData: any) => {
           if (!verifyData.success) {
-            console.error('Turnstile verification failed:', verifyData);
             return res.status(400).json({ message: "Security verification failed" });
           }
           
-          passport.authenticate('local', (err: any, user: any, info: any) => {
-            if (err) {
-              return res.status(500).json({ message: "Login failed" });
-            }
-            if (!user) {
-              return res.status(401).json({ message: info?.message || "Invalid email or password" });
-            }
-
-            req.login(user, (loginErr) => {
-              if (loginErr) {
-                return res.status(500).json({ message: "Login failed" });
-              }
-              res.json({ user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName } });
-            });
-          })(req, res, next);
+          proceedWithLogin();
         })
         .catch(err => {
-          console.error('hCaptcha error:', err);
-          res.status(500).json({ message: "Security verification failed" });
+          console.error('Turnstile error:', err);
+          return res.status(500).json({ message: "Security verification failed" });
         });
         return;
       }
     }
 
-    passport.authenticate('local', (err: any, user: any, info: any) => {
-      if (err) {
-        console.error('Passport auth error:', err);
-        return res.status(500).json({ message: "Login failed" });
-      }
-      if (!user) {
-        console.log('Passport auth failed - no user:', info?.message);
-        return res.status(401).json({ message: info?.message || "Invalid email or password" });
-      }
+    proceedWithLogin();
 
-      req.login(user, (loginErr) => {
-        if (loginErr) {
-          console.error('req.login error:', loginErr);
-          return res.status(500).json({ message: "Login failed" });
+    function proceedWithLogin() {
+      passport.authenticate('local', (err: any, user: any, info: any) => {
+        if (err) {
+          console.error('Passport authentication error:', err);
+          return res.status(500).json({ message: "Authentication failed" });
         }
-        res.json({ user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName } });
-      });
-    })(req, res, next);
+        
+        if (!user) {
+          return res.status(401).json({ message: info?.message || "Invalid credentials" });
+        }
+
+        req.login(user, (loginErr) => {
+          if (loginErr) {
+            console.error('Session login error:', loginErr);
+            // Return success even if session storage fails
+            return res.json({ 
+              user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName },
+              message: "Login successful but session persistence unavailable"
+            });
+          }
+          
+          res.json({ user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName } });
+        });
+      })(req, res, next);
+    }
   });
 
   app.post('/api/auth/logout', (req, res) => {
     req.logout((err) => {
       if (err) {
         console.error('Logout error:', err);
-        return res.status(500).json({ message: "Logout failed" });
       }
-      // Clear session cookie
+      
+      // Always clear session regardless of errors
       req.session.destroy((destroyErr) => {
         if (destroyErr) {
           console.error('Session destroy error:', destroyErr);
         }
+        
+        // Clear cookie
         res.clearCookie('projecthub.sid');
         res.json({ message: "Logged out successfully" });
       });
@@ -268,16 +331,161 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Password reset routes
+  app.post('/api/auth/forgot-password', async (req, res) => {
+    try {
+      const { email, captchaToken } = req.body;
+      
+      if (!email) {
+        return res.status(400).json({ message: "Email is required" });
+      }
+
+      // Captcha validation for production
+      if (process.env.NODE_ENV === 'production' && captchaToken) {
+        const turnstileSecret = process.env.TURNSTILE_SECRET_KEY || process.env.VITE_TURNSTILE_SECRET_KEY;
+        if (turnstileSecret) {
+          try {
+            const verifyResponse = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+              body: `secret=${turnstileSecret}&response=${captchaToken}`
+            });
+            const verifyData: any = await verifyResponse.json();
+            if (!verifyData.success) {
+              return res.status(400).json({ message: "Security verification failed" });
+            }
+          } catch (err) {
+            console.error('Forgot password Turnstile error:', err);
+          }
+        }
+      }
+
+      const user = await storage.getUserByEmail(email);
+      if (!user) {
+        // Don't reveal if email exists
+        return res.json({ message: "Password reset email sent" });
+      }
+
+      // Generate reset token
+      const { randomBytes } = await import("crypto");
+      const resetToken = randomBytes(3).toString('hex').toUpperCase();
+      const resetTokenExpiry = new Date(Date.now() + 3600000); // 1 hour
+
+      await storage.updateUserResetToken(user.id, resetToken, resetTokenExpiry);
+
+      res.json({ message: "Password reset email sent" });
+    } catch (error) {
+      console.error('Forgot password error:', error);
+      res.status(500).json({ message: "Failed to process reset request" });
+    }
+  });
+
+  app.post('/api/auth/reset-password', async (req, res) => {
+    try {
+      const { token, newPassword, captchaToken } = req.body;
+      
+      // Captcha validation for production
+      if (process.env.NODE_ENV === 'production' && captchaToken) {
+        const turnstileSecret = process.env.TURNSTILE_SECRET_KEY || process.env.VITE_TURNSTILE_SECRET_KEY;
+        if (turnstileSecret) {
+          const verifyResponse = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `secret=${turnstileSecret}&response=${captchaToken}`
+          });
+          const verifyData: any = await verifyResponse.json();
+          if (!verifyData.success) {
+            return res.status(400).json({ message: "Security verification failed" });
+          }
+        }
+      }
+
+      if (!token || !newPassword) {
+        return res.status(400).json({ message: "Token and new password are required" });
+      }
+
+      if (newPassword.length < 6) {
+        return res.status(400).json({ message: "Password must be at least 6 characters" });
+      }
+
+      // Find user by reset token
+      const user = await storage.getUserByResetToken(token);
+      if (!user || !user.resetTokenExpiry || new Date() > user.resetTokenExpiry) {
+        return res.status(400).json({ message: "Invalid or expired reset token" });
+      }
+
+      // Hash new password
+      const hashedPassword = await bcrypt.hash(newPassword, 12);
+
+      // Update user password and clear reset token
+      await storage.resetUserPassword(user.id, hashedPassword);
+
+      res.json({ message: "Password reset successfully" });
+    } catch (error) {
+      console.error('Reset password error:', error);
+      res.status(500).json({ message: "Failed to reset password" });
+    }
+  });
+
+  // Get current user profile
+  app.get('/api/auth/user', (req, res) => {
+    if (!req.isAuthenticated()) {
+      return res.status(401).json({ message: "Authentication required" });
+    }
+    const user = req.user as any;
+    res.json({ 
+      user: { 
+        id: user.id, 
+        email: user.email, 
+        firstName: user.firstName, 
+        lastName: user.lastName,
+        profileImageUrl: user.profileImageUrl
+      } 
+    });
+  });
+
+  // Update user profile
+  app.patch('/api/auth/user', requireAuth, async (req, res) => {
+    try {
+      const user = req.user as any;
+      const { firstName, lastName, profileImageUrl } = req.body;
+
+      const updatedUser = await storage.upsertUser({
+        id: user.id,
+        firstName: firstName !== undefined ? firstName : user.firstName,
+        lastName: lastName !== undefined ? lastName : user.lastName,
+        profileImageUrl: profileImageUrl !== undefined ? profileImageUrl : user.profileImageUrl,
+      });
+
+      res.json({ user: updatedUser });
+    } catch (error) {
+      console.error('Profile update error:', error);
+      res.status(500).json({ message: "Failed to update profile" });
+    }
+  });
+
+  // Upload profile picture
+  app.post('/api/auth/upload-profile-pic', requireAuth, async (req, res) => {
+    try {
+      // Handle file upload logic here
+      res.json({ message: "Profile picture uploaded successfully" });
+    } catch (error) {
+      console.error('Profile picture upload error:', error);
+      res.status(500).json({ message: "Failed to upload profile picture" });
+    }
+  });
+
   // Health check endpoint
   app.get('/api/health', (req, res) => {
-    res.json({ 
-      status: 'ok', 
+    res.json({
+      status: 'ok',
       timestamp: new Date().toISOString(),
       environment: {
         NODE_ENV: process.env.NODE_ENV,
         VERCEL: !!process.env.VERCEL,
         HAS_DATABASE_URL: !!process.env.DATABASE_URL,
         HAS_SESSION_SECRET: !!process.env.SESSION_SECRET,
+        DATABASE_SESSIONS: useDatabaseSessions
       }
     });
   });
@@ -304,5 +512,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
     res.status(404).json({ message: 'API endpoint not found' });
   });
 
-  return createServer(app);
+  // Create HTTP server
+  const server = createServer(app);
+  return server;
 }

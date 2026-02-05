@@ -41,12 +41,15 @@ passport.use(new LocalStrategy({
 
     console.log('Login successful for user:', email);
     return done(null, user);
-  } catch (error) {
+  } catch (error: any) {
     console.error('Login error:', error);
-    return done(error);
+    // Return a more user-friendly error message
+    if (error.code === 'ETIMEDOUT' || error.message?.includes('timeout')) {
+      return done(null, false, { message: 'Service temporarily unavailable. Please try again.' });
+    }
+    return done(null, false, { message: 'Login failed. Please try again.' });
   }
 }));
-
 
 // Discord Strategy
 passport.use(new DiscordStrategy({
@@ -58,6 +61,7 @@ passport.use(new DiscordStrategy({
   if (process.env.DISCORD_CLIENT_ID === "placeholder") {
     return done(new Error("Discord Client ID is missing"));
   }
+  
   try {
     let user = await storage.getUserBySocialId('discord', profile.id);
 
@@ -76,15 +80,23 @@ passport.use(new DiscordStrategy({
     }
 
     return done(null, user);
-  } catch (error) {
-    return done(error);
+  } catch (error: any) {
+    console.error('Discord login error:', error);
+    if (error.code === 'ETIMEDOUT') {
+      return done(null, false, { message: 'Service temporarily unavailable. Please try again.' });
+    }
+    return done(null, false, { message: 'Discord login failed. Please try again.' });
   }
 }));
 
-
 // Serialize user for session
 passport.serializeUser((user: any, done) => {
-  done(null, user.id);
+  try {
+    done(null, user.id);
+  } catch (error) {
+    console.error('Serialize user error:', error);
+    done(error);
+  }
 });
 
 // Deserialize user from session
@@ -92,8 +104,13 @@ passport.deserializeUser(async (id: any, done) => {
   try {
     const user = await storage.getUser(id);
     done(null, user || false);
-  } catch (error) {
-    done(error);
+  } catch (error: any) {
+    console.error('Deserialize user error:', error);
+    if (error.code === 'ETIMEDOUT') {
+      done(null, false); // Fail silently for timeout errors
+    } else {
+      done(error);
+    }
   }
 });
 
