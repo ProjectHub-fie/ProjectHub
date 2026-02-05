@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 import { useState } from "react";
+=======
+import { useState, useRef, useEffect } from "react";
+>>>>>>> 0b6757d (Add security check to prevent bots from accessing the admin login)
 import { useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,6 +17,17 @@ export default function AdminLoginPage() {
   const [password, setPassword] = useState("");
   const { toast } = useToast();
   const [, setLocation] = useLocation();
+
+  // Add a listener to handle the turnstile challenge
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data?.type === 'cf-turnstile-response') {
+        console.log("Turnstile response received");
+      }
+    };
+    window.addEventListener('message', handleMessage);
+    return () => window.removeEventListener('message', handleMessage);
+  }, []);
 
   const loginMutation = useMutation({
     mutationFn: async ({ pin, password }: { pin: string; password: string }) => {
@@ -40,6 +55,7 @@ export default function AdminLoginPage() {
     }
   });
 
+<<<<<<< HEAD
   const getRoleIcon = (role: string) => {
     switch (role) {
       case 'owner': return <Crown className="h-4 w-4 text-yellow-500" />;
@@ -57,6 +73,9 @@ export default function AdminLoginPage() {
       default: return '';
     }
   };
+=======
+  const siteKey = import.meta.env.VITE_TURNSTILE_SITE_KEY;
+>>>>>>> 0b6757d (Add security check to prevent bots from accessing the admin login)
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
@@ -95,6 +114,32 @@ export default function AdminLoginPage() {
               />
             </div>
             
+<<<<<<< HEAD
+=======
+            <div className="flex justify-center py-2 min-h-[65px]">
+              {siteKey ? (
+                <Turnstile
+                  ref={turnstileRef}
+                  siteKey={siteKey}
+                  onSuccess={(token) => setTurnstileToken(token)}
+                  onExpire={() => setTurnstileToken(null)}
+                  onError={(err) => {
+                    console.error("Turnstile error:", err);
+                    setTurnstileToken(null);
+                  }}
+                  options={{
+                    theme: 'light',
+                    size: 'normal',
+                  }}
+                />
+              ) : (
+                <div className="text-destructive text-xs">
+                  Turnstile Site Key missing. Please check environment variables.
+                </div>
+              )}
+            </div>
+
+>>>>>>> 0b6757d (Add security check to prevent bots from accessing the admin login)
             <Button 
               type="submit" 
               className="w-full"
