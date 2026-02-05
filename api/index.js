@@ -23,6 +23,35 @@ export default async function handler(req, res) {
   const url = new URL(req.url, `http://${req.headers.host}`);
   const path = url.pathname.replace(/^\/api/, '');
 
+  // Health check endpoint
+  if (path === '/health') {
+    return res.json({
+      status: 'ok',
+      timestamp: new Date().toISOString(),
+      environment: {
+        NODE_ENV: process.env.NODE_ENV,
+        VERCEL: !!process.env.VERCEL,
+        DATABASE_URL: !!process.env.DATABASE_URL,
+        SESSION_SECRET: !!process.env.SESSION_SECRET,
+      }
+    });
+  }
+
+  // Debug endpoint for environment variables (only in development)
+  if (path === '/debug/env' && process.env.NODE_ENV === 'development') {
+    return res.json({
+      DATABASE_URL: process.env.DATABASE_URL ? 'SET' : 'NOT_SET',
+      SESSION_SECRET: process.env.SESSION_SECRET ? 'SET' : 'NOT_SET',
+      RESEND_API_KEY: process.env.RESEND_API_KEY ? 'SET' : 'NOT_SET',
+      TURNSTILE_SECRET_KEY: process.env.TURNSTILE_SECRET_KEY ? 'SET' : 'NOT_SET',
+      DISCORD_CLIENT_ID: process.env.DISCORD_CLIENT_ID ? 'SET' : 'NOT_SET',
+      NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
+      VERCEL_URL: process.env.VERCEL_URL,
+      NODE_ENV: process.env.NODE_ENV,
+      VERCEL: process.env.VERCEL,
+    });
+  }
+
   if (path.startsWith('/projects/')) {
     const parts = path.split('/');
     if (parts.length >= 3) {

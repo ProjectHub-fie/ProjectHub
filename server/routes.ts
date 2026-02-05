@@ -8,6 +8,20 @@ import { insertProjectRequestSchema } from "./../shared/schema.js";
 import pg from "pg";
 import connectPgSimple from "connect-pg-simple";
 
+// Extend Express Request type to include user
+declare global {
+  namespace Express {
+    interface User {
+      id: string;
+      email: string | null;
+      firstName: string | null;
+      lastName: string | null;
+      isBlocked?: boolean;
+      profileImageUrl?: string | null;
+    }
+  }
+}
+
 // Middleware to check if user is authenticated and not blocked
 function requireAuth(req: any, res: any, next: any) {
   if (req.isAuthenticated()) {
@@ -24,12 +38,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   // Trust proxy for Vercel
   app.set('trust proxy', 1);
 
-  // Session configuration with PostgreSQL store
+  // Session configuration with improved Vercel compatibility
   const PgSession = connectPgSimple(session);
   const pgPool = new pg.Pool({
     connectionString: process.env.DATABASE_URL,
     ssl: { rejectUnauthorized: false }
   });
+  
+  // Determine if we're in production/Vercel environment
+  const isProduction = process.env.NODE_ENV === 'production' || !!process.env.VERCEL;
+  const cookieDomain = isProduction ? undefined : undefined; // Let browser handle domain
   
   app.use(session({
     store: new PgSession({
@@ -37,15 +55,18 @@ export async function registerRoutes(app: Express): Promise<Server> {
       tableName: 'sessions',
       createTableIfMissing: true,
     }),
-    secret: process.env.SESSION_SECRET || 'fallback-secret-key',
+    secret: process.env.SESSION_SECRET || 'fallback-secret-key-for-development-only-do-not-use-in-production',
     resave: false,
     saveUninitialized: false,
     proxy: true,
+    name: 'projecthub.sid', // Custom session cookie name
     cookie: {
-      secure: true,
-      sameSite: 'none',
+      secure: isProduction, // Only secure in production
+      sameSite: isProduction ? 'none' : 'lax', // 'none' for cross-origin in production
       httpOnly: true,
-      maxAge: 24 * 60 * 60 * 1000 // 24 hours
+      maxAge: 24 * 60 * 60 * 1000, // 24 hours
+      domain: cookieDomain,
+      path: '/'
     }
   }));
 
@@ -53,31 +74,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.use(passport.initialize());
   app.use(passport.session());
 
+  // Enhanced error logging
+  app.use((err: any, req: any, res: any, next: any) => {
+    console.error('Session error:', err);
+    next(err);
+  });
+
   // Auth routes
   app.post('/api/auth/register', async (req, res) => {
     try {
       const { email, password, firstName, lastName, captchaToken } = req.body;
-
-      if (captchaToken) {
-        const turnstileSecret = process.env.TURNSTILE_SECRET_KEY || process.env.VITE_TURNSTILE_SECRET_KEY || "1x0000000000000000000000000000000AA";
-        console.log('Verifying Turnstile token, secret present:', !!(process.env.TURNSTILE_SECRET_KEY || process.env.VITE_TURNSTILE_SECRET_KEY));
-        if (turnstileSecret) {
-          try {
-            const verifyResponse = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-              body: `secret=${turnstileSecret}&response=${captchaToken}`
-            });
-            const verifyData: any = await verifyResponse.json();
-            if (!verifyData.success) {
-              console.error('Turnstile verification failed:', verifyData);
-              return res.status(400).json({ message: "Security verification failed" });
-            }
-          } catch (verifyError) {
-            console.error('Turnstile fetch error:', verifyError);
-          }
-        }
-      }
 
       // Validate required fields
       if (!email || !password || !firstName || !lastName) {
@@ -87,26 +93,32 @@ export async function registerRoutes(app: Express): Promise<Server> {
       // Check if user already exists
       const existingUser = await storage.getUserByEmail(email);
       if (existingUser) {
-        return res.status(400).json({ message: "Email already registered" });
+        return res.status(409).json({ message: "Email already registered" });
       }
 
       // Hash password
-      const hashedPassword = await bcrypt.hash(password, 10);
+      const hashedPassword = await bcrypt.hash(password, 12);
 
       // Create user
       const user = await storage.upsertUser({
         email,
-        firstName,
-        lastName,
         password: hashedPassword,
+        firstName,
+        lastName
       });
 
-      // Log user in
-      req.login(user, (err) => {
-        if (err) {
-          return res.status(500).json({ message: "Registration successful but login failed" });
+      // Log user in automatically after registration
+      req.login(user, (loginErr) => {
+        if (loginErr) {
+          console.error('Auto-login after registration failed:', loginErr);
+          return res.status(201).json({ 
+            message: "Registration successful", 
+            user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName } 
+          });
         }
-        res.json({ user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName } });
+        res.status(201).json({ 
+          user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName } 
+        });
       });
     } catch (error) {
       console.error('Registration error:', error);
@@ -180,423 +192,117 @@ export async function registerRoutes(app: Express): Promise<Server> {
   app.post('/api/auth/logout', (req, res) => {
     req.logout((err) => {
       if (err) {
+        console.error('Logout error:', err);
         return res.status(500).json({ message: "Logout failed" });
       }
-      res.json({ message: "Logged out successfully" });
+      // Clear session cookie
+      req.session.destroy((destroyErr) => {
+        if (destroyErr) {
+          console.error('Session destroy error:', destroyErr);
+        }
+        res.clearCookie('projecthub.sid');
+        res.json({ message: "Logged out successfully" });
+      });
     });
   });
 
-  // Forgot password endpoint
-  app.post('/api/auth/forgot-password', async (req, res) => {
-    try {
-      const { email, captchaToken } = req.body;
-
-      if (captchaToken) {
-        const turnstileSecret = process.env.TURNSTILE_SECRET_KEY || process.env.VITE_TURNSTILE_SECRET_KEY || "1x0000000000000000000000000000000AA";
-        if (turnstileSecret) {
-          const verifyResponse = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: `secret=${turnstileSecret}&response=${captchaToken}`
-          });
-          const verifyData: any = await verifyResponse.json();
-          if (!verifyData.success) {
-            return res.status(400).json({ message: "Security verification failed" });
-          }
-        }
-      }
-
-      if (!email) {
-        return res.status(400).json({ message: "Email is required" });
-      }
-
-      // Check if user exists
-      const user = await storage.getUserByEmail(email);
-      if (!user) {
-        // Don't reveal if email exists or not for security
-        return res.json({ message: "If an account with that email exists, you will receive a reset email" });
-      }
-
-      // Generate reset token
-      const { randomBytes } = await import("crypto");
-      const resetToken = randomBytes(3).toString('hex').toUpperCase(); // 6 character alphanumeric code
-      const resetTokenExpiry = new Date(Date.now() + 3600000); // 1 hour from now
-
-      // Save reset token to user
-      await storage.updateUserResetToken(user.id, resetToken, resetTokenExpiry);
-
-      // Send reset email using Mailjet
-      const Mailjet = (await import('node-mailjet')).default;
-      const mailjet = Mailjet.apiConnect(
-        process.env.MAILJET_API_KEY || '',
-        process.env.MAILJET_API_SECRET || ''
-      );
-
-      const resetTokenLink = `${req.protocol}://${req.get('host')}/reset-password?token=${resetToken}`;
-      
-      await mailjet
-        .post("send", { version: 'v3.1' })
-        .request({
-          Messages: [
-            {
-              From: {
-                Email: process.env.EMAIL_USER || 'dev.projecthub.fie@gmail.com',
-                Name: "ProjectHub"
-              },
-              To: [
-                {
-                  Email: email,
-                  Name: user.firstName || ''
-                }
-              ],
-              Subject: "Password Reset Request",
-              HTMLPart: `
-                <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #e2e8f0; border-radius: 8px;">
-                  <h2 style="color: #3b82f6; margin-bottom: 20px;">Password Reset Request</h2>
-                  <p>Hello ${user.firstName},</p>
-                  <p>You requested to reset your password for ProjectHub. Use the verification code below to complete the process:</p>
-                  <div style="background-color: #f8fafc; padding: 15px; text-align: center; border-radius: 6px; margin: 25px 0;">
-                    <span style="font-size: 32px; font-weight: bold; letter-spacing: 5px; color: #1e293b;">${resetToken}</span>
-                  </div>
-                  <p>Alternatively, click the button below to reset your password:</p>
-                  <div style="text-align: center; margin: 30px 0;">
-                    <a href="${resetTokenLink}" style="background-color: #3b82f6; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; font-weight: bold;">Reset Password</a>
-                  </div>
-                  <p style="color: #64748b; font-size: 14px;">This code will expire in 1 hour. If you didn't request this, please ignore this email.</p>
-                  <hr style="border: 0; border-top: 1px solid #e2e8f0; margin: 30px 0;">
-                  <p style="color: #94a3b8; font-size: 12px; text-align: center;">ProjectHub Security Team</p>
-                </div>
-              `
-            }
-          ]
-        });
-
-      res.json({ message: "If an account with that email exists, you will receive a reset email" });
-    } catch (error) {
-      console.error('Forgot password error:', error);
-      res.status(500).json({ message: "Failed to process password reset request" });
-    }
+  // Profile routes
+  app.get('/api/auth/me', requireAuth, (req, res) => {
+    res.json({ user: req.user });
   });
 
-  // Reset password endpoint
-  app.post('/api/auth/reset-password', async (req, res) => {
-    try {
-      const { token, newPassword, captchaToken } = req.body;
-
-      if (captchaToken) {
-        const turnstileSecret = process.env.TURNSTILE_SECRET_KEY || process.env.VITE_TURNSTILE_SECRET_KEY || "1x0000000000000000000000000000000AA";
-        if (turnstileSecret) {
-          const verifyResponse = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: `secret=${turnstileSecret}&response=${captchaToken}`
-          });
-          const verifyData: any = await verifyResponse.json();
-          if (!verifyData.success) {
-            return res.status(400).json({ message: "Security verification failed" });
-          }
-        }
-      }
-
-      if (!token || !newPassword) {
-        return res.status(400).json({ message: "Token and new password are required" });
-      }
-
-      if (newPassword.length < 6) {
-        return res.status(400).json({ message: "Password must be at least 6 characters" });
-      }
-
-      // Find user by reset token
-      const user = await storage.getUserByResetToken(token);
-      if (!user || !user.resetTokenExpiry || new Date() > user.resetTokenExpiry) {
-        return res.status(400).json({ message: "Invalid or expired reset token" });
-      }
-
-      // Hash new password
-      const hashedPassword = await bcrypt.hash(newPassword, 10);
-
-      // Update user password and clear reset token
-      await storage.resetUserPassword(user.id, hashedPassword);
-
-      res.json({ message: "Password reset successfully" });
-    } catch (error) {
-      console.error('Reset password error:', error);
-      res.status(500).json({ message: "Failed to reset password" });
-    }
-  });
-
-  // Discord OAuth routes - enabled when Discord credentials are available
-  app.get('/api/auth/discord', (req, res, next) => {
-    const { captchaToken } = req.query;
-    if (!captchaToken && process.env.NODE_ENV === 'production') {
-      return res.status(400).json({ message: "Captcha token required" });
-    }
-    // Store captcha token in session to verify in callback
-    (req.session as any).discordCaptchaToken = captchaToken;
-    passport.authenticate('discord')(req, res, next);
-  });
-
-  app.get('/api/auth/discord/callback', async (req, res, next) => {
-    const captchaToken = (req.session as any).discordCaptchaToken;
-    
-    if (captchaToken) {
-      const turnstileSecret = process.env.TURNSTILE_SECRET_KEY || process.env.VITE_TURNSTILE_SECRET_KEY || "1x0000000000000000000000000000000AA";
-      if (turnstileSecret) {
-        try {
-          const verifyResponse = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: `secret=${turnstileSecret}&response=${captchaToken}`
-          });
-          const verifyData: any = await verifyResponse.json();
-          if (!verifyData.success) {
-            delete (req.session as any).discordCaptchaToken;
-            return res.redirect('/login?error=captcha_failed');
-          }
-        } catch (err) {
-          console.error('Discord callback Turnstile verification error:', err);
-        }
-      }
-    }
-    delete (req.session as any).discordCaptchaToken;
-
-    passport.authenticate('discord', { 
-      failureRedirect: '/login?error=discord_failed',
-      successRedirect: '/dashboard?login=success'
-    })(req, res, next);
-  });
-
-  // No-op for removed /api/auth/me
-  app.get('/api/auth/me', (req, res) => {
-    res.status(410).json({ message: "Endpoint removed" });
-  });
-
-  // Get current user profile
-  app.get('/api/auth/user', (req, res) => {
-    if (!req.isAuthenticated()) {
-      return res.status(401).json({ message: "Authentication required" });
-    }
-    const user = req.user as any;
-    res.json({ 
-      user: { 
-        id: user.id, 
-        email: user.email, 
-        firstName: user.firstName, 
-        lastName: user.lastName,
-        profileImageUrl: user.profileImageUrl
-      } 
-    });
-  });
-
-  // Update user profile
   app.patch('/api/auth/user', requireAuth, async (req, res) => {
     try {
-      const user = req.user as any;
       const { firstName, lastName, profileImageUrl } = req.body;
+      const userId = (req.user as Express.User)?.id;
+
+      if (!userId) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
 
       const updatedUser = await storage.upsertUser({
-        id: user.id,
-        firstName: firstName !== undefined ? firstName : user.firstName,
-        lastName: lastName !== undefined ? lastName : user.lastName,
-        profileImageUrl: profileImageUrl !== undefined ? profileImageUrl : user.profileImageUrl,
+        id: userId,
+        firstName,
+        lastName,
+        profileImageUrl
       });
 
-      // Synchronize the session
-      req.login(updatedUser, (err) => {
-        if (err) {
-          console.error('Error re-logging user after profile update:', err);
-          return res.status(500).json({ message: "Failed to update session" });
-        }
-        res.json({ 
-          user: { 
-            id: updatedUser.id, 
-            email: updatedUser.email, 
-            firstName: updatedUser.firstName, 
-            lastName: updatedUser.lastName,
-            profileImageUrl: updatedUser.profileImageUrl
-          } 
-        });
-      });
+      res.json({ user: updatedUser });
     } catch (error) {
       console.error('Profile update error:', error);
       res.status(500).json({ message: "Failed to update profile" });
     }
   });
 
-  // Profile picture upload
-  const multer = (await import('multer')).default;
-  const upload = multer({ 
-    limits: { fileSize: 5 * 1024 * 1024 }, // 5MB limit
-    storage: multer.memoryStorage()
-  });
-
-  app.post('/api/auth/upload-profile-pic', requireAuth, upload.single('file'), async (req: any, res: any) => {
-    try {
-      if (!req.file) {
-        return res.status(400).json({ message: "No file uploaded" });
-      }
-
-    const user = req.user as any;
-    const base64Image = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
-    
-    const updatedUser = await storage.upsertUser({
-      id: user.id,
-      profileImageUrl: base64Image
-    });
-
-    // Update the user in the session
-    req.login(updatedUser, (err: any) => {
-        if (err) {
-          console.error('Error re-logging user after picture upload:', err);
-          return res.status(500).json({ message: "Failed to update session" });
-        }
-        res.json({ 
-          user: { 
-            id: updatedUser.id,
-            profileImageUrl: updatedUser.profileImageUrl
-          } 
-        });
-      });
-    } catch (error) {
-      console.error('Upload error:', error);
-      res.status(500).json({ message: "Failed to upload image" });
-    }
-  });
-
-  // Contact form endpoint
-  app.post('/api/contact', async (req: any, res: any) => {
-    try {
-      const { name, email, subject, message, captchaToken } = req.body;
-
-      // Always try to verify if token is present
-      if (captchaToken) {
-        const turnstileSecret = process.env.TURNSTILE_SECRET_KEY || process.env.VITE_TURNSTILE_SECRET_KEY || "1x0000000000000000000000000000000AA";
-        console.log('Verifying Turnstile token, secret present:', !!(process.env.TURNSTILE_SECRET_KEY || process.env.VITE_TURNSTILE_SECRET_KEY));
-        if (turnstileSecret) {
-          try {
-            const verifyResponse = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-              body: `secret=${turnstileSecret}&response=${captchaToken}`
-            });
-            const verifyData: any = await verifyResponse.json();
-            if (!verifyData.success) {
-              console.error('Turnstile verification failed:', verifyData);
-              return res.status(400).json({ message: "Security verification failed" });
-            }
-          } catch (verifyError) {
-            console.error('Turnstile fetch error:', verifyError);
-          }
-        }
-      }
-
-      if (!process.env.RESEND_API_KEY) {
-        return res.status(500).json({ message: "Email service not configured" });
-      }
-
-      const { Resend } = await import('resend');
-      const resend = new Resend(process.env.RESEND_API_KEY);
-
-      const { data, error } = await resend.emails.send({
-        from: 'Contact Form <onboarding@resend.dev>',
-        to: process.env.EMAIL_USER || 'dev.projecthub.fie@gmail.com',
-        subject: `New Contact Form: ${subject}`,
-        replyTo: email,
-        html: `
-          <h2>New Contact Form Submission</h2>
-          <p><strong>Name:</strong> ${name}</p>
-          <p><strong>Email:</strong> ${email}</p>
-          <p><strong>Subject:</strong> ${subject}</p>
-          <p><strong>Message:</strong></p>
-          <p>${message.replace(/\n/g, '<br>')}</p>
-          <hr>
-          <p><em>Sent from ProjectHub contact form via Resend</em></p>
-        `,
-      });
-
-      if (error) {
-        console.error('Resend error:', error);
-        return res.status(500).json({ message: "Failed to send email" });
-      }
-
-      res.json({ message: "Contact form submitted successfully" });
-    } catch (error) {
-      console.error('Contact form error:', error);
-      res.status(500).json({ message: "Failed to submit contact form" });
-    }
-  });
-
   // Project request routes
   app.post('/api/project-requests', requireAuth, async (req, res) => {
     try {
-      const user = req.user as any;
       const validatedData = insertProjectRequestSchema.parse({
         ...req.body,
-        userId: user.id
+        userId: (req.user as Express.User)?.id
       });
 
       const projectRequest = await storage.createProjectRequest(validatedData);
-      res.json(projectRequest);
-    } catch (error) {
-      console.error('Project request creation error:', error);
+      res.status(201).json(projectRequest);
+    } catch (error: any) {
+      console.error('Project request error:', error);
+      if (error.name === 'ZodError') {
+        return res.status(400).json({ message: "Invalid request data", errors: error.errors });
+      }
       res.status(500).json({ message: "Failed to create project request" });
     }
   });
 
   app.get('/api/project-requests', requireAuth, async (req, res) => {
     try {
-      const user = req.user as any;
-      const requests = await storage.getProjectRequests(user.id);
+      const userId = (req.user as Express.User)?.id;
+      if (!userId) {
+        return res.status(401).json({ message: "Not authenticated" });
+      }
+
+      const requests = await storage.getProjectRequests(userId);
       res.json(requests);
     } catch (error) {
-      console.error('Project requests fetch error:', error);
+      console.error('Get project requests error:', error);
       res.status(500).json({ message: "Failed to fetch project requests" });
     }
   });
 
-  app.get('/api/projects/:projectId/interactions', async (req, res) => {
-    try {
-      const { projectId } = req.params;
-      const { likes, averageRating } = await storage.getProjectInteractions(projectId);
-      
-      let userInteraction: any = null;
-      if (req.isAuthenticated()) {
-        const user = req.user as any;
-        const interaction = await storage.getUserInteraction(projectId, user.id);
-        userInteraction = interaction || null;
+  // Health check endpoint
+  app.get('/api/health', (req, res) => {
+    res.json({ 
+      status: 'ok', 
+      timestamp: new Date().toISOString(),
+      environment: {
+        NODE_ENV: process.env.NODE_ENV,
+        VERCEL: !!process.env.VERCEL,
+        HAS_DATABASE_URL: !!process.env.DATABASE_URL,
+        HAS_SESSION_SECRET: !!process.env.SESSION_SECRET,
       }
-      
-      res.json({ 
-        likes, 
-        averageRating, 
-        userInteraction 
-      });
-    } catch (error) {
-      console.error('Fetch interactions error:', error);
-      res.status(500).json({ message: "Failed to fetch project interactions" });
-    }
+    });
   });
 
-  app.post('/api/projects/:projectId/interactions', requireAuth, async (req, res) => {
-    try {
-      const { projectId } = req.params;
-      const user = req.user as any;
-      const { isLiked, rating } = req.body;
-
-      const interaction = await storage.upsertProjectInteraction({
-        projectId,
-        userId: user.id,
-        isLiked: isLiked?.toString(),
-        rating: rating?.toString(),
+  // Debug endpoint for development
+  if (process.env.NODE_ENV === 'development') {
+    app.get('/api/debug/env', (req, res) => {
+      res.json({
+        DATABASE_URL: process.env.DATABASE_URL ? 'SET' : 'NOT_SET',
+        SESSION_SECRET: process.env.SESSION_SECRET ? 'SET' : 'NOT_SET',
+        RESEND_API_KEY: process.env.RESEND_API_KEY ? 'SET' : 'NOT_SET',
+        TURNSTILE_SECRET_KEY: process.env.TURNSTILE_SECRET_KEY ? 'SET' : 'NOT_SET',
+        DISCORD_CLIENT_ID: process.env.DISCORD_CLIENT_ID ? 'SET' : 'NOT_SET',
+        NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
+        VERCEL_URL: process.env.VERCEL_URL,
+        NODE_ENV: process.env.NODE_ENV,
+        VERCEL: process.env.VERCEL,
       });
+    });
+  }
 
-      res.json(interaction);
-    } catch (error) {
-      console.error('Update interaction error:', error);
-      res.status(500).json({ message: "Failed to update project interaction" });
-    }
+  // Catch-all for undefined routes
+  app.use('/api/*', (req, res) => {
+    res.status(404).json({ message: 'API endpoint not found' });
   });
 
-  const httpServer = createServer(app);
-  return httpServer;
+  return createServer(app);
 }
