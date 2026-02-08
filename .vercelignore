@@ -30,6 +30,11 @@ testing/
 temp-tests/
 *.test.*
 
+# Build scripts to exclude (keep build-vercel.mjs)
+scripts/setup-testdb.js
+scripts/verify-deployment.js
+scripts/verify-imports.js
+
 # TypeScript files with JavaScript equivalents (to prevent Vercel conflicts)
 **/*.ts
 !**/node_modules/**/*.ts
@@ -90,8 +95,7 @@ CHANGELOG.md
 TROUBLESHOOTING.md
 netlify.toml
 
-# Build and development scripts
-scripts/
+# Build output directories
 build/
 dist/
 
