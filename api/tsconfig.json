@@ -9,11 +9,13 @@
     "skipLibCheck": true,
     "forceConsistentCasingInFileNames": true,
     "outDir": "./dist",
-    "rootDir": ".",
+    "rootDir": "..",
     "types": ["node"],
     "resolveJsonModule": true
   },
   "include": [
+    "../shared/**/*.ts",
+    "../drizzle/**/*.ts",
     "**/*.ts",
     "**/*.js"
   ],
