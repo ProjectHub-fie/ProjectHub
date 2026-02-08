@@ -13,6 +13,14 @@ Due to Vercel's 12 serverless function limit, all API endpoints are consolidated
 - `/api/contact` - Contact form endpoint
 - `/api/project-requests` - Project requests endpoint
 
+## Framework Information
+
+This project uses:
+- **Frontend**: React 18 + TypeScript + Vite
+- **Backend**: Node.js + Express.js (no Next.js)
+- **Database**: PostgreSQL with Drizzle ORM
+- **Deployment**: Vercel (serverless functions)
+
 ## Common Authentication Issues and Solutions
 
 ### 1. Login Returns 401 Unauthorized
@@ -28,7 +36,7 @@ Due to Vercel's 12 serverless function limit, all API endpoints are consolidated
    ```
 4. Create a test user using the debug endpoint:
    ```
-   POST /api/debug/create-test-user (development only)
+   POST /api/debug/create-test-user
    ```
 
 **Solutions**:
@@ -49,18 +57,7 @@ Due to Vercel's 12 serverless function limit, all API endpoints are consolidated
 
 **Solutions**:
 - Ensure `NEXT_PUBLIC_APP_URL` matches your Vercel domain exactly
-- Verify cookie settings in authentication handlers:
-  ```javascript
-  const isProd = process.env.NODE_ENV === 'production' || !!process.env.VERCEL;
-  const cookieOptions = [
-    `connect.sid=${sessionToken}`,
-    'Path=/', 
-    'HttpOnly', 
-    `SameSite=${isProd ? 'None' : 'Lax'}`, 
-    isProd ? 'Secure' : '', 
-    'Max-Age=86400'
-  ].filter(Boolean).join('; ');
-  ```
+- Verify cookie settings in authentication handlers
 - Check that your domain allows third-party cookies if needed
 
 ### 3. CORS Errors During Authentication
@@ -74,11 +71,7 @@ Due to Vercel's 12 serverless function limit, all API endpoints are consolidated
 
 **Solutions**:
 - Ensure `NEXT_PUBLIC_APP_URL` is set to your actual Vercel domain
-- Verify CORS headers in API handlers:
-  ```javascript
-  res.setHeader('Access-Control-Allow-Origin', isDev ? '*' : (allowedOrigins.includes(origin) ? origin : 'null'));
-  res.setHeader('Access-Control-Allow-Credentials', 'true');
-  ```
+- Verify CORS headers in API handlers
 - Make sure frontend requests include `credentials: 'include'`
 
 ### 4. Database Connection Failures

@@ -1,7 +1,6 @@
 import { parse } from "cookie";
 import { storage } from "../lib/storage.js";
 import multer from 'multer';
-import nc from "next-connect";
 
 const upload = multer({
   limits: { fileSize: 5 * 1024 * 1024 },
@@ -14,42 +13,43 @@ export const config = {
   },
 };
 
-const handler = nc()
-  .use((req, res, next) => {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-User-Session');
-    next();
-  })
-  .options((req, res) => {
-    res.status(200).end();
-  })
-  .get(async (req, res) => {
-    console.log('Profile GET request received');
-    console.log('Headers:', {
-      cookie: req.headers.cookie ? 'present' : 'missing',
-      'x-user-session': req.headers['x-user-session'] ? 'present' : 'missing',
-      authorization: req.headers.authorization ? 'present' : 'missing'
-    });
+export default async function handler(req, res) {
+  // Enable CORS
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-User-Session');
+  
+  // Handle preflight requests
+  if (req.method === 'OPTIONS') {
+    return res.status(200).end();
+  }
 
-    const cookies = parse(req.headers.cookie || '');
-    let sessionToken = cookies['connect.sid'] || req.headers['x-user-session'];
+  try {
+    if (req.method === 'GET') {
+      console.log('Profile GET request received');
+      console.log('Headers:', {
+        cookie: req.headers.cookie ? 'present' : 'missing',
+        'x-user-session': req.headers['x-user-session'] ? 'present' : 'missing',
+        authorization: req.headers.authorization ? 'present' : 'missing'
+      });
 
-    if (!sessionToken && req.headers.authorization) {
-      const authHeader = req.headers.authorization;
-      if (authHeader.startsWith('Bearer ')) {
-        sessionToken = authHeader.substring(7);
+      const cookies = parse(req.headers.cookie || '');
+      let sessionToken = cookies['connect.sid'] || req.headers['x-user-session'];
+
+      if (!sessionToken && req.headers.authorization) {
+        const authHeader = req.headers.authorization;
+        if (authHeader.startsWith('Bearer ')) {
+          sessionToken = authHeader.substring(7);
+        }
       }
-    }
 
-    console.log('Session token found:', !!sessionToken);
+      console.log('Session token found:', !!sessionToken);
 
-    if (!sessionToken) {
-      console.log('No session token found, returning 401');
-      return res.status(401).json({ user: null, message: "Authentication required" });
-    }
+      if (!sessionToken) {
+        console.log('No session token found, returning 401');
+        return res.status(401).json({ user: null, message: "Authentication required" });
+      }
 
-    try {
       const decodedSession = Buffer.from(sessionToken, 'base64').toString();
       console.log('Decoded session:', decodedSession);
       
@@ -73,15 +73,18 @@ const handler = nc()
       };
       
       console.log('Returning user data');
-      res.json({ user: responseUser });
-    } catch (e) {
-      console.error('Session parsing error:', e);
-      res.status(401).json({ user: null, message: "Invalid session" });
+      return res.json({ user: responseUser });
     }
-  })
-  .use(upload.single('file'))
-  .post(async (req, res) => {
-    try {
+
+    if (req.method === 'POST') {
+      // Process multipart form data with multer
+      await new Promise((resolve, reject) => {
+        upload.single('file')(req, res, (err) => {
+          if (err) reject(err);
+          else resolve();
+        });
+      });
+
       if (!req.file) return res.status(400).json({ message: "No file uploaded" });
       
       const cookies = parse(req.headers.cookie || '');
@@ -94,13 +97,10 @@ const handler = nc()
 
       const base64Image = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
       const updatedUser = await storage.upsertUser({ id: userData.id, profileImageUrl: base64Image });
-      res.json({ user: { id: updatedUser.id, profileImageUrl: updatedUser.profileImageUrl } });
-    } catch (error) {
-      res.status(500).json({ message: "Failed to upload image" });
+      return res.json({ user: { id: updatedUser.id, profileImageUrl: updatedUser.profileImageUrl } });
     }
-  })
-  .patch(async (req, res) => {
-    try {
+
+    if (req.method === 'PATCH') {
       const cookies = parse(req.headers.cookie || '');
       let sessionToken = cookies['connect.sid'] || req.headers['x-user-session'];
       
@@ -108,7 +108,17 @@ const handler = nc()
       
       const decodedSession = Buffer.from(sessionToken, 'base64').toString();
       const userData = JSON.parse(decodedSession);
-      const { firstName, lastName } = req.body;
+      
+      let body = {};
+      if (req.headers['content-type']?.includes('application/json')) {
+        const chunks = [];
+        for await (const chunk of req) {
+          chunks.push(chunk);
+        }
+        body = JSON.parse(Buffer.concat(chunks).toString());
+      }
+
+      const { firstName, lastName } = body;
 
       const updatedUser = await storage.upsertUser({ 
         id: userData.id, 
@@ -116,7 +126,7 @@ const handler = nc()
         lastName: lastName || undefined 
       });
       
-      res.json({ 
+      return res.json({ 
         user: { 
           id: updatedUser.id, 
           email: updatedUser.email, 
@@ -125,9 +135,11 @@ const handler = nc()
           profileImageUrl: updatedUser.profileImageUrl 
         } 
       });
-    } catch (error) {
-      res.status(500).json({ message: "Failed to update profile" });
     }
-  });
 
-export default handler;
+    return res.status(405).json({ message: "Method not allowed" });
+  } catch (error) {
+    console.error('Profile handler error:', error);
+    return res.status(500).json({ message: "Internal server error" });
+  }
+}
