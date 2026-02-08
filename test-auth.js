@@ -1,6 +1,6 @@
 // Simple test script to verify authentication functionality
 async function testAuth() {
-  const baseUrl = 'http://localhost:5173'; // Adjust this to your Vercel URL when deployed
+  const baseUrl = 'http://localhost:5000'; // Fixed to match the server port
   
   console.log('🧪 Testing Authentication Flow\n');
   

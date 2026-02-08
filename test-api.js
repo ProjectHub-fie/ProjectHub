@@ -1,6 +1,6 @@
 // Simple test script to verify API functionality
 async function testAPI() {
-  const baseUrl = process.argv[2] || 'http://localhost:5173';
+  const baseUrl = process.argv[2] || 'http://localhost:5000';
   
   console.log(`🧪 Testing API endpoints on ${baseUrl}\n`);
   

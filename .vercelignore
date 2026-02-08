@@ -1,0 +1,29 @@
+# Test files and directories
+test*
+test-*
+tests/
+__tests__/
+spec/
+specs/
+
+# Individual test files
+*-test.js
+*.test.js
+*.spec.js
+test-*.js
+test.js
+
+# Test scripts and utilities
+test-api.js
+test-auth.js
+test-db.js
+test-imports.js
+test-integration.js
+detailed-auth-test.js
+setup-testdb.js
+
+# Test utilities and temporary files
+test-utils/
+testing/
+temp-tests/
+*.test.*
