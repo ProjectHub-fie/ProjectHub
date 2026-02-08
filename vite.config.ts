@@ -27,10 +27,10 @@ export default defineConfig({
     },
     extensions: ['.js', '.jsx', '.ts', '.tsx', '.json']
   },
-  root: "client",
-  publicDir: "public",
+  root: path.resolve(__dirname, "client"),
+  publicDir: path.resolve(__dirname, "client/public"),
   build: {
-    outDir: "../dist/public",
+    outDir: path.resolve(__dirname, "dist/public"),
     emptyOutDir: true,
   },
   server: {
