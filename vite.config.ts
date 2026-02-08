@@ -5,8 +5,6 @@ import { fileURLToPath } from "url";
 import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const clientPath = path.resolve(__dirname, "client");
-const indexPath = path.resolve(clientPath, "index.html");
 
 export default defineConfig({
   plugins: [
@@ -23,28 +21,20 @@ export default defineConfig({
   ],
   resolve: {
     alias: {
-      "@": path.resolve(clientPath, "src"),
+      "@": path.resolve(__dirname, "client/src"),
       "@shared": path.resolve(__dirname, "shared"),
       "@assets": path.resolve(__dirname, "attached_assets"),
     },
     extensions: ['.js', '.jsx', '.ts', '.tsx', '.json']
   },
-  root: clientPath,
-  publicDir: path.resolve(__dirname, "client/public"),
+  root: "client",
+  publicDir: "public",
   build: {
-    outDir: path.resolve(__dirname, "dist/public"),
+    outDir: "../dist/public",
     emptyOutDir: true,
-    rollupOptions: {
-      input: indexPath,
-      external: [],
-    },
   },
   server: {
     host: "0.0.0.0",
     port: 5000,
-    fs: {
-      strict: true,
-      deny: ["**/.*"],
-    },
   },
 });
