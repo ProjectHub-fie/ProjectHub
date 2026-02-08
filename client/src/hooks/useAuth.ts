@@ -22,6 +22,7 @@ export function useAuth() {
     try {
       const storedUser = localStorage.getItem(USER_STORAGE_KEY);
       if (storedUser) {
+        console.log('Loaded user from localStorage:', JSON.parse(storedUser));
         setUser(JSON.parse(storedUser));
       }
     } catch (error) {
@@ -35,6 +36,7 @@ export function useAuth() {
   // Check authentication status with server
   useEffect(() => {
     const checkAuthStatus = async () => {
+      console.log('Checking authentication status...');
       try {
         const response = await fetch("/api/auth/me", {
           credentials: "include",
@@ -43,16 +45,24 @@ export function useAuth() {
           },
         });
 
+        console.log('Auth check response status:', response.status);
+        
         if (response.ok) {
           const data = await response.json();
+          console.log('Auth check response data:', data);
+          
           if (data.user) {
             setUser(data.user);
             localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(data.user));
+            console.log('User authenticated and stored locally');
           }
         } else if (response.status === 401) {
+          console.log('User not authenticated, clearing local storage');
           // Not authenticated, clear local storage
           setUser(null);
           localStorage.removeItem(USER_STORAGE_KEY);
+        } else {
+          console.log('Auth check failed with status:', response.status);
         }
       } catch (error) {
         console.error("Error checking auth status:", error);
@@ -69,6 +79,12 @@ export function useAuth() {
 
   const loginMutation = useMutation({
     mutationFn: async (credentials: { email: string; password: string; captchaToken?: string }) => {
+      console.log('Attempting login with credentials:', { 
+        email: credentials.email,
+        hasPassword: !!credentials.password,
+        hasCaptcha: !!credentials.captchaToken 
+      });
+      
       const response = await fetch("/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -76,7 +92,10 @@ export function useAuth() {
         body: JSON.stringify(credentials),
       });
 
+      console.log('Login response status:', response.status);
+      
       const data = await response.json();
+      console.log('Login response data:', data);
 
       if (!response.ok) {
         throw new Error(data.message || "Invalid email or password");
@@ -85,6 +104,7 @@ export function useAuth() {
       return data;
     },
     onSuccess: (data) => {
+      console.log('Login successful, setting user:', data.user);
       if (data && data.user) {
         setUser(data.user);
         localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(data.user));
@@ -108,6 +128,14 @@ export function useAuth() {
       lastName: string;
       captchaToken?: string;
     }) => {
+      console.log('Attempting registration with data:', { 
+        email: userData.email,
+        firstName: userData.firstName,
+        lastName: userData.lastName,
+        hasPassword: !!userData.password,
+        hasCaptcha: !!userData.captchaToken 
+      });
+      
       const response = await fetch("/api/auth/register", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -115,7 +143,11 @@ export function useAuth() {
         body: JSON.stringify(userData),
       });
 
+      console.log('Registration response status:', response.status);
+      
       const data = await response.json();
+      console.log('Registration response data:', data);
+      
       if (!response.ok) {
         throw new Error(data.message || "Registration failed");
       }
@@ -123,6 +155,7 @@ export function useAuth() {
       return data;
     },
     onSuccess: (data) => {
+      console.log('Registration successful, setting user:', data.user);
       if (data && data.user) {
         setUser(data.user);
         localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(data.user));
@@ -138,11 +171,14 @@ export function useAuth() {
 
   const logoutMutation = useMutation({
     mutationFn: async () => {
+      console.log('Attempting logout...');
       const response = await fetch("/api/auth/logout", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         credentials: "include",
       });
+      
+      console.log('Logout response status:', response.status);
       
       if (!response.ok) {
         const data = await response.json();
@@ -152,6 +188,7 @@ export function useAuth() {
       return response.json();
     },
     onSuccess: () => {
+      console.log('Logout successful, clearing user data');
       setUser(null);
       localStorage.removeItem(USER_STORAGE_KEY);
       // Clear all cached queries
@@ -200,19 +237,25 @@ export function useAuth() {
 
   // Manual refresh function
   const refreshAuth = async () => {
+    console.log('Manually refreshing auth status...');
     setIsCheckingAuth(true);
     try {
       const response = await fetch("/api/auth/me", {
         credentials: "include",
       });
       
+      console.log('Manual auth refresh response status:', response.status);
+      
       if (response.ok) {
         const data = await response.json();
+        console.log('Manual auth refresh data:', data);
+        
         if (data.user) {
           setUser(data.user);
           localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(data.user));
         }
       } else {
+        console.log('Manual auth refresh failed, clearing user data');
         setUser(null);
         localStorage.removeItem(USER_STORAGE_KEY);
       }

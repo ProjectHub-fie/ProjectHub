@@ -129,13 +129,10 @@ class InMemoryStorage implements IStorage {
       id: this.generateId(),
       userId: requestData.userId,
       title: requestData.title,
-      description: requestData.description || null,
-      projectType: requestData.projectType,
+      description: requestData.description || '',
       budget: requestData.budget || null,
       timeline: requestData.timeline || null,
-      contactMethod: requestData.contactMethod,
-      urgency: requestData.urgency || null,
-      additionalInfo: requestData.additionalInfo || null,
+      technologies: requestData.technologies || null,
       status: 'pending',
       createdAt: new Date(),
       updatedAt: new Date(),
@@ -231,12 +228,16 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number = 5000): Pr
   }
 }
 
+// Update the IStorage interface to include missing methods
 export interface IStorage {
   // User operations
   getUser(id: string): Promise<IUser | null>;
   getUserByEmail(email: string): Promise<IUser | null>;
   getUserBySocialId(provider: string, socialId: string): Promise<IUser | null>;
+  getUserByResetToken(token: string): Promise<IUser | null>;
   upsertUser(user: UpsertUser): Promise<IUser>;
+  updateUserResetToken(id: string, token: string, expiry: Date): Promise<void>;
+  resetUserPassword(id: string, hashedPassword: string): Promise<void>;
   
   // Project request operations
   createProjectRequest(request: InsertProjectRequest): Promise<IProjectRequest>;
@@ -413,7 +414,17 @@ export class DatabaseStorage implements IStorage {
     try {
       const result = await withTimeout(
         db.insert(projectRequests).values({
-          ...requestData,
+          userId: requestData.userId,
+          title: requestData.title,
+          description: requestData.description || null,
+          projectType: requestData.projectType,
+          budget: requestData.budget || null,
+          timeline: requestData.timeline || null,
+          contactMethod: requestData.contactMethod,
+          urgency: requestData.urgency || null,
+          additionalInfo: requestData.additionalInfo || null,
+          technologies: requestData.technologies || null,
+          status: 'pending',
           createdAt: new Date(),
           updatedAt: new Date(),
         }).returning()

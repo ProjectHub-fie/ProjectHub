@@ -35,6 +35,17 @@ async function handler(req, res) {
     }
   }
 
+  // Log request for debugging (remove in production)
+  console.log(`Auth request: ${action}`, {
+    method: req.method,
+    headers: {
+      origin: req.headers.origin,
+      'content-type': req.headers['content-type'],
+      cookie: req.headers.cookie ? 'present' : 'missing'
+    },
+    bodyKeys: Object.keys(body)
+  });
+
   if (action === 'register') {
     try {
       const { email, password, firstName, lastName, captchaToken } = body;
@@ -103,10 +114,11 @@ async function handler(req, res) {
       
       res.setHeader('Set-Cookie', cookieOptions);
       
+      console.log('Registration successful for user:', user.email);
       return res.status(201).json({ user: userData });
     } catch (error) {
       console.error('Registration error:', error);
-      return res.status(500).json({ message: "Registration failed" });
+      return res.status(500).json({ message: "Registration failed", error: error.message });
     }
   }
 
@@ -117,6 +129,8 @@ async function handler(req, res) {
       if (!email || !password) {
         return res.status(400).json({ message: "Email and password are required" });
       }
+
+      console.log('Login attempt for email:', email);
 
       // Captcha verification for production
       if (captchaToken && (process.env.NODE_ENV === 'production' || process.env.VERCEL)) {
@@ -140,7 +154,17 @@ async function handler(req, res) {
       }
 
       const user = await storage.getUserByEmail(email);
-      if (!user || !user.password || !(await bcrypt.compare(password, user.password))) {
+      console.log('User lookup result:', user ? 'found' : 'not found');
+      
+      if (!user || !user.password) {
+        console.log('Login failed: User not found or no password');
+        return res.status(401).json({ message: "Invalid email or password" });
+      }
+
+      const passwordMatch = await bcrypt.compare(password, user.password);
+      console.log('Password comparison result:', passwordMatch);
+      
+      if (!passwordMatch) {
         return res.status(401).json({ message: "Invalid email or password" });
       }
 
@@ -172,10 +196,11 @@ async function handler(req, res) {
       
       res.setHeader('Set-Cookie', cookieOptions);
       
+      console.log('Login successful for user:', user.email);
       return res.json({ user: userData, sessionToken });
     } catch (error) {
       console.error('Login error:', error);
-      return res.status(500).json({ message: "Login failed" });
+      return res.status(500).json({ message: "Login failed", error: error.message });
     }
   }
 
@@ -192,10 +217,11 @@ async function handler(req, res) {
       ].filter(Boolean).join('; ');
       
       res.setHeader('Set-Cookie', cookieOptions);
+      console.log('Logout successful');
       return res.json({ message: "Logged out successfully" });
     } catch (error) {
       console.error('Logout error:', error);
-      return res.status(500).json({ message: "Logout failed" });
+      return res.status(500).json({ message: "Logout failed", error: error.message });
     }
   }
 

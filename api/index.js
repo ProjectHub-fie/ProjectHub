@@ -4,6 +4,7 @@ import projectsMain from './handlers/projects-main.js';
 import authMain from './handlers/auth/auth-main.js';
 import profileMain from './handlers/auth/profile-main.js';
 import recoveryMain from './handlers/auth/recovery-main.js';
+import bcrypt from 'bcryptjs';
 
 const handlers = {
   '/contact': contactMain,
@@ -50,6 +51,73 @@ export default async function handler(req, res) {
       NODE_ENV: process.env.NODE_ENV,
       VERCEL: process.env.VERCEL,
     });
+  }
+
+  // Enhanced debug endpoint for authentication issues
+  if (path === '/debug/auth') {
+    try {
+      // Test database connection
+      const { storage } = await import('./lib/storage.js');
+      let dbStatus = 'unknown';
+      try {
+        const testUser = await storage.getUserByEmail('test@example.com');
+        dbStatus = testUser ? 'connected_with_data' : 'connected_no_data';
+      } catch (dbError) {
+        dbStatus = `error: ${dbError.message}`;
+      }
+
+      return res.json({
+        environment: {
+          NODE_ENV: process.env.NODE_ENV,
+          VERCEL: !!process.env.VERCEL,
+          HAS_DATABASE_URL: !!process.env.DATABASE_URL,
+          HAS_SESSION_SECRET: !!process.env.SESSION_SECRET,
+          NEXT_PUBLIC_APP_URL: process.env.NEXT_PUBLIC_APP_URL,
+          VERCEL_URL: process.env.VERCEL_URL,
+        },
+        database: {
+          status: dbStatus,
+        },
+        cookies: {
+          connect_sid: req.headers.cookie?.includes('connect.sid') ? 'present' : 'missing',
+          cookie_header: req.headers.cookie || 'none',
+        },
+        cors: {
+          origin: req.headers.origin,
+          allowed_origins: [process.env.NEXT_PUBLIC_APP_URL, process.env.VERCEL_URL].filter(Boolean),
+        }
+      });
+    } catch (error) {
+      return res.status(500).json({ error: error.message });
+    }
+  }
+
+  // Test user creation endpoint (for debugging only)
+  if (path === '/debug/create-test-user' && process.env.NODE_ENV === 'development') {
+    try {
+      const { storage } = await import('./lib/storage.js');
+      
+      // Create a test user
+      const hashedPassword = await bcrypt.hash('password123', 12);
+      const testUser = await storage.upsertUser({
+        email: 'test@example.com',
+        firstName: 'Test',
+        lastName: 'User',
+        password: hashedPassword
+      });
+
+      return res.json({
+        message: 'Test user created successfully',
+        user: {
+          id: testUser.id,
+          email: testUser.email,
+          firstName: testUser.firstName,
+          lastName: testUser.lastName
+        }
+      });
+    } catch (error) {
+      return res.status(500).json({ error: error.message });
+    }
   }
 
   if (path.startsWith('/projects/')) {

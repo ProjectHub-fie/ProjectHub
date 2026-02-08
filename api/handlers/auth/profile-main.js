@@ -25,6 +25,13 @@ const handler = nc()
     res.status(200).end();
   })
   .get(async (req, res) => {
+    console.log('Profile GET request received');
+    console.log('Headers:', {
+      cookie: req.headers.cookie ? 'present' : 'missing',
+      'x-user-session': req.headers['x-user-session'] ? 'present' : 'missing',
+      authorization: req.headers.authorization ? 'present' : 'missing'
+    });
+
     const cookies = parse(req.headers.cookie || '');
     let sessionToken = cookies['connect.sid'] || req.headers['x-user-session'];
 
@@ -35,16 +42,40 @@ const handler = nc()
       }
     }
 
-    if (!sessionToken) return res.status(401).json({ user: null, message: "Authentication required" });
+    console.log('Session token found:', !!sessionToken);
+
+    if (!sessionToken) {
+      console.log('No session token found, returning 401');
+      return res.status(401).json({ user: null, message: "Authentication required" });
+    }
 
     try {
       const decodedSession = Buffer.from(sessionToken, 'base64').toString();
+      console.log('Decoded session:', decodedSession);
+      
       const userData = JSON.parse(decodedSession);
+      console.log('Parsed user data:', userData);
+      
       const user = await storage.getUser(userData.id);
-      if (!user) return res.status(401).json({ user: null, message: "User not found" });
+      console.log('Database user lookup:', user ? 'found' : 'not found');
+      
+      if (!user) {
+        console.log('User not found in database');
+        return res.status(401).json({ user: null, message: "User not found" });
+      }
 
-      res.json({ user: { id: user.id, email: user.email, firstName: user.firstName, lastName: user.lastName, profileImageUrl: user.profileImageUrl } });
+      const responseUser = { 
+        id: user.id, 
+        email: user.email, 
+        firstName: user.firstName, 
+        lastName: user.lastName, 
+        profileImageUrl: user.profileImageUrl 
+      };
+      
+      console.log('Returning user data');
+      res.json({ user: responseUser });
     } catch (e) {
+      console.error('Session parsing error:', e);
       res.status(401).json({ user: null, message: "Invalid session" });
     }
   })
@@ -61,7 +92,7 @@ const handler = nc()
       const decodedSession = Buffer.from(sessionToken, 'base64').toString();
       const userData = JSON.parse(decodedSession);
 
-      const base64Image = `data:\${req.file.mimetype};base64,\${req.file.buffer.toString('base64')}`;
+      const base64Image = `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}`;
       const updatedUser = await storage.upsertUser({ id: userData.id, profileImageUrl: base64Image });
       res.json({ user: { id: updatedUser.id, profileImageUrl: updatedUser.profileImageUrl } });
     } catch (error) {
