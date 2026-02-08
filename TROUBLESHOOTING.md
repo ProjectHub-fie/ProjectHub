@@ -1,5 +1,18 @@
 # Vercel Authentication Troubleshooting Guide
 
+## Current API Structure
+
+Due to Vercel's 12 serverless function limit, all API endpoints are consolidated in `/api/index.js` with the following routes:
+
+- `/api/health` - Basic health check
+- `/api/debug/env` - Environment variable debugging  
+- `/api/debug/auth` - Authentication system debugging
+- `/api/debug/create-test-user` - Create test user (development only)
+- `/api/auth/*` - Authentication endpoints (login, register, logout, etc.)
+- `/api/projects/*` - Project-related endpoints
+- `/api/contact` - Contact form endpoint
+- `/api/project-requests` - Project requests endpoint
+
 ## Common Authentication Issues and Solutions
 
 ### 1. Login Returns 401 Unauthorized
@@ -102,36 +115,24 @@ SESSION_SECRET=your-very-long-random-secret-string
 NEXT_PUBLIC_APP_URL=https://your-domain.vercel.app
 ```
 
-### 6. Captcha/Security Verification Issues
-
-**Symptoms**: Login fails with "Security verification failed" message
-
-**Debug Steps**:
-1. Check if `TURNSTILE_SECRET_KEY` is properly set
-2. Verify Cloudflare Turnstile site key matches
-3. Test without captcha in development environment
-
-**Solutions**:
-- Ensure both `TURNSTILE_SECRET_KEY` and frontend site key are configured
-- Check that the captcha token is being sent correctly from frontend
-- Verify Cloudflare Turnstile is properly integrated
-
 ## Testing Your Setup
 
 ### Using the Built-in Debug Endpoints
 
 1. **Health Check**: `GET /api/health`
-2. **Environment Debug**: `GET /api/debug/env` (development only)
+2. **Environment Debug**: `GET /api/debug/env`
 3. **Auth Debug**: `GET /api/debug/auth`
 4. **Create Test User**: `POST /api/debug/create-test-user` (development only)
 
 ### Running the Test Script
 
 ```bash
-node test-auth.js
-```
+# Test against local development server
+node test-api.js http://localhost:5173
 
-This script will test the complete authentication flow and report any issues.
+# Test against Vercel deployment
+node test-api.js https://your-vercel-app.vercel.app
+```
 
 ## Quick Fix Checklist
 
