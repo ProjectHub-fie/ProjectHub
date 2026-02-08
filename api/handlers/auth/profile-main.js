@@ -1,5 +1,5 @@
 import { parse } from "cookie";
-import { storage } from "../lib/storage.js";
+import { storage } from "../../lib/storage.ts";
 import multer from 'multer';
 
 const upload = multer({

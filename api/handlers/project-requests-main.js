@@ -1,11 +1,11 @@
-import { storage } from "./lib/storage.js";
+import { storage } from "../lib/storage.ts";
 import { parse } from "cookie";
 
 export default async function handler(req, res) {
   // Enable CORS
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
-  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-User-Sesssion');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
   
   // Handle preflight requests
   if (req.method === 'OPTIONS') {
@@ -30,7 +30,7 @@ export default async function handler(req, res) {
         body = JSON.parse(Buffer.concat(chunks).toString());
       }
 
-      const { title, description, projectType, budget, timeline, contactMethod, urgency, additionalInfo } = body;
+      const { title, description, budget, timeline, technologies, contactMethod, urgency, additionalInfo } = body;
 
       // Validate required fields
       if (!title || !description) {
@@ -54,19 +54,19 @@ export default async function handler(req, res) {
       }
 
       // Create project request
-      const request = await storage.createProjectRequest({
+      const projectRequest = await storage.createProjectRequest({
         userId,
         title,
         description,
-        projectType: projectType || 'other',
-        budget: budget || 'not-specified',
-        timeline: timeline || 'not-specified',
+        budget: budget || null,
+        timeline: timeline || null,
+        technologies: technologies || [],
         contactMethod: contactMethod || 'email',
         urgency: urgency || 'medium',
-        additionalInfo: additionalInfo || ''
+        additionalInfo: additionalInfo || null
       });
 
-      return res.status(201).json({ request });
+      return res.status(201).json(request);
     }
 
     return res.status(405).json({ message: "Method not allowed" });

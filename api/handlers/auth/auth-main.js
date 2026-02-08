@@ -1,5 +1,5 @@
 import bcrypt from "bcryptjs";
-import { storage } from "../../lib/storage.js";
+import { storage } from "../../lib/storage.ts";
 
 async function handler(req, res) {
   const action = req.query.action;

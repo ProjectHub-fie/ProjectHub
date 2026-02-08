@@ -1,4 +1,4 @@
-import { storage } from "../lib/storage.js";
+import { storage } from "../../lib/storage.ts";
 import bcrypt from "bcryptjs";
 import { randomBytes } from "crypto";
 
