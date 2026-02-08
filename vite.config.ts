@@ -33,6 +33,7 @@ export default defineConfig({
     outDir: path.resolve(__dirname, "dist/public"),
     emptyOutDir: true,
     rollupOptions: {
+      input: path.resolve(clientPath, "index.html"),
       external: [],
     },
   },
