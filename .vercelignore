@@ -36,6 +36,9 @@ scripts/verify-deployment.js
 scripts/verify-imports.js
 
 # TypeScript files with JavaScript equivalents (to prevent Vercel conflicts)
+# Exclude vite config files as they're needed for build process
+!vite.config.ts
+!vite.config.js
 **/*.ts
 !**/node_modules/**/*.ts
 
