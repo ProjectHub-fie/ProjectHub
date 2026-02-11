@@ -34,12 +34,8 @@ scripts/setup-testdb.js
 scripts/verify-deployment.js
 scripts/verify-imports.js
 
-# Server and API files (exclude for static frontend deployment)
+# Server files (exclude for static frontend deployment)
 server/
-api/handlers/
-api/test.js
-# Exclude conflicting TypeScript files in API lib
-api/lib/*.ts
 
 # Development and build artifacts
 node_modules/

@@ -10,6 +10,7 @@ interface User {
 }
 
 const USER_STORAGE_KEY = "projecthub_user";
+const SESSION_TOKEN_KEY = "projecthub_session_token";
 
 export function useAuth() {
   const queryClient = useQueryClient();
@@ -17,17 +18,25 @@ export function useAuth() {
   const [isLoading, setIsLoading] = useState(true);
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
 
-  // Load user from localStorage on mount
+  // Load user and session token from localStorage on mount
   useEffect(() => {
     try {
       const storedUser = localStorage.getItem(USER_STORAGE_KEY);
+      const storedSessionToken = localStorage.getItem(SESSION_TOKEN_KEY);
+      
       if (storedUser) {
         console.log('Loaded user from localStorage:', JSON.parse(storedUser));
         setUser(JSON.parse(storedUser));
       }
+      
+      if (storedSessionToken) {
+        console.log('Loaded session token from localStorage');
+        // Set up interceptors or global headers here if needed
+      }
     } catch (error) {
       console.error("Error loading user from localStorage:", error);
       localStorage.removeItem(USER_STORAGE_KEY);
+      localStorage.removeItem(SESSION_TOKEN_KEY);
     } finally {
       setIsLoading(false);
     }
@@ -38,10 +47,15 @@ export function useAuth() {
     const checkAuthStatus = async () => {
       console.log('Checking authentication status...');
       try {
+        const storedSessionToken = localStorage.getItem(SESSION_TOKEN_KEY);
+        
         const response = await fetch("/api/auth/me", {
           credentials: "include",
-          headers: {
+          headers: storedSessionToken ? {
             "Content-Type": "application/json",
+            "X-User-Session": storedSessionToken
+          } : {
+            "Content-Type": "application/json"
           },
         });
 
@@ -61,6 +75,7 @@ export function useAuth() {
           // Not authenticated, clear local storage
           setUser(null);
           localStorage.removeItem(USER_STORAGE_KEY);
+          localStorage.removeItem(SESSION_TOKEN_KEY);
         } else {
           console.log('Auth check failed with status:', response.status);
         }
@@ -108,8 +123,19 @@ export function useAuth() {
       if (data && data.user) {
         setUser(data.user);
         localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(data.user));
+        
+        // Store session token if provided
+        if (data.sessionToken) {
+          localStorage.setItem(SESSION_TOKEN_KEY, data.sessionToken);
+          console.log('Stored session token in localStorage');
+        }
+        
         // Invalidate any cached queries that might need refreshing
         queryClient.invalidateQueries({ queryKey: ['auth'] });
+        // Force a re-render by triggering auth check
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent('auth-update', { detail: data.user }));
+        }, 0);
       }
     },
     onError: (error) => {
@@ -117,6 +143,7 @@ export function useAuth() {
       // Clear any stale auth data
       setUser(null);
       localStorage.removeItem(USER_STORAGE_KEY);
+      localStorage.removeItem(SESSION_TOKEN_KEY);
     }
   });
 
@@ -172,9 +199,18 @@ export function useAuth() {
   const logoutMutation = useMutation({
     mutationFn: async () => {
       console.log('Attempting logout...');
+      
+      // Get session token for logout request
+      const sessionToken = localStorage.getItem(SESSION_TOKEN_KEY);
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      
+      if (sessionToken) {
+        headers['X-User-Session'] = sessionToken;
+      }
+
       const response = await fetch("/api/auth/logout", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers,
         credentials: "include",
       });
       
@@ -191,6 +227,7 @@ export function useAuth() {
       console.log('Logout successful, clearing user data');
       setUser(null);
       localStorage.removeItem(USER_STORAGE_KEY);
+      localStorage.removeItem(SESSION_TOKEN_KEY);
       // Clear all cached queries
       queryClient.clear();
       // Redirect to home page
@@ -201,6 +238,7 @@ export function useAuth() {
       // Even if server logout fails, clear local state
       setUser(null);
       localStorage.removeItem(USER_STORAGE_KEY);
+      localStorage.removeItem(SESSION_TOKEN_KEY);
       queryClient.clear();
       window.location.href = "/";
     }
@@ -212,9 +250,17 @@ export function useAuth() {
       lastName?: string;
       profileImageUrl?: string;
     }) => {
+      // Get session token for authentication
+      const sessionToken = localStorage.getItem(SESSION_TOKEN_KEY);
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      
+      if (sessionToken) {
+        headers['X-User-Session'] = sessionToken;
+      }
+
       const response = await fetch("/api/auth/user", {
         method: "PATCH",
-        headers: { "Content-Type": "application/json" },
+        headers,
         credentials: "include",
         body: JSON.stringify(userData),
       });
@@ -240,8 +286,16 @@ export function useAuth() {
     console.log('Manually refreshing auth status...');
     setIsCheckingAuth(true);
     try {
+      const sessionToken = localStorage.getItem(SESSION_TOKEN_KEY);
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      
+      if (sessionToken) {
+        headers['X-User-Session'] = sessionToken;
+      }
+
       const response = await fetch("/api/auth/me", {
         credentials: "include",
+        headers,
       });
       
       console.log('Manual auth refresh response status:', response.status);
@@ -258,6 +312,7 @@ export function useAuth() {
         console.log('Manual auth refresh failed, clearing user data');
         setUser(null);
         localStorage.removeItem(USER_STORAGE_KEY);
+        localStorage.removeItem(SESSION_TOKEN_KEY);
       }
     } catch (error) {
       console.error("Error refreshing auth:", error);

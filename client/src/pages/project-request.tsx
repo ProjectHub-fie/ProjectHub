@@ -70,10 +70,14 @@ export default function ProjectRequestPage() {
 
   // Redirect if not authenticated
   useEffect(() => {
+    console.log('Dashboard auth check - isLoading:', isLoading, 'isAuthenticated:', isAuthenticated, 'user:', user);
     if (!isLoading && !isAuthenticated) {
+      console.log('Redirecting to login from dashboard');
       setLocation("/login");
+    } else if (!isLoading && isAuthenticated) {
+      console.log('User authenticated, staying on dashboard');
     }
-  }, [isAuthenticated, isLoading, setLocation]);
+  }, [isAuthenticated, isLoading, setLocation, user]);
 
   const { data: userRequests } = useQuery({
     queryKey: ["/api/project-requests"],

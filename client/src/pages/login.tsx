@@ -96,6 +96,21 @@ export default function LoginPage() {
     }
   }, [isAuthenticated, setLocation]);
 
+  // Listen for auth updates from the auth hook
+  useEffect(() => {
+    const handleAuthUpdate = (event: CustomEvent) => {
+      console.log('Received auth update event:', event.detail);
+      if (event.detail) {
+        setLocation("/dashboard");
+      }
+    };
+
+    window.addEventListener('auth-update', handleAuthUpdate as EventListener);
+    return () => {
+      window.removeEventListener('auth-update', handleAuthUpdate as EventListener);
+    };
+  }, [setLocation]);
+
   const onLogin = async (values: z.infer<typeof loginSchema>) => {
     if (!captchaToken) {
       toast({ 
@@ -106,13 +121,17 @@ export default function LoginPage() {
       return;
     }
     try {
-      await login({ ...values, captchaToken } as any);
+      const loginResult = await login({ ...values, captchaToken } as any);
       toast({
         title: "Success!",
         description: "You've been logged in successfully.",
         variant: "success",
       });
-      setLocation("/dashboard");
+      
+      // Add a small delay to ensure state is properly updated
+      setTimeout(() => {
+        setLocation("/dashboard");
+      }, 100);
     } catch (error: any) {
       toast({
         title: "Login Failed",

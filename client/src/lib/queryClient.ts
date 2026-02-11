@@ -12,9 +12,19 @@ export async function apiRequest(
   method: string,
   data?: unknown | undefined,
 ): Promise<Response> {
+  // Get session token for authentication
+  const sessionToken = localStorage.getItem('projecthub_session_token');
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json"
+  };
+  
+  if (sessionToken) {
+    headers['X-User-Session'] = sessionToken;
+  }
+
   const res = await fetch(url, {
     method,
-    headers: data ? { "Content-Type": "application/json" } : {},
+    headers,
     body: data ? JSON.stringify(data) : undefined,
     credentials: "include",
   });
@@ -29,8 +39,8 @@ export const getQueryFn: <T>(options: {
 }) => QueryFunction<T> =
   ({ on401: unauthorizedBehavior }) =>
   async ({ queryKey }) => {
-    // Get session token for Vercel stateless auth
-    const sessionToken = localStorage.getItem('userSession');
+    // Get session token for authentication
+    const sessionToken = localStorage.getItem('projecthub_session_token');
     const headers: Record<string, string> = {};
     
     if (sessionToken) {

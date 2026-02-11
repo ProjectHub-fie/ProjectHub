@@ -1,41 +1,46 @@
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
-import path from "path";
-import { fileURLToPath } from "url";
-import runtimeErrorOverlay from "@replit/vite-plugin-runtime-error-modal";
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+import { defineConfig } from 'vite';
+import react from '@vitejs/plugin-react';
+import path from 'path';
 
 export default defineConfig({
-  plugins: [
-    react(),
-    runtimeErrorOverlay(),
-    ...(process.env.NODE_ENV !== "production" &&
-    process.env.REPL_ID !== undefined
-      ? [
-          (await import("@replit/vite-plugin-cartographer")).cartographer(),
-        ]
-      : []),
-  ],
+  plugins: [react()],
   resolve: {
     alias: {
-      "@": path.resolve(__dirname, "client/src"),
-      "@shared": path.resolve(__dirname, "shared"),
-      "@assets": path.resolve(__dirname, "attached_assets"),
-    },
-    extensions: ['.js', '.jsx', '.ts', '.tsx', '.json']
-  },
-  root: path.resolve(__dirname, "client"),
-  publicDir: path.resolve(__dirname, "client/public"),
-  build: {
-    outDir: path.resolve(__dirname, "dist/public"),
-    emptyOutDir: true,
-    rollupOptions: {
-      input: path.resolve(__dirname, "client/index.html")
+      '@': path.resolve(__dirname, './client/src'),
+      '@shared': path.resolve(__dirname, './shared')
     }
   },
-  server: {
-    host: "0.0.0.0",
-    port: 5000,
+  root: './client',
+  build: {
+    outDir: '../dist/public',
+    rollupOptions: {
+      input: path.resolve(__dirname, './client/index.html'),
+      output: {
+        manualChunks: {
+          // Split vendor libraries into separate chunks
+          'react-vendor': ['react', 'react-dom'],
+          'router': ['wouter'],
+          'ui-components': [
+            '@radix-ui/react-dialog',
+            '@radix-ui/react-dropdown-menu',
+            '@radix-ui/react-popover',
+            '@radix-ui/react-tooltip'
+          ],
+          'icons': ['lucide-react', 'react-icons'],
+          'forms': ['react-hook-form', '@hookform/resolvers', 'zod'],
+          'state-management': ['@tanstack/react-query']
+        }
+      }
+    },
+    chunkSizeWarningLimit: 600 // Increase limit slightly since we're implementing code splitting
   },
+  server: {
+    port: 3000,
+    proxy: {
+      '/api': {
+        target: 'http://localhost:5000',
+        changeOrigin: true
+      }
+    }
+  }
 });

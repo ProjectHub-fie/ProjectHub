@@ -13,6 +13,10 @@
     "isolatedModules": true,
     "noEmit": true,
 
+    /* JSX Support */
+    "jsx": "react-jsx",
+    "jsxImportSource": "react",
+
     /* Linting */
     "strict": true,
     "noUnusedLocals": true,
