@@ -1,6 +1,5 @@
 # Test files and directories
 test*
-test-*
 tests/
 __tests__/
 spec/
@@ -30,30 +29,23 @@ testing/
 temp-tests/
 *.test.*
 
-# Build scripts to exclude (keep build-vercel.mjs)
+# Build scripts to exclude
 scripts/setup-testdb.js
 scripts/verify-deployment.js
 scripts/verify-imports.js
 
-# TypeScript files with JavaScript equivalents (to prevent Vercel conflicts)
-# Exclude vite config files as they're needed for build process
-!vite.config.ts
-!vite.config.js
-**/*.ts
-!**/node_modules/**/*.ts
-
-# Specific API TypeScript files that have JS counterparts
+# Server and API files (exclude for static frontend deployment)
+server/
+api/handlers/
+api/test.js
+# Exclude conflicting TypeScript files in API lib
 api/lib/*.ts
-api/handlers/**/*.ts
-shared/*.ts
-drizzle/*.ts
 
 # Development and build artifacts
 node_modules/
 .git/
 .github/
 .vscode/
-*.md
 .env
 .env.local
 .env.development
@@ -98,7 +90,7 @@ CHANGELOG.md
 TROUBLESHOOTING.md
 netlify.toml
 
-# Build output directories
+# Build output directories (these will be regenerated)
 build/
 dist/
 
