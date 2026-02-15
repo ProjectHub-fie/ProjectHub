@@ -1,4 +1,4 @@
-// Simple test script to verify authentication functionality
+ databas// Simple test script to verify authentication functionality
 async function testAuth() {
   const baseUrl = 'http://localhost:5000'; // Fixed to match the server port
   

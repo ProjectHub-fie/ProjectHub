@@ -4,12 +4,15 @@ import {
   users,
   projectRequests,
   projectInteractions,
-  sessions
+  sessions,
+  verifiedProjects
 } from '../drizzle/schema.js';
 
 // Re-export types from Drizzle schema using $inferSelect/$inferInsert
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
+export type VerifiedProject = typeof verifiedProjects.$inferSelect;
+export type InsertVerifiedProject = typeof verifiedProjects.$inferInsert;
 export type ProjectRequest = typeof projectRequests.$inferSelect;
 export type InsertProjectRequest = typeof projectRequests.$inferInsert;
 export type ProjectInteraction = typeof projectInteractions.$inferSelect;
@@ -46,6 +49,12 @@ export const upsertUserSchema = z.object({
   isBlocked: z.boolean().optional(),
 });
 
+export const insertVerifiedProjectSchema = createInsertSchema(verifiedProjects).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true
+});
+
 export const insertProjectRequestSchema = createInsertSchema(projectRequests).omit({
   id: true,
   createdAt: true,
@@ -61,3 +70,4 @@ export const insertProjectInteractionSchema = createInsertSchema(projectInteract
 
 // Type exports for schemas
 export type UpsertUser = z.infer<typeof upsertUserSchema>;
+export type InsertVerifiedProjectInput = z.infer<typeof insertVerifiedProjectSchema>;

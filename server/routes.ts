@@ -371,12 +371,8 @@ export async function registerRoutes(app: Express): Promise<Server> {
       const resetToken = randomBytes(3).toString('hex').toUpperCase();
       const resetTokenExpiry = new Date(Date.now() + 3600000); // 1 hour
 
-      // Use upsertUser to update reset token (since updateUserResetToken doesn't exist)
-      await storage.upsertUser({
-        id: user.id,
-        resetToken: resetToken,
-        resetTokenExpiry: resetTokenExpiry
-      });
+      // Save reset token to user
+      await storage.updateUserResetToken(user.id, resetToken, resetTokenExpiry);
 
       res.json({ message: "Password reset email sent" });
     } catch (error) {
@@ -413,26 +409,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
         return res.status(400).json({ message: "Password must be at least 6 characters" });
       }
 
-      // Find user by reset token using getUserByEmail and checking resetToken
-      // This is a workaround since getUserByResetToken doesn't exist
-      // For now, we'll assume the token validation happens elsewhere
-      let user = null;
-      // In a real implementation, you'd need to query all users and check reset tokens
-      
+      // Find user by reset token
+      const user = await storage.getUserByResetToken(token);
       if (!user || !user.resetTokenExpiry || new Date() > user.resetTokenExpiry) {
         return res.status(400).json({ message: "Invalid or expired reset token" });
       }
 
       // Hash new password
-      const hashedPassword = await bcrypt.hash(newPassword, 12);
+      const hashedPassword = await bcrypt.hash(newPassword, 10);
 
-      // Use upsertUser to reset password (since resetUserPassword doesn't exist)
-      await storage.upsertUser({
-        id: user.id,
-        password: hashedPassword,
-        resetToken: null,
-        resetTokenExpiry: null
-      });
+      // Update user password and clear reset token
+      await storage.resetUserPassword(user.id, hashedPassword);
 
       res.json({ message: "Password reset successfully" });
     } catch (error) {
@@ -486,6 +473,84 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Profile picture upload error:', error);
       res.status(500).json({ message: "Failed to upload profile picture" });
+    }
+  });
+
+  // Verified projects routes
+  app.get('/api/projects', async (req, res) => {
+    try {
+      const projects = await storage.getAllVerifiedProjects();
+      res.json(projects);
+    } catch (error) {
+      console.error('Get projects error:', error);
+      res.status(500).json({ message: "Failed to fetch projects" });
+    }
+  });
+
+  app.get('/api/projects/:slug', async (req, res) => {
+    try {
+      const { slug } = req.params;
+      const project = await storage.getVerifiedProjectBySlug(slug);
+      
+      if (!project) {
+        return res.status(404).json({ message: "Project not found" });
+      }
+      
+      res.json(project);
+    } catch (error) {
+      console.error('Get project by slug error:', error);
+      res.status(500).json({ message: "Failed to fetch project" });
+    }
+  });
+
+  // Admin routes for managing projects (require authentication)
+  app.post('/api/admin/projects', requireAuth, async (req, res) => {
+    try {
+      const projectData = req.body;
+      const project = await storage.createVerifiedProject(projectData);
+      res.status(201).json(project);
+    } catch (error: any) {
+      console.error('Create project error:', error);
+      if (error.name === 'ZodError') {
+        return res.status(400).json({ message: "Invalid project data", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to create project" });
+    }
+  });
+
+  app.put('/api/admin/projects/:id', requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const projectData = req.body;
+      const project = await storage.updateVerifiedProject(id, projectData);
+      
+      if (!project) {
+        return res.status(404).json({ message: "Project not found" });
+      }
+      
+      res.json(project);
+    } catch (error: any) {
+      console.error('Update project error:', error);
+      if (error.name === 'ZodError') {
+        return res.status(400).json({ message: "Invalid project data", errors: error.errors });
+      }
+      res.status(500).json({ message: "Failed to update project" });
+    }
+  });
+
+  app.delete('/api/admin/projects/:id', requireAuth, async (req, res) => {
+    try {
+      const { id } = req.params;
+      const success = await storage.deleteVerifiedProject(id);
+      
+      if (!success) {
+        return res.status(404).json({ message: "Project not found" });
+      }
+      
+      res.json({ message: "Project deleted successfully" });
+    } catch (error) {
+      console.error('Delete project error:', error);
+      res.status(500).json({ message: "Failed to delete project" });
     }
   });
 

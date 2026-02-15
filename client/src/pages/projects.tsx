@@ -75,93 +75,88 @@ function ProjectInteractions({ projectId }: { projectId: string }) {
 
 interface Project {
   id: string;
+  slug: string;
   title: string;
   description: string;
-  image: string;
+  imageUrl: string;
   category: "websites" | "bots" | "utilities";
-  tech: string[];
+  technologies: string[];
   liveUrl?: string;
   githubUrl?: string;
   status: string;
-  statusColor: string;
+  authorName?: string;
   architecture?: string;
-  author?: {
-    name: string;
-    avatar?: string;
-  };
+  createdAt: Date;
+  updatedAt: Date;
 }
-
-const projects: Project[] = [
-  {
-    id: "PrimeBot",
-    title: "PrimeBot",
-    description: "PrimeBot is a sleek, multipurpose Discord bot built to supercharge your server with essential tools. It features a dynamic giveaway system with customizable entries, interactive polls for instant feedback, and a ticket system for seamless support handling.",
-    image: "/primebot.gif",
-    category: "bots",
-    tech: ["discord.js", "C"," PostgreeSQL"],
-    liveUrl: "https://discord.com/oauth2/authorize?client_id=1356575287151951943&permissions=8&integration_type=0&scope=bot%20applications.commands",
-    status: " Active",
-    statusColor: "bg-green-500",
-    author: { name: "Team ProjectHub" },
-    architecture: "Multi-sharded microservices architecture with a centralized command handler and persistent MySQL storage."
-  },
-  {
-    id: "pbo",
-    title: "PrimeBot Dashboard",
-    description: "Interactive and dynamic website with dashboard of PrimeBot discord bot (Dashboard will come soon)",
-    image: "/primebot.gif",
-    category: "websites",
-    tech: ["Typescript React", "Node.js", "PostgreSQL"],
-    liveUrl: "https://primebot-online.vercel.app",
-    status: "In development",
-    statusColor: "bg-red-500",
-    author: { name: "Team ProjectHub" },
-    architecture: "React-based frontend with a Node.js backend using a micro-frontend approach for dashboard modules."
-  },
-  {
-    id: "Sky",
-    title: "Sky Bot",
-    description: "Collaborative task management application with real-time updates, team collaboration features, and project tracking capabilities.",
-    image: "/api/placeholder/400/300",
-    category: "bots",
-    tech: ["Discord.js"],
-    liveUrl: "",
-    status: "Active",
-    statusColor: "bg-green-500",
-    author: { name: "Raj Roy" }
-  },
-  {
-    id: "db",
-    title: "Database Dashboard",
-    description: "Online based database dashboard for your PostgreeSQL.",
-    image: "/api/placeholder/400/300",
-    category: "websites",
-    tech: ["Typescript","React"],
-    liveUrl: "",
-    githubUrl: "https://github.com/rajroy1313/Database-web.git",
-    status: "Developing",
-    statusColor: "bg-red-500",
-    author: { name: "Raj Roy" },
-    architecture: "Client-server architecture utilizing direct PostgreSQL connection protocols via secured tunneling for real-time data visualization."
-  },
-  {
-    id: "wh",
-    title: "Hosting ",
-    description: "Discord bot hosting platform",
-    image: "/api/placeholder/400/300",
-    category: "websites",
-    tech: ["React", "Typescript", "PostgreSQL"],
-    liveUrl: "",
-    githubUrl: "https://github.com/rajroy1313/Webhost.git",
-    status: "In development",
-    statusColor: "bg-red-500",
-    author: { name: "Raj Roy" }
-  }
-];
 
 export default function ProjectsPage() {
   const [, setLocation] = useLocation();
   const [activeFilter, setActiveFilter] = useState<string>("all");
+  const { toast } = useToast();
+
+  // Fetch projects from API
+  const { data: projects = [], isLoading, error, refetch } = useQuery<Project[]>({
+    queryKey: ["/api/projects"],
+    queryFn: async () => {
+      try {
+        const response = await apiRequest("/api/projects", "GET");
+        if (!Array.isArray(response)) {
+          throw new Error("Invalid response format");
+        }
+        return response;
+      } catch (error: any) {
+        console.error("Failed to fetch projects:", error);
+        throw error;
+      }
+    },
+    staleTime: 5 * 60 * 1000, // 5 minutes
+    retry: 2,
+    retryDelay: 1000,
+  });
+
+  // Handle error display
+  if (error) {
+    toast({
+      title: "Error loading projects",
+      description: "Failed to fetch projects. Please try again.",
+      variant: "destructive",
+    });
+  }
+
+  // Loading skeleton
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-background pt-20 px-4 pb-20">
+        <div className="max-w-6xl mx-auto">
+          <div className="animate-pulse">
+            <div className="h-12 bg-muted rounded w-1/3 mb-8"></div>
+            <div className="flex flex-wrap justify-center gap-4 mb-12">
+              {[...Array(4)].map((_, i) => (
+                <div key={i} className="h-10 bg-muted rounded w-24"></div>
+              ))}
+            </div>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+              {[...Array(6)].map((_, i) => (
+                <div key={i} className="bg-card rounded-2xl overflow-hidden border border-border h-96">
+                  <div className="h-48 bg-muted"></div>
+                  <div className="p-6 space-y-4">
+                    <div className="h-6 bg-muted rounded w-3/4"></div>
+                    <div className="h-4 bg-muted rounded w-full"></div>
+                    <div className="h-4 bg-muted rounded w-2/3"></div>
+                    <div className="flex gap-2">
+                      <div className="h-6 bg-muted rounded w-16"></div>
+                      <div className="h-6 bg-muted rounded w-16"></div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   const filteredProjects = activeFilter === "all"
     ? projects
@@ -173,6 +168,17 @@ export default function ProjectsPage() {
       case "bots": return <Bot className="w-4 h-4 mr-2" />;
       case "utilities": return <Download className="w-4 h-4 mr-2" />;
       default: return <ExternalLink className="w-4 h-4 mr-2" />;
+    }
+  };
+
+  const getStatusColor = (status: string) => {
+    switch (status.toLowerCase()) {
+      case "active": return "bg-green-500";
+      case "developing": return "bg-red-500";
+      case "live": return "bg-blue-500";
+      case "beta": return "bg-yellow-500";
+      case "archived": return "bg-gray-500";
+      default: return "bg-gray-500";
     }
   };
 
@@ -206,6 +212,11 @@ export default function ProjectsPage() {
           <p className="text-xl text-muted-foreground">
             A comprehensive list of all our creations and developments
           </p>
+          {projects.length > 0 && (
+            <p className="text-sm text-muted-foreground mt-2">
+              Showing {filteredProjects.length} of {projects.length} projects
+            </p>
+          )}
         </div>
 
         <div className="flex flex-wrap justify-center gap-4 mb-12">
@@ -222,6 +233,11 @@ export default function ProjectsPage() {
               className="rounded-xl px-6"
             >
               {filter.label}
+              {filter.key !== "all" && projects.filter(p => p.category === filter.key).length > 0 && (
+                <span className="ml-2 text-xs opacity-75">
+                  ({projects.filter(p => p.category === filter.key).length})
+                </span>
+              )}
             </Button>
           ))}
         </div>
@@ -230,26 +246,31 @@ export default function ProjectsPage() {
           {filteredProjects.map((project) => (
             <div
               key={project.id}
-              className="group bg-card rounded-2xl overflow-hidden border border-border hover:border-primary/50 transition-all duration-300 hover:-translate-y-2"
+              className="group bg-card rounded-2xl overflow-hidden border border-border hover:border-primary/50 transition-all duration-300 hover:-translate-y-2 cursor-pointer"
+              onClick={() => setLocation(`/project/${project.slug}`)}
             >
               <div className="relative h-48 overflow-hidden">
                 <img
-                  src={project.image}
+                  src={project.imageUrl || "/api/placeholder/400/300"}
                   alt={project.title}
                   className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-500"
+                  onError={(e) => {
+                    const target = e.target as HTMLImageElement;
+                    target.src = "/api/placeholder/400/300";
+                  }}
                 />
-                <div className={`absolute top-4 right-4 ${project.statusColor} text-white px-3 py-1 rounded-full text-xs font-medium`}>
-                  {project.status}
+                <div className={`${getStatusColor(project.status)} text-white px-3 py-1 rounded-full text-xs font-medium absolute top-4 right-4`}>
+                  {project.status.charAt(0).toUpperCase() + project.status.slice(1)}
                 </div>
               </div>
 
               <div className="p-6">
                 <div className="flex justify-between items-start mb-2">
                   <h3 className="text-xl font-bold">{project.title}</h3>
-                  {project.author && (
+                  {project.authorName && (
                     <div className="flex items-center gap-2 bg-secondary/50 px-2 py-1 rounded-lg text-[10px] text-muted-foreground">
                       <User className="w-3 h-3" />
-                      <span>{project.author.name}</span>
+                      <span>{project.authorName}</span>
                     </div>
                   )}
                 </div>
@@ -270,11 +291,16 @@ export default function ProjectsPage() {
                 )}
 
                 <div className="flex flex-wrap gap-2 mb-6">
-                  {project.tech.map((tech) => (
+                  {project.technologies?.slice(0, 3).map((tech) => (
                     <Badge key={tech} variant="outline" className="text-[10px]">
                       {tech}
                     </Badge>
                   ))}
+                  {project.technologies && project.technologies.length > 3 && (
+                    <Badge variant="outline" className="text-[10px]">
+                      +{project.technologies.length - 3} more
+                    </Badge>
+                  )}
                 </div>
 
                 <ProjectInteractions projectId={project.id} />
@@ -282,7 +308,10 @@ export default function ProjectsPage() {
                   <div className="flex gap-3">
                     <Button
                       className="flex-1"
-                      onClick={() => setLocation(`/project/${project.id}`)}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setLocation(`/project/${project.slug}`);
+                      }}
                     >
                       <ExternalLink className="w-4 h-4 mr-2" />
                       View Details
@@ -292,7 +321,10 @@ export default function ProjectsPage() {
                         variant="outline"
                         size="icon"
                         className="shrink-0"
-                        onClick={() => window.open(project.githubUrl, '_blank')}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          window.open(project.githubUrl, '_blank');
+                        }}
                       >
                         <Github className="w-4 h-4" />
                       </Button>
@@ -301,7 +333,12 @@ export default function ProjectsPage() {
                   <Button
                     variant="outline"
                     className="w-full"
-                    onClick={() => project.liveUrl && window.open(project.liveUrl, '_blank')}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (project.liveUrl) {
+                        window.open(project.liveUrl, '_blank');
+                      }
+                    }}
                     disabled={!project.liveUrl}
                   >
                     {getActionIcon(project.category)}
@@ -312,6 +349,23 @@ export default function ProjectsPage() {
             </div>
           ))}
         </div>
+
+        {filteredProjects.length === 0 && (
+          <div className="text-center py-12">
+            <div className="text-muted-foreground text-lg">
+              {activeFilter === "all" 
+                ? "No projects found" 
+                : `No ${activeFilter} projects found`}
+            </div>
+            <Button 
+              variant="outline" 
+              className="mt-4"
+              onClick={() => refetch()}
+            >
+              Refresh Projects
+            </Button>
+          </div>
+        )}
       </div>
     </div>
   );

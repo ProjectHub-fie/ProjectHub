@@ -1,4 +1,4 @@
-import {
+basedimport {
   type IUser,
   type IProjectRequest,
   type IProjectInteraction,
@@ -6,17 +6,38 @@ import {
   type UpsertUser,
   type InsertProjectRequest,
   type InsertProjectInteraction,
+  type InsertVerifiedProjectInput,
+  type VerifiedProject,
 } from "./../shared/schema.js";
 import { db } from "./db.js";
 import { eq, and, sql } from "drizzle-orm";
-import { users, projectRequests, projectInteractions } from "../drizzle/schema.js";
+import { users, projectRequests, projectInteractions, verifiedProjects } from "../drizzle/schema.js";
+import seedProjects from './seed-projects.js';
 
 // Simple in-memory storage for development/testing when database is unavailable
 class InMemoryStorage implements IStorage {
   private users: Map<string, any> = new Map();
   private projectRequests: Map<string, any> = new Map();
   private projectInteractions: Map<string, any> = new Map();
+  private verifiedProjects: Map<string, any> = new Map();
   private nextId = 1;
+
+  constructor() {
+    // Load seed data
+    this.loadSeedData();
+  }
+
+  private loadSeedData() {
+    seedProjects.forEach(project => {
+      const projectId = this.generateId();
+      this.verifiedProjects.set(projectId, {
+        id: projectId,
+        ...project,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
+    });
+  }
 
   private generateId(): string {
     return `mem_${this.nextId++}_${Date.now()}`;
@@ -121,6 +142,66 @@ class InMemoryStorage implements IStorage {
       this.users.set(newUser.id, newUser);
       return newUser;
     }
+  }
+
+  // Verified projects operations
+  async getAllVerifiedProjects(): Promise<VerifiedProject[]> {
+    return Array.from(this.verifiedProjects.values())
+      .filter(project => project.isActive)
+      .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+  }
+
+  async getVerifiedProjectBySlug(slug: string): Promise<VerifiedProject | null> {
+    for (const project of this.verifiedProjects.values()) {
+      if (project.slug === slug && project.isActive) {
+        return project;
+      }
+    }
+    return null;
+  }
+
+  async createVerifiedProject(projectData: InsertVerifiedProjectInput): Promise<VerifiedProject> {
+    const newProject: VerifiedProject = {
+      id: this.generateId(),
+      slug: projectData.slug,
+      title: projectData.title,
+      description: projectData.description,
+      longDescription: projectData.longDescription || null,
+      imageUrl: projectData.imageUrl || null,
+      category: projectData.category,
+      technologies: projectData.technologies || [],
+      features: projectData.features || [],
+      highlights: projectData.highlights || [],
+      liveUrl: projectData.liveUrl || null,
+      githubUrl: projectData.githubUrl || null,
+      status: projectData.status,
+      authorName: projectData.authorName || null,
+      authorAvatar: projectData.authorAvatar || null,
+      architecture: projectData.architecture || null,
+      timeline: projectData.timeline || null,
+      teamSize: projectData.teamSize || null,
+      userCount: projectData.userCount || null,
+      isActive: projectData.isActive !== undefined ? projectData.isActive : true,
+      sortOrder: projectData.sortOrder || 0,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    
+    this.verifiedProjects.set(newProject.id, newProject);
+    return newProject;
+  }
+
+  async updateVerifiedProject(id: string, projectData: Partial<InsertVerifiedProjectInput>): Promise<VerifiedProject | null> {
+    const project = this.verifiedProjects.get(id);
+    if (project) {
+      Object.assign(project, projectData, { updatedAt: new Date() });
+      return project;
+    }
+    return null;
+  }
+
+  async deleteVerifiedProject(id: string): Promise<boolean> {
+    return this.verifiedProjects.delete(id);
   }
 
   // Project request operations
@@ -239,11 +320,12 @@ export interface IStorage {
   updateUserResetToken(id: string, token: string, expiry: Date): Promise<void>;
   resetUserPassword(id: string, hashedPassword: string): Promise<void>;
   
-  // Project request operations
-  createProjectRequest(request: InsertProjectRequest): Promise<IProjectRequest>;
-  getProjectRequests(userId: string): Promise<IProjectRequest[]>;
-  getAllProjectRequests(): Promise<IProjectRequest[]>;
-  updateProjectRequestStatus(id: string, status: string): Promise<IProjectRequest | null>;
+  // Verified projects operations
+  getAllVerifiedProjects(): Promise<VerifiedProject[]>;
+  getVerifiedProjectBySlug(slug: string): Promise<VerifiedProject | null>;
+  createVerifiedProject(project: InsertVerifiedProjectInput): Promise<VerifiedProject>;
+  updateVerifiedProject(id: string, project: Partial<InsertVerifiedProjectInput>): Promise<VerifiedProject | null>;
+  deleteVerifiedProject(id: string): Promise<boolean>;
 
   // Project interaction operations
   getProjectInteractions(projectId: string): Promise<{ likes: number, averageRating: number }>;
@@ -409,6 +491,101 @@ export class DatabaseStorage implements IStorage {
     }
   }
 
+  // Verified projects operations
+  async getAllVerifiedProjects(): Promise<VerifiedProject[]> {
+    try {
+      return await withTimeout(
+        db.select()
+          .from(verifiedProjects)
+          .where(eq(verifiedProjects.isActive, true))
+          .orderBy(verifiedProjects.sortOrder)
+      );
+    } catch (error: any) {
+      console.error('getAllVerifiedProjects error:', error.message);
+      if (error.message?.includes('timeout')) {
+        throw new Error('Database timeout');
+      }
+      throw error;
+    }
+  }
+
+  async getVerifiedProjectBySlug(slug: string): Promise<VerifiedProject | null> {
+    try {
+      const result = await withTimeout(
+        db.select()
+          .from(verifiedProjects)
+          .where(and(
+            eq(verifiedProjects.slug, slug),
+            eq(verifiedProjects.isActive, true)
+          ))
+          .limit(1)
+      );
+      return result[0] || null;
+    } catch (error: any) {
+      console.error('getVerifiedProjectBySlug error:', error.message);
+      if (error.message?.includes('timeout')) {
+        throw new Error('Database timeout');
+      }
+      throw error;
+    }
+  }
+
+  async createVerifiedProject(projectData: InsertVerifiedProjectInput): Promise<VerifiedProject> {
+    try {
+      const result = await withTimeout(
+        db.insert(verifiedProjects)
+          .values({
+            ...projectData,
+            createdAt: new Date(),
+            updatedAt: new Date(),
+          })
+          .returning()
+      );
+      return result[0];
+    } catch (error: any) {
+      console.error('createVerifiedProject error:', error.message);
+      if (error.message?.includes('timeout')) {
+        throw new Error('Database timeout');
+      }
+      throw error;
+    }
+  }
+
+  async updateVerifiedProject(id: string, projectData: Partial<InsertVerifiedProjectInput>): Promise<VerifiedProject | null> {
+    try {
+      const result = await withTimeout(
+        db.update(verifiedProjects)
+          .set({ ...projectData, updatedAt: new Date() })
+          .where(eq(verifiedProjects.id, id))
+          .returning()
+      );
+      return result[0] || null;
+    } catch (error: any) {
+      console.error('updateVerifiedProject error:', error.message);
+      if (error.message?.includes('timeout')) {
+        throw new Error('Database timeout');
+      }
+      throw error;
+    }
+  }
+
+  async deleteVerifiedProject(id: string): Promise<boolean> {
+    try {
+      const result = await withTimeout(
+        db.delete(verifiedProjects)
+          .where(eq(verifiedProjects.id, id))
+          .returning()
+      );
+      return result.length > 0;
+    } catch (error: any) {
+      console.error('deleteVerifiedProject error:', error.message);
+      if (error.message?.includes('timeout')) {
+        throw new Error('Database timeout');
+      }
+      throw error;
+    }
+  }
+
   // Project request operations
   async createProjectRequest(requestData: InsertProjectRequest): Promise<IProjectRequest> {
     try {
@@ -417,12 +594,8 @@ export class DatabaseStorage implements IStorage {
           userId: requestData.userId,
           title: requestData.title,
           description: requestData.description || null,
-          projectType: requestData.projectType,
           budget: requestData.budget || null,
           timeline: requestData.timeline || null,
-          contactMethod: requestData.contactMethod,
-          urgency: requestData.urgency || null,
-          additionalInfo: requestData.additionalInfo || null,
           technologies: requestData.technologies || null,
           status: 'pending',
           createdAt: new Date(),
