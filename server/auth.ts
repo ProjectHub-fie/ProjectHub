@@ -1,117 +1,120 @@
-import passport from "passport";
-import { Strategy as LocalStrategy } from "passport-local";
-import { Strategy as DiscordStrategy } from "passport-discord";
-import bcrypt from "bcryptjs";
-import { storage } from "./storage.js";
-import type { UserType as User } from "././../shared/schema.js";
+import { Context } from 'hono';
+import { eq } from 'drizzle-orm';
+import { users, adminUsers } from '../drizzle/schema.js';
+import { db } from './db.js';
 
-// Local strategy (email/password)
-passport.use(new LocalStrategy({
-  usernameField: 'email',
-  passwordField: 'password'
-}, async (email, password, done) => {
-  try {
-    console.log('Attempting login for email:', email);
-    
-    if (!email || !password) {
-      return done(null, false, { message: 'Email and password are required' });
-    }
-
-    const user = await storage.getUserByEmail(email);
-    if (!user) {
-      console.log('User not found:', email);
-      return done(null, false, { message: 'Invalid email or password' });
-    }
-
-    if (user.isBlocked) {
-      console.log('User is blocked:', email);
-      return done(null, false, { message: 'Your account has been blocked. Please contact support.' });
-    }
-
-    if (!user.password) {
-      console.log('User has no password (social login?):', email);
-      return done(null, false, { message: 'Please login using your social account' });
-    }
-
-    const isValidPassword = await bcrypt.compare(password, user.password);
-    if (!isValidPassword) {
-      console.log('Invalid password for user:', email);
-      return done(null, false, { message: 'Invalid email or password' });
-    }
-
-    console.log('Login successful for user:', email);
-    return done(null, user);
-  } catch (error: any) {
-    console.error('Login error:', error);
-    // Return a more user-friendly error message
-    if (error.code === 'ETIMEDOUT' || error.message?.includes('timeout')) {
-      return done(null, false, { message: 'Service temporarily unavailable. Please try again.' });
-    }
-    return done(null, false, { message: 'Login failed. Please try again.' });
-  }
-}));
-
-// Discord Strategy
-passport.use(new DiscordStrategy({
-  clientID: process.env.DISCORD_CLIENT_ID || "placeholder",
-  clientSecret: process.env.DISCORD_CLIENT_SECRET || "placeholder",
-  callbackURL: process.env.DISCORD_CALLBACK_URL || "/api/auth/discord/callback",
-  scope: ['identify', 'email']
-}, async (accessToken, refreshToken, profile, done) => {
-  if (process.env.DISCORD_CLIENT_ID === "placeholder") {
-    return done(new Error("Discord Client ID is missing"));
+// Extract session token from request headers
+export function getSessionToken(c: Context): string | null {
+  const authHeader = c.req.header('Authorization');
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    return authHeader.substring(7);
   }
   
+  const sessionHeader = c.req.header('X-User-Session');
+  if (sessionHeader) {
+    return sessionHeader;
+  }
+  
+  return null;
+}
+
+// Decode session token
+export function decodeSessionToken(token: string): { id: string; email: string } | null {
   try {
-    let user = await storage.getUserBySocialId('discord', profile.id);
+    const decoded = Buffer.from(token, 'base64').toString('utf-8');
+    const parsed = JSON.parse(decoded);
+    if (parsed.id && parsed.email) {
+      return { id: parsed.id, email: parsed.email };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+// Authenticate request middleware
+export async function authenticateRequest(c: Context, next: () => Promise<void>) {
+  const token = getSessionToken(c);
+  
+  if (!token) {
+    return c.json({ error: 'Authentication required' }, 401);
+  }
+
+  const sessionData = decodeSessionToken(token);
+  if (!sessionData) {
+    return c.json({ error: 'Invalid session token' }, 401);
+  }
+
+  try {
+    // Fetch user from database
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, sessionData.id));
 
     if (!user) {
-      user = await storage.upsertUser({
-        discordId: profile.id,
-        email: profile.email || null,
-        firstName: profile.username || null,
-        profileImageUrl: profile.avatar ? `https://cdn.discordapp.com/avatars/${profile.id}/${profile.avatar}.png` : null,
-      });
+      return c.json({ error: 'User not found' }, 401);
     }
 
     if (user.isBlocked) {
-      console.log('Blocked user attempted Discord login:', profile.email);
-      return done(null, false, { message: 'Your account has been blocked. Please contact support.' });
+      return c.json({ error: 'Account is blocked' }, 403);
     }
 
-    return done(null, user);
-  } catch (error: any) {
-    console.error('Discord login error:', error);
-    if (error.code === 'ETIMEDOUT') {
-      return done(null, false, { message: 'Service temporarily unavailable. Please try again.' });
-    }
-    return done(null, false, { message: 'Discord login failed. Please try again.' });
-  }
-}));
+    // Check if user is admin
+    const [adminUser] = await db
+      .select()
+      .from(adminUsers)
+      .where(and(
+        eq(adminUsers.userId, user.id),
+        eq(adminUsers.isActive, true)
+      ));
 
-// Serialize user for session
-passport.serializeUser((user: any, done) => {
-  try {
-    done(null, user.id);
+    // Attach user and admin info to context
+    c.set('user', {
+      ...user,
+      adminId: adminUser?.id,
+      isAdmin: !!adminUser,
+      adminRole: adminUser?.role,
+      adminPermissions: adminUser?.permissions || []
+    });
+
+    await next();
   } catch (error) {
-    console.error('Serialize user error:', error);
-    done(error);
+    console.error('Authentication error:', error);
+    return c.json({ error: 'Authentication failed' }, 500);
   }
-});
+}
 
-// Deserialize user from session
-passport.deserializeUser(async (id: any, done) => {
-  try {
-    const user = await storage.getUser(id);
-    done(null, user || false);
-  } catch (error: any) {
-    console.error('Deserialize user error:', error);
-    if (error.code === 'ETIMEDOUT') {
-      done(null, false); // Fail silently for timeout errors
-    } else {
-      done(error);
+// Admin authorization middleware
+export function authorizeAdmin(requiredRoles: string[] = []) {
+  return async (c: Context, next: () => Promise<void>) => {
+    const user = c.get('user');
+    
+    if (!user.isAdmin) {
+      return c.json({ error: 'Admin access required' }, 403);
     }
-  }
-});
 
-export default passport;
+    if (requiredRoles.length > 0 && !requiredRoles.includes(user.adminRole)) {
+      return c.json({ error: 'Insufficient admin privileges' }, 403);
+    }
+
+    await next();
+  };
+}
+
+// Permission check middleware
+export function requirePermission(permission: string) {
+  return async (c: Context, next: () => Promise<void>) => {
+    const user = c.get('user');
+    
+    if (!user.isAdmin) {
+      return c.json({ error: 'Admin access required' }, 403);
+    }
+
+    if (!user.adminPermissions.includes(permission)) {
+      return c.json({ error: `Permission '${permission}' required` }, 403);
+    }
+
+    await next();
+  };
+}

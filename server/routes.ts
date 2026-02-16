@@ -7,6 +7,78 @@ import passport from "./auth.js";
 import { insertProjectRequestSchema } from "./../shared/schema.js";
 import pg from "pg";
 import connectPgSimple from "connect-pg-simple";
+import { Hono } from 'hono';
+import { cors } from 'hono/cors';
+import authRoutes from './routes/auth.js';
+import projectRoutes from './routes/projects.js';
+import adminRoutes from './routes/admin.js';
+import { db } from './db.js';
+
+const app = new Hono();
+
+// CORS middleware
+app.use(
+  '*',
+  cors({
+    origin: ['http://localhost:3000', 'https://projecthub.vercel.app'],
+    credentials: true,
+  })
+);
+
+// Health check endpoint
+app.get('/health', async (c) => {
+  try {
+    // Test database connection
+    await db.execute(sql`SELECT 1`);
+    
+    return c.json({ 
+      status: 'ok', 
+      timestamp: new Date().toISOString(),
+      database: 'connected'
+    });
+  } catch (error) {
+    console.error('Health check failed:', error);
+    return c.json({ 
+      status: 'error', 
+      timestamp: new Date().toISOString(),
+      database: 'disconnected',
+      error: error instanceof Error ? error.message : 'Unknown error'
+    }, 500);
+  }
+});
+
+// API routes
+app.route('/api/auth', authRoutes);
+app.route('/api/projects', projectRoutes);
+app.route('/api/admin', adminRoutes);
+
+// 404 handler
+app.notFound((c) => {
+  return c.json({ 
+    error: 'Route not found',
+    path: c.req.path,
+    method: c.req.method
+  }, 404);
+});
+
+// Error handler
+app.onError((err, c) => {
+  console.error('API Error:', err);
+  
+  if (err instanceof z.ZodError) {
+    return c.json({ 
+      error: 'Validation error',
+      details: err.errors 
+    }, 400);
+  }
+  
+  return c.json({ 
+    error: 'Internal server error',
+    message: err instanceof Error ? err.message : 'Unknown error'
+  }, 500);
+});
+
+export default app;
 
 // Extend Express Request type to include user
 declare global {

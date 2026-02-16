@@ -1,0 +1,224 @@
+{
+  "version": "5",
+  "dialect": "postgresql",
+  "tables": {
+    "admin_actions": {
+      "name": "admin_actions",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "admin_user_id": {
+          "name": "admin_user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "action_type": {
+          "name": "action_type",
+          "type": "admin_action_type",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "target_type": {
+          "name": "target_type",
+          "type": "admin_target_type",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "target_id": {
+          "name": "target_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "details": {
+          "name": "details",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "ip_address": {
+          "name": "ip_address",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "user_agent": {
+          "name": "user_agent",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "NOW()"
+        }
+      },
+      "indexes": {
+        "idx_admin_actions_admin_user_id": {
+          "name": "idx_admin_actions_admin_user_id",
+          "columns": ["admin_user_id"],
+          "isUnique": false
+        },
+        "idx_admin_actions_created_at": {
+          "name": "idx_admin_actions_created_at",
+          "columns": ["created_at"],
+          "isUnique": false
+        },
+        "idx_admin_actions_target": {
+          "name": "idx_admin_actions_target",
+          "columns": ["target_type", "target_id"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "admin_actions_admin_user_id_admin_users_id_fk": {
+          "name": "admin_actions_admin_user_id_admin_users_id_fk",
+          "tableFrom": "admin_actions",
+          "tableTo": "admin_users",
+          "columnsFrom": ["admin_user_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {}
+    },
+    "admin_users": {
+      "name": "admin_users",
+      "schema": "",
+      "columns": {
+        "id": {
+          "name": "id",
+          "type": "uuid",
+          "primaryKey": true,
+          "notNull": true,
+          "default": "gen_random_uuid()"
+        },
+        "user_id": {
+          "name": "user_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "role": {
+          "name": "role",
+          "type": "admin_role",
+          "primaryKey": false,
+          "notNull": true
+        },
+        "permissions": {
+          "name": "permissions",
+          "type": "text[]",
+          "primaryKey": false,
+          "notNull": false,
+          "default": "'{}'"
+        },
+        "is_active": {
+          "name": "is_active",
+          "type": "boolean",
+          "primaryKey": false,
+          "notNull": true,
+          "default": true
+        },
+        "created_at": {
+          "name": "created_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "NOW()"
+        },
+        "updated_at": {
+          "name": "updated_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "NOW()"
+        }
+      },
+      "indexes": {
+        "idx_admin_users_user_id": {
+          "name": "idx_admin_users_user_id",
+          "columns": ["user_id"],
+          "isUnique": true
+        },
+        "idx_admin_users_role": {
+          "name": "idx_admin_users_role",
+          "columns": ["role"],
+          "isUnique": false
+        }
+      },
+      "foreignKeys": {
+        "admin_users_user_id_users_id_fk": {
+          "name": "admin_users_user_id_users_id_fk",
+          "tableFrom": "admin_users",
+          "tableTo": "users",
+          "columnsFrom": ["user_id"],
+          "columnsTo": ["id"],
+          "onDelete": "cascade",
+          "onUpdate": "no action"
+        }
+      },
+      "compositePrimaryKeys": {},
+      "uniqueConstraints": {
+        "admin_users_user_id_unique": {
+          "name": "admin_users_user_id_unique",
+          "nullsNotDistinct": false,
+          "columns": ["user_id"]
+        }
+      }
+    }
+  },
+  "enums": {
+    "admin_action_type": {
+      "name": "admin_action_type",
+      "values": {
+        "user_created": "user_created",
+        "user_updated": "user_updated",
+        "user_deleted": "user_deleted",
+        "project_created": "project_created",
+        "project_updated": "project_updated",
+        "project_deleted": "project_deleted",
+        "request_approved": "request_approved",
+        "request_rejected": "request_rejected",
+        "settings_updated": "settings_updated",
+        "system_maintenance": "system_maintenance",
+        "admin_created": "admin_created",
+        "admin_updated": "admin_updated"
+      }
+    },
+    "admin_role": {
+      "name": "admin_role",
+      "values": {
+        "super_admin": "super_admin",
+        "admin": "admin",
+        "moderator": "moderator"
+      }
+    },
+    "admin_target_type": {
+      "name": "admin_target_type",
+      "values": {
+        "user": "user",
+        "project": "project",
+        "request": "request",
+        "system": "system"
+      }
+    }
+  },
+  "schemas": {},
+  "_meta": {
+    "schemas": {},
+    "tables": {},
+    "columns": {}
+  }
+}

@@ -10,6 +10,7 @@ import { AppSidebar } from "@/components/app-sidebar";
 import { Button } from "@/components/ui/button";
 import { Sun, Moon } from "lucide-react";
 import { useTheme } from "@/components/theme-provider";
+import { useAuth } from "@/hooks/useAuth";
 
 // 懒加载较重的页面组件
 const Home = React.lazy(() => import("@/pages/home"));
@@ -19,6 +20,7 @@ const ProjectRequest = React.lazy(() => import("@/pages/project-request"));
 const ProjectPage = React.lazy(() => import("@/pages/project"));
 const ErrorPage = React.lazy(() => import("@/pages/error"));
 const NotFound = React.lazy(() => import("@/pages/not-found"));
+const AdminDashboard = React.lazy(() => import("@/pages/admin-dashboard"));
 
 function ThemeToggle() {
   const { theme, setTheme } = useTheme();
@@ -37,6 +39,8 @@ function ThemeToggle() {
 }
 
 function Router() {
+  const { isAuthenticated } = useAuth();
+  
   return (
     <React.Suspense 
       fallback={
@@ -51,6 +55,9 @@ function Router() {
         <Route path="/projects" component={Projects} />
         <Route path="/dashboard" component={ProjectRequest} />
         <Route path="/project/:id" component={ProjectPage} />
+        <Route path="/admin" component={() => (
+          isAuthenticated ? <AdminDashboard /> : <Login />
+        )} />
         <Route path="/error" component={ErrorPage} />
         <Route path="/404" component={NotFound} />
         <Route component={NotFound} />

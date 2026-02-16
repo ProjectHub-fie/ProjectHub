@@ -206,28 +206,21 @@ class InMemoryStorage implements IStorage {
 
   // Project request operations
   async createProjectRequest(requestData: InsertProjectRequest): Promise<IProjectRequest> {
-    try {
-      const result = await withTimeout(
-        db.insert(projectRequests).values({
-          userId: requestData.userId,
-          title: requestData.title,
-          description: requestData.description,
-          budget: requestData.budget,
-          timeline: requestData.timeline,
-          technologies: requestData.technologies,
-          status: 'pending',
-          createdAt: new Date(),
-          updatedAt: new Date(),
-        }).returning()
-      );
-      return result[0];
-    } catch (error: any) {
-      console.error('createProjectRequest error:', error.message);
-      if (error.message?.includes('timeout')) {
-        throw new Error('Database timeout');
-      }
-      throw error;
-    }
+    const newRequest: IProjectRequest = {
+      id: this.generateId(),
+      userId: requestData.userId,
+      title: requestData.title,
+      description: requestData.description || '',
+      budget: requestData.budget || null,
+      timeline: requestData.timeline || null,
+      technologies: requestData.technologies || null,
+      status: 'pending',
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+    
+    this.projectRequests.set(newRequest.id, newRequest);
+    return newRequest;
   }
 
   async getProjectRequests(userId: string): Promise<IProjectRequest[]> {

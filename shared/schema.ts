@@ -70,4 +70,26 @@ export const insertProjectInteractionSchema = createInsertSchema(projectInteract
 
 // Type exports for schemas
 export type UpsertUser = z.infer<typeof upsertUserSchema>;
-export type InsertVerifiedProjectInput = z.infer<typeof insertVerifiedProjectSchema>;
+// Simplified type definition to avoid Zod constraint issues
+export type InsertVerifiedProjectInput = {
+  slug: string;
+  title: string;
+  description: string;
+  longDescription?: string | null;
+  imageUrl?: string | null;
+  category: string;
+  technologies?: string[] | null;
+  features?: string[] | null;
+  highlights?: string[] | null;
+  liveUrl?: string | null;
+  githubUrl?: string | null;
+  status: string;
+  authorName?: string | null;
+  authorAvatar?: string | null;
+  architecture?: string | null;
+  timeline?: string | null;
+  teamSize?: string | null;
+  userCount?: string | null;
+  isActive?: boolean;
+  sortOrder?: number;
+};

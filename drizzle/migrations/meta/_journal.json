@@ -1,19 +1,47 @@
 {
-  "version": "7",
+  "version": "5",
   "dialect": "postgresql",
   "entries": [
     {
       "idx": 0,
-      "version": "7",
-      "when": 1768991153677,
+      "version": "5",
+      "when": 1704067200000,
       "tag": "0000_lazy_skaar",
       "breakpoints": true
     },
     {
       "idx": 1,
-      "version": "7",
-      "when": 1771003328461,
+      "version": "5",
+      "when": 1704067200001,
       "tag": "0001_charming_prism",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "5",
+      "when": 1704067200002,
+      "tag": "0002_add_verified_projects",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "5",
+      "when": 1704067200003,
+      "tag": "0003_update_project_request_status",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "5",
+      "when": 1704067200004,
+      "tag": "0004_create_projecthub_tables",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "5",
+      "when": 1704067200005,
+      "tag": "0005_create_admin_tables",
       "breakpoints": true
     }
   ]
