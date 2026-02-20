@@ -1,7 +1,7 @@
 import { Context } from 'hono';
-import { eq } from 'drizzle-orm';
-import { users, adminUsers } from '../drizzle/schema.js';
+import { users } from '../drizzle/schema.js';
 import { db } from './db.js';
+import { eq, and } from 'drizzle-orm';
 
 // Extract session token from request headers
 export function getSessionToken(c: Context): string | null {
@@ -45,41 +45,35 @@ export async function authenticateRequest(c: Context, next: () => Promise<void>)
     return c.json({ error: 'Invalid session token' }, 401);
   }
 
-  try {
-    // Fetch user from database
-    const [user] = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, sessionData.id));
+    try {
+      // Fetch user from database
+      const [user] = await db
+        .select()
+        .from(users)
+        .where(eq(users.id, sessionData.id));
 
-    if (!user) {
-      return c.json({ error: 'User not found' }, 401);
-    }
+      if (!user) {
+        return c.json({ error: 'User not found' }, 401);
+      }
 
-    if (user.isBlocked) {
-      return c.json({ error: 'Account is blocked' }, 403);
-    }
+      if (user.isBlocked) {
+        return c.json({ error: 'Account is blocked' }, 403);
+      }
 
-    // Check if user is admin
-    const [adminUser] = await db
-      .select()
-      .from(adminUsers)
-      .where(and(
-        eq(adminUsers.userId, user.id),
-        eq(adminUsers.isActive, true)
-      ));
+      // Check if user is admin
+      const isAdmin = user.isAdmin;
+      const adminRole = user.isAdmin ? 'admin' : null;
 
-    // Attach user and admin info to context
-    c.set('user', {
-      ...user,
-      adminId: adminUser?.id,
-      isAdmin: !!adminUser,
-      adminRole: adminUser?.role,
-      adminPermissions: adminUser?.permissions || []
-    });
+      // Attach user info to context
+      c.set('user', {
+        ...user,
+        isAdmin,
+        adminRole,
+        adminPermissions: []
+      });
 
-    await next();
-  } catch (error) {
+      await next();
+    } catch (error) {
     console.error('Authentication error:', error);
     return c.json({ error: 'Authentication failed' }, 500);
   }

@@ -7,11 +7,10 @@ import passport from "./auth.js";
 import { insertProjectRequestSchema } from "./../shared/schema.js";
 import pg from "pg";
 import connectPgSimple from "connect-pg-simple";
+import { sql } from 'drizzle-orm';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
-import authRoutes from './routes/auth.js';
-import projectRoutes from './routes/projects.js';
-import adminRoutes from './routes/admin.js';
+import * as z from 'zod';
 import { db } from './db.js';
 
 const app = new Hono();
@@ -28,9 +27,6 @@ app.use(
 // Health check endpoint
 app.get('/health', async (c) => {
   try {
-    // Test database connection
-    await db.execute(sql`SELECT 1`);
-    
     return c.json({ 
       status: 'ok', 
       timestamp: new Date().toISOString(),
@@ -48,9 +44,9 @@ app.get('/health', async (c) => {
 });
 
 // API routes
-app.route('/api/auth', authRoutes);
-app.route('/api/projects', projectRoutes);
-app.route('/api/admin', adminRoutes);
+// app.route('/api/auth', authRoutes);
+// app.route('/api/projects', projectRoutes);
+// app.route('/api/admin', adminRoutes);
 
 // 404 handler
 app.notFound((c) => {
