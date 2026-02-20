@@ -8,6 +8,18 @@
       "destination": "/api/index.js"
     },
     {
+      "source": "/reset-password",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/assets/(.*)",
+      "destination": "/assets/$1"
+    },
+    {
+      "source": "/(.*)\\.(js|css|png|jpg|svg|ico|json)",
+      "destination": "/$1.$2"
+    },
+    {
       "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
