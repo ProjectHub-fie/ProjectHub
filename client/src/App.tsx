@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import React, { useEffect, useState, Suspense } from "react";
 import { Switch, Route } from "wouter";
 import { queryClient } from "@/lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -43,7 +43,7 @@ function Router() {
   const { isAuthenticated } = useAuth();
   
   return (
-    <React.Suspense 
+    <Suspense 
       fallback={
         <div className="h-screen w-screen flex items-center justify-center bg-background">
           <div className="h-12 w-12 border-4 border-green-600 border-t-transparent rounded-full animate-spin" />
@@ -64,7 +64,7 @@ function Router() {
         <Route path="/404" component={NotFound} />
         <Route component={NotFound} />
       </Switch>
-    </React.Suspense>
+    </Suspense>
   );
 }
 

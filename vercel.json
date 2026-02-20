@@ -16,7 +16,15 @@
       "destination": "/assets/$1"
     },
     {
-      "source": "/(.*)\\.(js|css|png|jpg|svg|ico|json)",
+      "source": "/primebot.gif",
+      "destination": "/primebot.gif"
+    },
+    {
+      "source": "/Project.jpg",
+      "destination": "/Project.jpg"
+    },
+    {
+      "source": "/(.*)\\.(js|css|png|jpg|svg|ico|json|gif)",
       "destination": "/$1.$2"
     },
     {
