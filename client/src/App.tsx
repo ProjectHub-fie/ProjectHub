@@ -12,7 +12,6 @@ import { Sun, Moon } from "lucide-react";
 import { useTheme } from "@/components/theme-provider";
 import { useAuth } from "@/hooks/useAuth";
 
-// 懒加载较重的页面组件
 const Home = React.lazy(() => import("@/pages/home"));
 const Login = React.lazy(() => import("@/pages/login"));
 const Projects = React.lazy(() => import("@/pages/projects"));

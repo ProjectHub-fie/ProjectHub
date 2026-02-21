@@ -1,7 +1,7 @@
 import { Context } from 'hono';
 import { users } from '../drizzle/schema.js';
 import { db } from './db.js';
-import { eq, and } from 'drizzle-orm';
+import { eq } from 'drizzle-orm';
 
 // Extract session token from request headers
 export function getSessionToken(c: Context): string | null {
@@ -33,7 +33,7 @@ export function decodeSessionToken(token: string): { id: string; email: string }
 }
 
 // Authenticate request middleware
-export async function authenticateRequest(c: Context, next: () => Promise<void>) {
+export const authenticateRequest = async (c: Context, next: () => Promise<void>) => {
   const token = getSessionToken(c);
   
   if (!token) {
@@ -45,29 +45,39 @@ export async function authenticateRequest(c: Context, next: () => Promise<void>)
     return c.json({ error: 'Invalid session token' }, 401);
   }
 
-    try {
-      // Fetch user from database
-      const [user] = await db
-        .select()
-        .from(users)
-        .where(eq(users.id, sessionData.id));
+  try {
+    // Fetch user from database
+    const [user] = await db
+      .select()
+      .from(users)
+      .where(eq(users.id, sessionData.id));
 
-      if (!user) {
-        return c.json({ error: 'User not found' }, 401);
-      }
+    if (!user) {
+      return c.json({ error: 'User not found' }, 401);
+    }
 
-      if (user.isBlocked) {
-        return c.json({ error: 'Account is blocked' }, 403);
-      }
+    if (user.isBlocked) {
+      return c.json({ error: 'Account is blocked' }, 403);
+    }
 
-      // Attach user info to context
-      c.set('user', {
-        ...user
-      });
+    // Attach user info to context
+    c.set('user', user);
 
-      await next();
+    await next();
   } catch (error) {
     console.error('Authentication error:', error);
     return c.json({ error: 'Authentication failed' }, 500);
   }
-}
+};
+
+// Mock initialize and session for passport compatibility in routes
+export const initialize = () => (req: any, res: any, next: any) => next();
+export const session = () => (req: any, res: any, next: any) => next();
+export const authenticate = (strategy: string, options: any, callback?: any) => (req: any, res: any, next: any) => {
+  if (typeof options === 'function') {
+    options(null, {}, {});
+  } else if (callback) {
+    callback(null, {}, {});
+  }
+  next();
+};
