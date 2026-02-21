@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { X, Users, Globe } from "lucide-react";
+import { X, Users } from "lucide-react";
 import { Button } from "@/components/ui/button";
 
 interface DiscordWidgetProps {
