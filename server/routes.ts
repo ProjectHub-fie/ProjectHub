@@ -1,4 +1,3 @@
-import type { Express } from "express";
 import { createServer, type Server } from "http";
 import session from "express-session";
 import bcrypt from "bcryptjs";

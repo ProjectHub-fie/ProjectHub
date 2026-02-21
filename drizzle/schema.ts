@@ -3,7 +3,6 @@ import { relations } from 'drizzle-orm';
 
 // Enums - Match the database enums exactly
 export const projectRequestStatusEnum = pgEnum('project_request_status', ['pending', 'in_review', 'approved', 'rejected', 'completed']);
-export const adminRoleEnum = pgEnum('admin_role', ['owner', 'admin', 'moderator']);
 
 // Tables - Keep original names but add our projecthub-specific columns
 export const users = pgTable('users', {
@@ -18,7 +17,6 @@ export const users = pgTable('users', {
   username: text('username').unique(),
   password: text('password'),
   isBlocked: boolean('is_blocked').default(false).notNull(),
-  isAdmin: boolean('is_admin').default(false).notNull(),
   resetToken: text('reset_token').unique(),
   resetTokenExpiry: timestamp('reset_token_expiry'),
   createdAt: timestamp('created_at').defaultNow().notNull(),

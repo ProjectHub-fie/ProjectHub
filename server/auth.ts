@@ -60,55 +60,14 @@ export async function authenticateRequest(c: Context, next: () => Promise<void>)
         return c.json({ error: 'Account is blocked' }, 403);
       }
 
-      // Check if user is admin
-      const isAdmin = user.isAdmin;
-      const adminRole = user.isAdmin ? 'admin' : null;
-
       // Attach user info to context
       c.set('user', {
-        ...user,
-        isAdmin,
-        adminRole,
-        adminPermissions: []
+        ...user
       });
 
       await next();
-    } catch (error) {
+  } catch (error) {
     console.error('Authentication error:', error);
     return c.json({ error: 'Authentication failed' }, 500);
   }
-}
-
-// Admin authorization middleware
-export function authorizeAdmin(requiredRoles: string[] = []) {
-  return async (c: Context, next: () => Promise<void>) => {
-    const user = c.get('user');
-    
-    if (!user.isAdmin) {
-      return c.json({ error: 'Admin access required' }, 403);
-    }
-
-    if (requiredRoles.length > 0 && !requiredRoles.includes(user.adminRole)) {
-      return c.json({ error: 'Insufficient admin privileges' }, 403);
-    }
-
-    await next();
-  };
-}
-
-// Permission check middleware
-export function requirePermission(permission: string) {
-  return async (c: Context, next: () => Promise<void>) => {
-    const user = c.get('user');
-    
-    if (!user.isAdmin) {
-      return c.json({ error: 'Admin access required' }, 403);
-    }
-
-    if (!user.adminPermissions.includes(permission)) {
-      return c.json({ error: `Permission '${permission}' required` }, 403);
-    }
-
-    await next();
-  };
 }

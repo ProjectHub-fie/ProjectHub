@@ -20,7 +20,6 @@ const ProjectRequest = React.lazy(() => import("@/pages/project-request"));
 const ProjectPage = React.lazy(() => import("@/pages/project"));
 const ErrorPage = React.lazy(() => import("@/pages/error"));
 const NotFound = React.lazy(() => import("@/pages/not-found"));
-const AdminDashboard = React.lazy(() => import("@/pages/admin-dashboard"));
 const ResetPassword = React.lazy(() => import("@/pages/reset-password"));
 
 function ThemeToggle() {
@@ -56,9 +55,6 @@ function Router() {
         <Route path="/projects" component={Projects} />
         <Route path="/dashboard" component={ProjectRequest} />
         <Route path="/project/:id" component={ProjectPage} />
-        <Route path="/admin" component={() => (
-          isAuthenticated ? <AdminDashboard /> : <Login />
-        )} />
         <Route path="/error" component={ErrorPage} />
         <Route path="/reset-password" component={ResetPassword} />
         <Route path="/404" component={NotFound} />
