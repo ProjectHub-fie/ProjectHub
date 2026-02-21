@@ -4,12 +4,14 @@ import { Github, Twitter, Facebook, ChevronDown } from "lucide-react";
 import { FaDiscord } from "react-icons/fa";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useLocation } from "wouter";
+import { DiscordWidget } from "./discord-widget";
 
 export default function HeroSection() {
   const [, setLocation] = useLocation();
   const [currentTextIndex, setCurrentTextIndex] = useState(0);
   const [currentCharIndex, setCurrentCharIndex] = useState(0);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showDiscordWidget, setShowDiscordWidget] = useState(false);
   const isMobile = useIsMobile();
 
   const typingTexts = isMobile ? [
@@ -144,14 +146,14 @@ export default function HeroSection() {
           >
             <Github />
           </a>
-          <a 
-            href="https://discord.gg/gd7UNSfX86" 
+          <button 
+            onClick={() => setShowDiscordWidget(true)}
             className="text-muted-foreground hover:text-primary transition-colors duration-200 text-xl md:text-2xl p-2 hover:bg-secondary rounded-lg" 
             data-testid="social-discord"
             aria-label="Discord Server"
           >
             <FaDiscord />
-          </a>
+          </button>
           <a 
             href="#" 
             className="text-muted-foreground hover:text-primary transition-colors duration-200 text-xl md:text-2xl p-2 hover:bg-secondary rounded-lg" 
@@ -170,6 +172,10 @@ export default function HeroSection() {
           </a>
         </div>
       </div>
+
+      {showDiscordWidget && (
+        <DiscordWidget onClose={() => setShowDiscordWidget(false)} />
+      )}
 
       {/* Scroll Indicator */}
       <div className="absolute bottom-8 left-1/2 transform -translate-x-1/2 animate-bounce">
