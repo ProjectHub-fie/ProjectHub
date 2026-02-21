@@ -72,7 +72,10 @@ export function DiscordWidget({ onClose }: DiscordWidgetProps) {
               <div className="space-y-3">
                 <p className="text-sm font-medium text-muted-foreground px-1">Online Members</p>
                 <div className="grid grid-cols-2 gap-2 max-h-48 overflow-y-auto pr-2 custom-scrollbar">
-                  {data.members.slice(0, 10).map((member, i) => (
+                  {data.members
+                    .filter(member => !member.username.toLowerCase().includes('bot'))
+                    .slice(0, 10)
+                    .map((member, i) => (
                     <div key={i} className="flex items-center gap-2 p-2 rounded-lg bg-background border border-border/50">
                       <div className="relative">
                         <img src={member.avatar_url} alt="" className="w-8 h-8 rounded-full bg-secondary" />
@@ -83,9 +86,9 @@ export function DiscordWidget({ onClose }: DiscordWidgetProps) {
                       <span className="text-xs font-medium truncate">{member.username}</span>
                     </div>
                   ))}
-                  {data.members.length > 10 && (
+                  {data.members.filter(member => !member.username.toLowerCase().includes('bot')).length > 10 && (
                     <div className="col-span-2 text-center py-2 text-xs text-muted-foreground italic">
-                      + {data.members.length - 10} more members online
+                      + {data.members.filter(member => !member.username.toLowerCase().includes('bot')).length - 10} more members online
                     </div>
                   )}
                 </div>
