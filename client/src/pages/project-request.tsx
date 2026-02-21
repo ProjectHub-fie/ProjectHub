@@ -16,6 +16,8 @@ import { useLocation } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
 import { LogOut, Plus, Clock, User, Settings, Camera } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
+import { formatStatusWithEmoji, getStatusDisplay } from "@/lib/utils";
+import { EmojiTest } from "@/components/EmojiTest";
 
 const projectRequestSchema = z.object({
   title: z.string().min(1, "Project title is required"),
@@ -79,10 +81,16 @@ export default function ProjectRequestPage() {
     }
   }, [isAuthenticated, isLoading, setLocation, user]);
 
-  const { data: userRequests } = useQuery({
+  const { data: userRequests, isLoading: requestsLoading, error: requestsError } = useQuery({
     queryKey: ["/api/project-requests"],
     enabled: isAuthenticated && !!user,
+    select: (data) => {
+      console.log('Raw user requests data:', data);
+      return data;
+    }
   });
+
+  console.log('User requests state:', { userRequests, requestsLoading, requestsError });
 
   const createRequestMutation = useMutation({
     mutationFn: async (data: z.infer<typeof projectRequestSchema>) => {
@@ -318,6 +326,11 @@ export default function ProjectRequestPage() {
         )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Emoji Test - Temporary */}
+          <div className="lg:col-span-3 mb-6">
+            <EmojiTest />
+          </div>
+          
           {/* Project Request Form */}
           <Card className="lg:col-span-2 bg-slate-800 border-slate-700">
             <CardHeader>
@@ -448,26 +461,38 @@ export default function ProjectRequestPage() {
             <CardContent>
               {userRequests && Array.isArray(userRequests) && userRequests.length > 0 ? (
                 <div className="space-y-4">
-                  {Array.isArray(userRequests) && userRequests.map((request: any) => (
-                    <div key={request.id} className="p-4 bg-slate-700 rounded-lg">
-                      <h4 className="font-medium text-white mb-2" data-testid={`request-title-${request.id}`}>{request.title}</h4>
-                      <p className="text-sm text-slate-400 mb-2 line-clamp-2" data-testid={`request-description-${request.id}`}>
-                        {request.description}
-                      </p>
-                      <div className="flex items-center justify-between">
-                        <Badge
-                          variant={request.status === 'pending' ? 'secondary' : 'default'}
-                          className="text-xs"
-                          data-testid={`request-status-${request.id}`}
-                        >
-                          {request.status}
-                        </Badge>
-                        <span className="text-xs text-slate-500">
-                          {new Date(request.createdAt).toLocaleDateString()}
-                        </span>
+                  {Array.isArray(userRequests) && userRequests.map((request: any) => {
+                    const statusInfo = getStatusDisplay(request.status);
+                    console.log('Debug - Processing request:', {
+                      id: request.id,
+                      title: request.title,
+                      rawStatus: request.status,
+                      statusInfo: statusInfo,
+                      formattedStatus: formatStatusWithEmoji(request.status)
+                    });
+                    return (
+                      <div key={request.id} className="p-4 bg-slate-700 rounded-lg">
+                        <h4 className="font-medium text-white mb-2" data-testid={`request-title-${request.id}`}>{request.title}</h4>
+                        <p className="text-sm text-slate-400 mb-2 line-clamp-2" data-testid={`request-description-${request.id}`}>
+                          {request.description}
+                        </p>
+                        <div className="flex items-center justify-between">
+                          <Badge
+                            variant={request.status === 'pending' ? 'secondary' : 'default'}
+                            className={`text-xs ${statusInfo.color}`}
+                            data-testid={`request-status-${request.id}`}
+                          >
+                            <span className="debug-status">
+                              Status: {request.status} | Formatted: {formatStatusWithEmoji(request.status)}
+                            </span>
+                          </Badge>
+                          <span className="text-xs text-slate-500">
+                            {new Date(request.createdAt).toLocaleDateString()}
+                          </span>
+                        </div>
                       </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               ) : (
                 <div className="text-center text-slate-400 py-8">

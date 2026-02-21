@@ -2,7 +2,7 @@ import { pgTable, text, timestamp, uuid, boolean, integer, varchar, pgEnum } fro
 import { relations } from 'drizzle-orm';
 
 // Enums
-export const projectRequestStatusEnum = pgEnum('project_request_status', ['pending', 'approved', 'rejected', 'in-progress', 'completed']);
+export const projectRequestStatusEnum = pgEnum('project_request_status', ['pending', 'working', 'done', 'canceled', 'suspended']);
 
 // Tables
 export const users = pgTable('users', {

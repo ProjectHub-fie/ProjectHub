@@ -1,10 +1,12 @@
 import { pgTable, text, timestamp, uuid, boolean, integer, varchar, pgEnum } from 'drizzle-orm/pg-core';
 import { relations } from 'drizzle-orm';
 
-// Enums - Match the database enums exactly
-export const projectRequestStatusEnum = pgEnum('project_request_status', ['pending', 'in_review', 'approved', 'rejected', 'completed']);
+// Enums
+export const projectRequestStatusEnum = pgEnum('project_request_status', ['pending', 'working', 'done', 'canceled', 'suspended']);
+export const projectCategoryEnum = pgEnum('project_category', ['websites', 'bots', 'utilities']);
+export const projectStatusEnum = pgEnum('project_status', ['active', 'developing', 'live', 'beta', 'archived']);
 
-// Tables - Keep original names but add our projecthub-specific columns
+// Tables
 export const users = pgTable('users', {
   id: uuid('id').primaryKey().defaultRandom(),
   email: text('email').unique(),
@@ -36,13 +38,13 @@ export const verifiedProjects = pgTable('verified_projects', {
   description: text('description').notNull(),
   longDescription: text('long_description'),
   imageUrl: text('image_url'),
-  category: text('category').notNull(), // Using text instead of enum to match database
+  category: projectCategoryEnum('category').notNull(),
   technologies: text('technologies').array(), // Array of strings
   features: text('features').array(), // Array of strings
   highlights: text('highlights').array(), // Array of strings
   liveUrl: text('live_url'),
   githubUrl: text('github_url'),
-  status: text('status').notNull(), // Using text instead of enum to match database
+  status: projectStatusEnum('status').notNull(),
   authorName: text('author_name'),
   authorAvatar: text('author_avatar'),
   architecture: text('architecture'),
