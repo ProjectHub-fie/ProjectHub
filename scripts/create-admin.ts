@@ -1,7 +1,7 @@
-zimport { storage } from "../server/storage.js";
+import { storage } from "../server/storage.js";
 import bcrypt from "bcryptjs";
 
-npx drizzle-kit generateasync function createDefaultOwner() {
+async function createDefaultOwner() {
   try {
     console.log("Creating default owner account...");
     

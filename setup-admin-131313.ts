@@ -1,50 +1,47 @@
+import { config } from 'dotenv';
+config(); // Load environment variables first
+
 import { storage } from "./server/storage.js";
 import bcrypt from "bcryptjs";
 
-async function setupAdmin131313() {
+async function createSpecificAdmin() {
   try {
-    console.log("Setting up admin with PIN: 131313");
+    console.log("Creating admin account with PIN 131313 and password adadad...");
     
-    // Get all existing admins
-    const existingAdmins = await storage.getAllAdmins();
-    console.log(`Found ${existingAdmins.length} existing admins`);
-    
-    // Delete all existing admins
-    for (const admin of existingAdmins) {
-      console.log(`Deleting admin with PIN: ${admin.pin}`);
-      await storage.deleteAdmin(admin.id);
+    // Check if admin with PIN 131313 already exists
+    const existingAdmin = await storage.getAdminByPin('131313');
+    if (existingAdmin) {
+      console.log("Admin with PIN 131313 already exists, removing existing entry...");
+      await storage.deleteAdmin(existingAdmin.id);
     }
     
-    if (existingAdmins.length > 0) {
-      console.log("✓ All existing admins deleted");
-    }
+    // Create new admin with specified credentials
+    const pin = "131313";
+    const password = "adadad";
+    const email = "admin131313@projecthub.com";
+    const role = "admin"; // Using admin role instead of owner
     
-    // Create new admin with PIN 131313 and password adadad
-    const newPin = "131313";
-    const newPassword = "adadad";
-    const email = "admin@example.com";
+    const hash = await bcrypt.hash(password, 10);
+    await storage.setAdminPassword(pin, email, hash, role);
     
-    const hash = await bcrypt.hash(newPassword, 10);
-    await storage.setAdminPassword(newPin, email, hash);
-    
-    console.log("✓ New admin created successfully");
-    console.log(`PIN: ${newPin}`);
-    console.log(`Password: ${newPassword}`);
+    console.log("✓ Admin created successfully");
+    console.log(`PIN: ${pin}`);
+    console.log(`Password: ${password}`);
     console.log(`Email: ${email}`);
+    console.log(`Role: ${role}`);
     
-    // Verify the new admin was created
-    const createdAdmin = await storage.getAdminByPin(newPin);
+    // Verify the admin was created
+    const createdAdmin = await storage.getAdminByPin(pin);
     if (createdAdmin) {
       console.log("✓ Admin verified in database");
-      
-      // Test password verification
-      const isValid = await bcrypt.compare(newPassword, createdAdmin.passwordHash);
-      console.log(`Password verification: ${isValid ? "✓ SUCCESS" : "✗ FAILED"}`);
+      console.log(`Database ID: ${createdAdmin.id}`);
+      console.log(`Role in DB: ${createdAdmin.role}`);
+      console.log(`Email in DB: ${createdAdmin.email}`);
     }
     
   } catch (error) {
-    console.error("Admin setup failed:", error);
+    console.error("Admin creation failed:", error);
   }
 }
 
-setupAdmin131313();
+createSpecificAdmin();

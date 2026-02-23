@@ -3,24 +3,14 @@ import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
-import { useToast } from "@/hooks/use-toast";
-import { useLocation } from "wouter";
-import { 
-  Users, 
-  FileText, 
-  Settings, 
-  LogOut, 
-  Plus, 
-  Trash2, 
-  Crown, 
-  User, 
-  Eye,
-  ShieldAlert
-} from "lucide-react";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { ProjectStatusSelector } from "@/components/project-status-selector";
+import { useAuth } from '@/hooks/useAuth';
+import { useProjectRequests } from '@/hooks/use-project-requests';
 
 interface Admin {
   id: string;
@@ -30,153 +20,54 @@ interface Admin {
   updatedAt: string;
 }
 
-export default function AdminPage() {
-  const [newPin, setNewPin] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [newEmail, setNewEmail] = useState("");
-  const [newRole, setNewRole] = useState("moderator");
-  const { toast } = useToast();
-  const [, setLocation] = useLocation();
-  const queryClient = useQueryClient();
-  const [userRole, setUserRole] = useState<string>("");
+type ProjectStatus = 'pending' | 'approved' | 'rejected';
 
-  // Get current user role
-  useEffect(() => {
-    const fetchUserRole = async () => {
-      try {
-        const res = await apiRequest("/api/admin/stats", "GET");
-        if (res.ok) {
-          // In a real implementation, you'd get the role from the session
-          // For now, we'll simulate this
-          setUserRole("owner"); // This would come from session
-        }
-      } catch (error) {
-        console.error("Failed to fetch user role");
-      }
-    };
-    fetchUserRole();
-  }, []);
+export function AdminPage() {
+  const { user } = useAuth();
+  const { 
+    requests, 
+    requestsLoading, 
+    updateStatus, 
+    updateStatusLoading,
+    deleteRequest,
+    deleteLoading,
+    getStatusCounts
+  } = useProjectRequests();
+  
+  // Role-based permissions
+  const canViewStats = user?.role === 'owner' || user?.role === 'admin' || user?.role === 'moderator';
+  const canViewUsers = user?.role === 'owner' || user?.role === 'admin';
+  const canManageProjects = user?.role === 'owner' || user?.role === 'admin' || user?.role === 'moderator';
+  const canManageAdmins = user?.role === 'owner';
 
-  const { data: admins = [], isLoading: adminsLoading } = useQuery({
-    queryKey: ["admins"],
-    queryFn: async () => {
-      const res = await apiRequest("/api/admin/list", "GET");
-      if (!res.ok) throw new Error("Failed to fetch admins");
-      return res.json();
-    },
-  });
-
+  // Fetch users
   const { data: users = [], isLoading: usersLoading } = useQuery({
-    queryKey: ["users"],
+    queryKey: ['users'],
     queryFn: async () => {
-      const res = await apiRequest("/api/users", "GET");
-      if (!res.ok) throw new Error("Failed to fetch users");
-      return res.json();
+      const response = await fetch('/api/users');
+      if (!response.ok) throw new Error('Failed to fetch users');
+      return response.json();
     },
-    enabled: ["owner", "admin", "moderator"].includes(userRole)
+    enabled: canViewUsers,
   });
 
-  const { data: requests = [], isLoading: requestsLoading } = useQuery({
-    queryKey: ["project-requests"],
+  // Fetch admin stats
+  const { data: stats } = useQuery({
+    queryKey: ['admin-stats'],
     queryFn: async () => {
-      const res = await apiRequest("/api/project-requests", "GET");
-      if (!res.ok) throw new Error("Failed to fetch requests");
-      return res.json();
+      const response = await fetch('/api/admin/stats');
+      if (!response.ok) throw new Error('Failed to fetch stats');
+      return response.json();
     },
-    enabled: ["owner", "admin", "moderator"].includes(userRole)
+    enabled: canViewStats,
   });
 
-  const createAdminMutation = useMutation({
-    mutationFn: async () => {
-      const res = await apiRequest("/api/admin/create", "POST", {
-        pin: newPin,
-        password: newPassword,
-        email: newEmail,
-        role: newRole
-      });
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message);
-      return data;
-    },
-    onSuccess: () => {
-      toast({ title: "Admin created successfully" });
-      queryClient.invalidateQueries({ queryKey: ["admins"] });
-      setNewPin("");
-      setNewPassword("");
-      setNewEmail("");
-    },
-    onError: (error: Error) => {
-      toast({ 
-        title: "Failed to create admin", 
-        description: error.message,
-        variant: "destructive" 
-      });
-    }
-  });
-
-  const deleteAdminMutation = useMutation({
-    mutationFn: async (id: string) => {
-      const res = await apiRequest(`/api/admin/${id}`, "DELETE");
-      const data = await res.json();
-      if (!res.ok) throw new Error(data.message);
-      return data;
-    },
-    onSuccess: () => {
-      toast({ title: "Admin deleted successfully" });
-      queryClient.invalidateQueries({ queryKey: ["admins"] });
-    },
-    onError: (error: Error) => {
-      toast({ 
-        title: "Failed to delete admin", 
-        description: error.message,
-        variant: "destructive" 
-      });
-    }
-  });
-
-  const logoutMutation = useMutation({
-    mutationFn: async () => {
-      const res = await apiRequest("/api/admin/logout", "POST");
-      if (!res.ok) throw new Error("Logout failed");
-      return res.json();
-    },
-    onSuccess: () => {
-      setLocation("/");
-    },
-    onError: (error: Error) => {
-      toast({ 
-        title: "Logout failed", 
-        description: error.message,
-        variant: "destructive" 
-      });
-    }
-  });
-
-  const canCreateAdmin = ["owner", "admin"].includes(userRole);
-  const canDeleteAdmin = ["owner", "admin"].includes(userRole);
-  const canViewUsers = ["owner", "admin", "moderator"].includes(userRole);
-  const canManageProjects = ["owner", "admin", "moderator"].includes(userRole);
-
-  const getRoleBadge = (role: string) => {
-    const roleStyles = {
-      owner: "bg-yellow-100 text-yellow-800 border-yellow-200",
-      admin: "bg-blue-100 text-blue-800 border-blue-200",
-      moderator: "bg-green-100 text-green-800 border-green-200"
-    };
-    
-    const roleIcons = {
-      owner: <Crown className="h-3 w-3" />,
-      admin: <User className="h-3 w-3" />,
-      moderator: <Eye className="h-3 w-3" />
-    };
-
-    return (
-      <Badge className={`${roleStyles[role as keyof typeof roleStyles]} flex items-center gap-1`}>
-        {roleIcons[role as keyof typeof roleIcons]}
-        {role.charAt(0).toUpperCase() + role.slice(1)}
-      </Badge>
-    );
+  // Handle status change
+  const handleStatusChange = (id: string, newStatus: string) => {
+    updateStatus({ id, status: newStatus });
   };
+
+  const statusCounts = getStatusCounts();
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
@@ -185,7 +76,7 @@ export default function AdminPage() {
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
             <p className="text-gray-600 mt-2">
-              Welcome! Your role: {getRoleBadge(userRole)}
+              Welcome! Your role: {user?.role.charAt(0).toUpperCase() + user?.role.slice(1)}
             </p>
           </div>
           <Button 
@@ -199,43 +90,45 @@ export default function AdminPage() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          {canViewUsers && (
+          {canViewStats && (
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Total Users</CardTitle>
                 <Users className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{users.length}</div>
+                <div className="text-2xl font-bold">{stats?.totalUsers}</div>
               </CardContent>
             </Card>
           )}
 
-          {canManageProjects && (
+          {canViewStats && (
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                 <CardTitle className="text-sm font-medium">Project Requests</CardTitle>
                 <FileText className="h-4 w-4 text-muted-foreground" />
               </CardHeader>
               <CardContent>
-                <div className="text-2xl font-bold">{requests.length}</div>
+                <div className="text-2xl font-bold">{stats?.totalRequests}</div>
               </CardContent>
             </Card>
           )}
 
-          <Card>
-            <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-              <CardTitle className="text-sm font-medium">Admin Accounts</CardTitle>
-              <ShieldAlert className="h-4 w-4 text-muted-foreground" />
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{admins.length}</div>
-            </CardContent>
-          </Card>
+          {canViewStats && (
+            <Card>
+              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                <CardTitle className="text-sm font-medium">Admin Accounts</CardTitle>
+                <ShieldAlert className="h-4 w-4 text-muted-foreground" />
+              </CardHeader>
+              <CardContent>
+                <div className="text-2xl font-bold">{stats?.totalAdmins}</div>
+              </CardContent>
+            </Card>
+          )}
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {canCreateAdmin && (
+          {canManageAdmins && (
             <Card>
               <CardHeader>
                 <CardTitle>Create New Admin</CardTitle>
@@ -401,11 +294,24 @@ export default function AdminPage() {
           <div className="mt-8">
             <Card>
               <CardHeader>
-                <CardTitle>Project Requests</CardTitle>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                  <CardTitle>Project Requests</CardTitle>
+                  <div className="flex flex-wrap gap-2 text-sm">
+                    <Badge variant="secondary">Pending: {statusCounts.pending}</Badge>
+                    <Badge variant="default">In Review: {statusCounts.in_review}</Badge>
+                    <Badge variant="default">Approved: {statusCounts.approved}</Badge>
+                    <Badge variant="destructive">Rejected: {statusCounts.rejected}</Badge>
+                    <Badge variant="default">Completed: {statusCounts.completed}</Badge>
+                  </div>
+                </div>
               </CardHeader>
               <CardContent>
                 {requestsLoading ? (
-                  <div>Loading requests...</div>
+                  <div className="space-y-2">
+                    {[...Array(3)].map((_, i) => (
+                      <Skeleton key={i} className="h-12 w-full" />
+                    ))}
+                  </div>
                 ) : (
                   <Table>
                     <TableHeader>
@@ -414,27 +320,72 @@ export default function AdminPage() {
                         <TableHead>User</TableHead>
                         <TableHead>Status</TableHead>
                         <TableHead>Created</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
                       </TableRow>
                     </TableHeader>
                     <TableBody>
-                      {requests.map((request: any) => (
-                        <TableRow key={request.id}>
-                          <TableCell>{request.title}</TableCell>
-                          <TableCell>{request.userId}</TableCell>
-                          <TableCell>
-                            <Badge variant={
-                              request.status === 'approved' ? 'default' :
-                              request.status === 'rejected' ? 'destructive' :
-                              'secondary'
-                            }>
-                              {request.status}
-                            </Badge>
+                      {requests.length === 0 ? (
+                        <TableRow>
+                          <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
+                            No project requests found
                           </TableCell>
-                          <TableCell>{new Date(request.createdAt).toLocaleDateString()}</TableCell>
                         </TableRow>
-                      ))}
+                      ) : (
+                        requests.map((request: any) => (
+                          <TableRow key={request.id}>
+                            <TableCell className="font-medium max-w-[200px] truncate">
+                              {request.title}
+                            </TableCell>
+                            <TableCell>
+                              <span className="text-sm text-muted-foreground">
+                                {request.userId.substring(0, 8)}...
+                              </span>
+                            </TableCell>
+                            <TableCell>
+                              <ProjectStatusSelector
+                                currentStatus={request.status}
+                                onStatusChange={(newStatus) => handleStatusChange(request.id, newStatus)}
+                                disabled={updateStatusLoading}
+                              />
+                            </TableCell>
+                            <TableCell>
+                              <span className="text-sm text-muted-foreground">
+                                {new Date(request.createdAt).toLocaleDateString()}
+                              </span>
+                            </TableCell>
+                            <TableCell className="text-right space-x-2">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                  // TODO: Implement project details modal/view
+                                  alert('Project details view coming soon');
+                                }}
+                              >
+                                View
+                              </Button>
+                              <Button
+                                variant="destructive"
+                                size="sm"
+                                onClick={() => deleteRequest(request.id)}
+                                disabled={deleteLoading}
+                              >
+                                Delete
+                              </Button>
+                            </TableCell>
+                          </TableRow>
+                        ))
+                      )}
                     </TableBody>
                   </Table>
+                )}
+                
+                {(updateStatusLoading || deleteLoading) && (
+                  <Alert className="mt-4">
+                    <AlertDescription>
+                      {updateStatusLoading ? 'Updating project status...' : 'Deleting project request...'}
+                    </AlertDescription>
+                  </Alert>
                 )}
               </CardContent>
             </Card>
