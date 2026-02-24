@@ -269,6 +269,23 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.patch('/api/project-requests/:id/status', requireAuth, async (req, res) => {
+    try {
+      const { status } = req.body;
+      if (!status) {
+        return res.status(400).json({ message: "Status is required" });
+      }
+      const updated = await storage.updateProjectRequestStatus(req.params.id, status);
+      if (!updated) {
+        return res.status(404).json({ message: "Project request not found" });
+      }
+      res.json(updated);
+    } catch (error) {
+      console.error('Status update error:', error);
+      res.status(500).json({ message: "Failed to update status" });
+    }
+  });
+
   const httpServer = createServer(app);
   return httpServer;
 }
