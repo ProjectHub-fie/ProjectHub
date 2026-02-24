@@ -7,14 +7,15 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Trash2, UserPlus, ArrowLeft, KeyRound, Shield, Crown, User, Eye, Calendar } from "lucide-react";
+import { Trash2, UserPlus, ArrowLeft, KeyRound, Shield, Crown, User, Eye, Calendar, ShieldCheck } from "lucide-react";
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useAdminAuth } from '@/hooks/useAdminAuth';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 // Admin Info 页面组件 / Admin Info page component
 export default function AdminInfo() {
-  const { canManageAdmins } = useAdminAuth();
+  const { canManageAdmins, adminRole: currentAdminRole } = useAdminAuth();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
 
@@ -29,6 +30,29 @@ export default function AdminInfo() {
   const [newPassword, setNewPassword] = useState("");
   const [confirmNewPassword, setConfirmNewPassword] = useState("");
   const [currentPin, setCurrentPin] = useState("");
+
+  // Role update state
+  const [selectedRoleAdmin, setSelectedRoleAdmin] = useState<{id: string, role: string} | null>(null);
+  const [newRole, setNewRole] = useState<string>("");
+
+  // Role update mutation
+  const updateRoleMutation = useMutation({
+    mutationFn: async ({ id, role }: { id: string; role: string }) => {
+      await apiRequest(`/api/admin/${id}/role`, "PUT", { role });
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["/api/admin/list"] });
+      toast({ title: "Role updated successfully" });
+      setSelectedRoleAdmin(null);
+    },
+    onError: (error: Error) => {
+      toast({
+        title: "Failed to update role",
+        description: error.message,
+        variant: "destructive",
+      });
+    },
+  });
 
   // 删除管理员的mutation / Delete admin mutation
   const deleteMutation = useMutation({
@@ -370,6 +394,63 @@ export default function AdminInfo() {
                       Email: {admin.email}
                     </div>
                   )}
+                  
+                  {/* Role management for Owners */}
+                  {currentAdminRole === 'owner' && (
+                    <Dialog open={selectedRoleAdmin?.id === admin.id} onOpenChange={(open) => !open && setSelectedRoleAdmin(null)}>
+                      <DialogTrigger asChild>
+                        <Button 
+                          variant="outline" 
+                          size="sm" 
+                          className="w-full mt-2"
+                          onClick={() => {
+                            setSelectedRoleAdmin({ id: admin.id, role: admin.role });
+                            setNewRole(admin.role);
+                          }}
+                        >
+                          <ShieldCheck className="h-3 w-3 mr-2" />
+                          Manage Role
+                        </Button>
+                      </DialogTrigger>
+                      <DialogContent>
+                        <DialogHeader>
+                          <DialogTitle>Update Admin Role</DialogTitle>
+                          <DialogDescription>
+                            Change the permission level for admin PIN: {admin.pin}
+                          </DialogDescription>
+                        </DialogHeader>
+                        <div className="py-4 space-y-4">
+                          <div className="space-y-2">
+                            <Label>Select New Role</Label>
+                            <Select value={newRole} onValueChange={setNewRole}>
+                              <SelectTrigger>
+                                <SelectValue placeholder="Select role" />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="moderator">Moderator (View & Manage Projects)</SelectItem>
+                                <SelectItem value="admin">Admin (Create Moderators & Delete Projects)</SelectItem>
+                                <SelectItem value="owner">Owner (Full System Control)</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                        </div>
+                        <DialogFooter>
+                          <Button 
+                            variant="outline" 
+                            onClick={() => setSelectedRoleAdmin(null)}
+                          >
+                            Cancel
+                          </Button>
+                          <Button 
+                            onClick={() => updateRoleMutation.mutate({ id: admin.id, role: newRole })}
+                            disabled={updateRoleMutation.isPending || newRole === admin.role}
+                          >
+                            {updateRoleMutation.isPending ? "Updating..." : "Update Role"}
+                          </Button>
+                        </DialogFooter>
+                      </DialogContent>
+                    </Dialog>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -377,13 +458,14 @@ export default function AdminInfo() {
         )}
       </div>
 
-      {(changePasswordMutation.isPending || deleteMutation.isPending) && (
+      {(changePasswordMutation.isPending || deleteMutation.isPending || updateRoleMutation.isPending) && (
         <div className="fixed bottom-4 right-4">
           <Card className="p-4 shadow-lg">
             <div className="flex items-center gap-2">
               <div className="h-4 w-4 animate-spin rounded-full border-2 border-solid border-current border-r-transparent"></div>
               <span className="text-sm">
-                {changePasswordMutation.isPending ? 'Changing password...' : 'Deleting admin...'}
+                {changePasswordMutation.isPending ? 'Changing password...' : 
+                 deleteMutation.isPending ? 'Deleting admin...' : 'Updating role...'}
               </span>
             </div>
           </Card>

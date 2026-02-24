@@ -20,6 +20,7 @@ interface Admin {
 
 export default function AdminPage() {
   const { user, logout } = useAuth();
+  const [, setLocation] = useLocation();
   const { 
     adminRole,
     isLoading: isAdminLoading,
@@ -181,7 +182,7 @@ export default function AdminPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {canViewUsers && (
             <Card className="hover:shadow-md transition-shadow cursor-pointer" 
-                  onClick={() => window.location.href = '/users'}>
+                  onClick={() => setLocation('/users')}>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <Users className="h-5 w-5" />
@@ -201,7 +202,7 @@ export default function AdminPage() {
 
           {canManageProjects && (
             <Card className="hover:shadow-md transition-shadow cursor-pointer"
-                  onClick={() => window.location.href = '/projects'}>
+                  onClick={() => setLocation('/projects')}>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <FileText className="h-5 w-5" />
@@ -221,11 +222,11 @@ export default function AdminPage() {
 
           {canManageAdmins && (
             <Card className="hover:shadow-md transition-shadow cursor-pointer"
-                  onClick={() => window.location.href = '/admin/info'}>
+                  onClick={() => setLocation('/admin/info')}>
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                   <ShieldAlert className="h-5 w-5" />
-                  Admin Credentials
+                  Admin Management
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -234,27 +235,6 @@ export default function AdminPage() {
                 </p>
                 <Button variant="outline" className="mt-4 w-full">
                   Go to Admin Management
-                </Button>
-              </CardContent>
-            </Card>
-          )}
-
-          {/* Role-specific quick actions */}
-          {adminRole === 'owner' && (
-            <Card className="hover:shadow-md transition-shadow cursor-pointer"
-                  onClick={() => window.location.href = '/admin/create'}>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <User className="h-5 w-5" />
-                  Create New Admin
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="text-sm text-muted-foreground">
-                  Create new administrator accounts with custom roles and permissions.
-                </p>
-                <Button variant="outline" className="mt-4 w-full">
-                  Create Admin Account
                 </Button>
               </CardContent>
             </Card>
