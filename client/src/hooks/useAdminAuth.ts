@@ -16,11 +16,11 @@ export function useAdminAuth() {
   useEffect(() => {
     const fetchAdminRole = async () => {
       try {
-        const response = await apiRequest("/api/admin/stats");
+        const response = await apiRequest("/api/admin/stats", "GET");
         if (response.ok) {
           // If we can access stats, we're authenticated
           // The actual role would come from session, but for now we'll determine it
-          const roleResponse = await apiRequest("/api/admin/current-role");
+          const roleResponse = await apiRequest("/api/admin/current-role", "GET");
           if (roleResponse.ok) {
             const data = await roleResponse.json();
             setAdminRole(data.role);

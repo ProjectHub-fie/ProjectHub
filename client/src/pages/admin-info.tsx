@@ -110,7 +110,7 @@ export default function AdminInfo() {
   const getRoleBadge = (role: string) => {
     const roleStyles = {
       owner: "bg-yellow-100 text-yellow-800 border-yellow-200",
-      admin: "bg-blue-100 text-blue-800 border-blue-200", 
+      admin: "bg-blue-100 text-blue-800 border-blue-200",
       moderator: "bg-green-100 text-green-800 border-green-200"
     };
     
@@ -130,10 +130,10 @@ export default function AdminInfo() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="flex items-center gap-2">
-          <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent"></div>
-          <span>Loading admins...</span>
+      <div className="flex justify-center items-center min-h-screen">
+        <div className="text-center">
+          <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-solid border-current border-r-transparent align-[-0.125em] motion-reduce:animate-[spin_1.5s_linear_infinite]"></div>
+          <p className="mt-2 text-muted-foreground">Loading admins...</p>
         </div>
       </div>
     );
@@ -191,7 +191,6 @@ export default function AdminInfo() {
             </p>
           </div>
         </div>
-        
         <Link href="/admin/create">
           <Button data-testid="button-create-admin">
             <UserPlus className="mr-2 h-4 w-4" />
@@ -200,62 +199,56 @@ export default function AdminInfo() {
         </Link>
       </div>
 
-      {/* Stats Cards */}
-      {canViewAdmins && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium">Total Admins</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold">{admins?.length || 0}</div>
-            </CardContent>
-          </Card>
-          
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-yellow-600">Owners</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-yellow-600">
-                {admins?.filter(a => a.role === 'owner').length || 0}
-              </div>
-            </CardContent>
-          </Card>
-          
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-blue-600">Admins</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-blue-600">
-                {admins?.filter(a => a.role === 'admin').length || 0}
-              </div>
-            </CardContent>
-          </Card>
-          
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-green-600">Moderators</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <div className="text-2xl font-bold text-green-600">
-                {admins?.filter(a => a.role === 'moderator').length || 0}
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      )}
+      {/* Admin Stats */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Total Admins</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold">{admins?.length || 0}</div>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Owners</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-yellow-600">
+              {admins?.filter(a => a.role === 'owner').length || 0}
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Admins</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-blue-600">
+              {admins?.filter(a => a.role === 'admin').length || 0}
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm font-medium">Moderators</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="text-2xl font-bold text-green-600">
+              {admins?.filter(a => a.role === 'moderator').length || 0}
+            </div>
+          </CardContent>
+        </Card>
+      </div>
 
       {/* 管理员卡片网格 / Admin card grid */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {(!admins || admins.length === 0) ? (
-          <div className="col-span-full">
-            <Card>
-              <CardContent className="text-center py-10 text-muted-foreground">
-                No administrators found.
-              </CardContent>
-            </Card>
+          <div className="col-span-full text-center py-10 text-muted-foreground">
+            No administrators found.
           </div>
         ) : (
           admins.map((admin) => (
@@ -263,13 +256,10 @@ export default function AdminInfo() {
               <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
                 <div className="flex items-center gap-2">
                   <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
-                    {admin.role === 'owner' ? <Crown className="h-4 w-4 text-yellow-500" /> :
-                     admin.role === 'admin' ? <User className="h-4 w-4 text-blue-500" /> :
-                     <Eye className="h-4 w-4 text-green-500" />}
+                    <Shield className="h-4 w-4 text-primary" />
                   </div>
                   <CardTitle className="text-sm font-medium">PIN: {admin.pin}</CardTitle>
                 </div>
-                
                 <div className="flex space-x-1">
                   {/* 密码更改对话框 / Password change dialog */}
                   <Dialog>
@@ -365,14 +355,12 @@ export default function AdminInfo() {
                   </Button>
                 </div>
               </CardHeader>
-              
               <CardContent>
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
                     <span className="text-sm text-muted-foreground">Role:</span>
                     {getRoleBadge(admin.role)}
                   </div>
-                  
                   <div className="flex items-center gap-1 text-xs text-muted-foreground">
                     <Calendar className="h-3 w-3" />
                     Last updated: {admin.updatedAt ? new Date(admin.updatedAt).toLocaleString() : 'Never'} {/* 最后更新时间 / Last updated */}
@@ -389,12 +377,11 @@ export default function AdminInfo() {
         )}
       </div>
 
-
       {(changePasswordMutation.isPending || deleteMutation.isPending) && (
         <div className="fixed bottom-4 right-4">
           <Card className="p-4 shadow-lg">
             <div className="flex items-center gap-2">
-              <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent"></div>
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-solid border-current border-r-transparent"></div>
               <span className="text-sm">
                 {changePasswordMutation.isPending ? 'Changing password...' : 'Deleting admin...'}
               </span>

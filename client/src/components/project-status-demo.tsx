@@ -90,7 +90,6 @@ export function ProjectStatusDemo() {
                     currentStatus={project.status}
                     onStatusChange={(newStatus) => handleStatusChange(project.id, newStatus)}
                     disabled={loadingId === project.id}
-                    className="min-w-[200px]"
                   />
                   {loadingId === project.id && (
                     <div className="text-sm text-muted-foreground">Updating...</div>
