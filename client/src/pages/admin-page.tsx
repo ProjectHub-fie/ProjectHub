@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import { LogOut, Users, FileText, ShieldAlert, Crown, User, Eye } from "lucide-react";
+import { useLocation } from "wouter";
 import { useAuth } from '@/hooks/useAuth';
 import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { useToast } from '@/hooks/use-toast';

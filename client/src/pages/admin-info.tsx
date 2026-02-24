@@ -215,12 +215,16 @@ export default function AdminInfo() {
             </p>
           </div>
         </div>
-        <Link href="/admin/create">
-          <Button data-testid="button-create-admin">
-            <UserPlus className="mr-2 h-4 w-4" />
-            Add New Admin
-          </Button>
-        </Link>
+        <div className="flex items-center gap-2">
+          {currentAdminRole === 'owner' && (
+            <Link href="/admin/create">
+              <Button data-testid="button-create-admin">
+                <UserPlus className="mr-2 h-4 w-4" />
+                Add New Admin
+              </Button>
+            </Link>
+          )}
+        </div>
       </div>
 
       {/* Admin Stats */}
@@ -459,11 +463,11 @@ export default function AdminInfo() {
       </div>
 
       {(changePasswordMutation.isPending || deleteMutation.isPending || updateRoleMutation.isPending) && (
-        <div className="fixed bottom-4 right-4">
-          <Card className="p-4 shadow-lg">
-            <div className="flex items-center gap-2">
-              <div className="h-4 w-4 animate-spin rounded-full border-2 border-solid border-current border-r-transparent"></div>
-              <span className="text-sm">
+        <div className="fixed bottom-4 right-4 z-50">
+          <Card className="p-4 shadow-lg border-primary/20 bg-background/95 backdrop-blur">
+            <div className="flex items-center gap-3">
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-r-transparent"></div>
+              <span className="text-sm font-medium">
                 {changePasswordMutation.isPending ? 'Changing password...' : 
                  deleteMutation.isPending ? 'Deleting admin...' : 'Updating role...'}
               </span>
