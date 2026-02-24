@@ -1,16 +1,14 @@
-import { useState, useEffect } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { useQuery, useMutation } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Alert, AlertDescription } from "@/components/ui/alert";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { ProjectStatusSelector } from "@/components/project-status-selector";
+import { LogOut, Users, FileText, ShieldAlert, Crown, User, Eye } from "lucide-react";
 import { useAuth } from '@/hooks/useAuth';
-import { useProjectRequests } from '@/hooks/use-project-requests';
+import { useAdminAuth } from '@/hooks/useAdminAuth';
+import { useToast } from '@/hooks/use-toast';
 
 interface Admin {
   id: string;
@@ -20,36 +18,28 @@ interface Admin {
   updatedAt: string;
 }
 
-type ProjectStatus = 'pending' | 'approved' | 'rejected';
-
-export function AdminPage() {
-  const { user } = useAuth();
+export default function AdminPage() {
+  const { user, logout } = useAuth();
   const { 
-    requests, 
-    requestsLoading, 
-    updateStatus, 
-    updateStatusLoading,
-    deleteRequest,
-    deleteLoading,
-    getStatusCounts
-  } = useProjectRequests();
+    adminRole,
+    isLoading: isAdminLoading,
+    canViewStats,
+    canViewUsers,
+    canManageProjects,
+    canManageAdmins
+  } = useAdminAuth();
+  const { toast } = useToast();
   
-  // Role-based permissions
-  const canViewStats = user?.role === 'owner' || user?.role === 'admin' || user?.role === 'moderator';
-  const canViewUsers = user?.role === 'owner' || user?.role === 'admin';
-  const canManageProjects = user?.role === 'owner' || user?.role === 'admin' || user?.role === 'moderator';
-  const canManageAdmins = user?.role === 'owner';
-
-  // Fetch users
-  const { data: users = [], isLoading: usersLoading } = useQuery({
-    queryKey: ['users'],
-    queryFn: async () => {
-      const response = await fetch('/api/users');
-      if (!response.ok) throw new Error('Failed to fetch users');
-      return response.json();
-    },
-    enabled: canViewUsers,
-  });
+  if (isAdminLoading) {
+    return (
+      <div className="flex justify-center items-center min-h-screen">
+        <div className="text-center">
+          <Skeleton className="h-8 w-8 rounded-full mx-auto mb-2" />
+          <p className="text-muted-foreground">Loading dashboard...</p>
+        </div>
+      </div>
+    );
+  }
 
   // Fetch admin stats
   const { data: stats } = useQuery({
@@ -62,12 +52,45 @@ export function AdminPage() {
     enabled: canViewStats,
   });
 
-  // Handle status change
-  const handleStatusChange = (id: string, newStatus: string) => {
-    updateStatus({ id, status: newStatus });
-  };
+  // Logout mutation
+  const logoutMutation = useMutation({
+    mutationFn: async () => {
+      await apiRequest("/api/admin/logout", "POST");
+    },
+    onSuccess: () => {
+      logout();
+      toast({ title: "Logged out successfully" });
+    },
+    onError: (error: Error) => {
+      toast({ 
+        title: "Logout failed", 
+        description: error.message,
+        variant: "destructive" 
+      });
+    }
+  });
 
-  const statusCounts = getStatusCounts();
+  // Role badge component
+  const getRoleBadge = (role: string) => {
+    const roleStyles = {
+      owner: "bg-yellow-100 text-yellow-800 border-yellow-200",
+      admin: "bg-blue-100 text-blue-800 border-blue-200",
+      moderator: "bg-green-100 text-green-800 border-green-200"
+    };
+    
+    const roleIcons = {
+      owner: <Crown className="h-3 w-3" />,
+      admin: <User className="h-3 w-3" />,
+      moderator: <Eye className="h-3 w-3" />
+    };
+
+    return (
+      <Badge className={`${roleStyles[role as keyof typeof roleStyles]} flex items-center gap-1`}>
+        {roleIcons[role as keyof typeof roleIcons]}
+        {role.charAt(0).toUpperCase() + role.slice(1)}
+      </Badge>
+    );
+  };
 
   return (
     <div className="min-h-screen bg-gray-50 p-6">
@@ -76,7 +99,7 @@ export function AdminPage() {
           <div>
             <h1 className="text-3xl font-bold text-gray-900">Admin Dashboard</h1>
             <p className="text-gray-600 mt-2">
-              Welcome! Your role: {user?.role.charAt(0).toUpperCase() + user?.role.slice(1)}
+              Welcome! Your role: {getRoleBadge(adminRole || 'guest')}
             </p>
           </div>
           <Button 
@@ -89,307 +112,168 @@ export function AdminPage() {
           </Button>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-          {canViewStats && (
+        {/* Stats Cards - Only visible to authorized roles */}
+        {canViewStats && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            {canViewUsers && (
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Total Users</CardTitle>
+                  <Users className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{stats?.totalUsers || 0}</div>
+                </CardContent>
+              </Card>
+            )}
+
+            {canManageProjects && (
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Project Requests</CardTitle>
+                  <FileText className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{stats?.totalRequests || 0}</div>
+                </CardContent>
+              </Card>
+            )}
+
+            {canManageAdmins && (
+              <Card>
+                <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                  <CardTitle className="text-sm font-medium">Admin Accounts</CardTitle>
+                  <ShieldAlert className="h-4 w-4 text-muted-foreground" />
+                </CardHeader>
+                <CardContent>
+                  <div className="text-2xl font-bold">{stats?.totalAdmins || 0}</div>
+                </CardContent>
+              </Card>
+            )}
+
             <Card>
               <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Total Users</CardTitle>
-                <Users className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{stats?.totalUsers}</div>
-              </CardContent>
-            </Card>
-          )}
-
-          {canViewStats && (
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Project Requests</CardTitle>
-                <FileText className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{stats?.totalRequests}</div>
-              </CardContent>
-            </Card>
-          )}
-
-          {canViewStats && (
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Admin Accounts</CardTitle>
-                <ShieldAlert className="h-4 w-4 text-muted-foreground" />
-              </CardHeader>
-              <CardContent>
-                <div className="text-2xl font-bold">{stats?.totalAdmins}</div>
-              </CardContent>
-            </Card>
-          )}
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-          {canManageAdmins && (
-            <Card>
-              <CardHeader>
-                <CardTitle>Create New Admin</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-4">
-                  <div>
-                    <Label htmlFor="pin">PIN</Label>
-                    <Input
-                      id="pin"
-                      value={newPin}
-                      onChange={(e) => setNewPin(e.target.value)}
-                      placeholder="Enter PIN"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="password">Password</Label>
-                    <Input
-                      id="password"
-                      type="password"
-                      value={newPassword}
-                      onChange={(e) => setNewPassword(e.target.value)}
-                      placeholder="Enter password"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="email">Email (Optional)</Label>
-                    <Input
-                      id="email"
-                      type="email"
-                      value={newEmail}
-                      onChange={(e) => setNewEmail(e.target.value)}
-                      placeholder="Enter email"
-                    />
-                  </div>
-                  <div>
-                    <Label htmlFor="role">Role</Label>
-                    <select
-                      id="role"
-                      value={newRole}
-                      onChange={(e) => setNewRole(e.target.value)}
-                      className="w-full p-2 border rounded-md"
-                      disabled={userRole !== "owner"}
-                    >
-                      <option value="moderator">Moderator</option>
-                      {userRole === "owner" && (
-                        <>
-                          <option value="admin">Admin</option>
-                          <option value="owner">Owner</option>
-                        </>
-                      )}
-                    </select>
-                    {userRole !== "owner" && (
-                      <p className="text-xs text-muted-foreground mt-1">
-                        Only owners can assign admin/owner roles
-                      </p>
-                    )}
-                  </div>
-                  <Button 
-                    onClick={() => createAdminMutation.mutate()}
-                    disabled={createAdminMutation.isPending}
-                    className="w-full"
-                  >
-                    <Plus className="h-4 w-4 mr-2" />
-                    Create Admin
-                  </Button>
+                <CardTitle className="text-sm font-medium">Your Permissions</CardTitle>
+                <div className="h-4 w-4 text-muted-foreground">
+                  {adminRole === 'owner' ? <Crown className="h-4 w-4 text-yellow-500" /> :
+                   adminRole === 'admin' ? <User className="h-4 w-4 text-blue-500" /> :
+                   <Eye className="h-4 w-4 text-green-500" />}
                 </div>
-              </CardContent>
-            </Card>
-          )}
-
-          <Card>
-            <CardHeader>
-              <CardTitle>Admin Accounts</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {adminsLoading ? (
-                <div>Loading...</div>
-              ) : (
-                <div className="space-y-4">
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>PIN</TableHead>
-                        <TableHead>Email</TableHead>
-                        <TableHead>Role</TableHead>
-                        <TableHead>Last Updated</TableHead>
-                        {canDeleteAdmin && <TableHead>Actions</TableHead>}
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {admins.map((admin: Admin) => (
-                        <TableRow key={admin.id}>
-                          <TableCell>{admin.pin}</TableCell>
-                          <TableCell>{admin.email || "N/A"}</TableCell>
-                          <TableCell>{getRoleBadge(admin.role)}</TableCell>
-                          <TableCell>{new Date(admin.updatedAt).toLocaleDateString()}</TableCell>
-                          {canDeleteAdmin && (
-                            <TableCell>
-                              <Button
-                                variant="destructive"
-                                size="sm"
-                                onClick={() => deleteAdminMutation.mutate(admin.id)}
-                                disabled={deleteAdminMutation.isPending || admin.role === "owner"}
-                              >
-                                <Trash2 className="h-4 w-4" />
-                              </Button>
-                            </TableCell>
-                          )}
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-
-        {canViewUsers && (
-          <div className="mt-8">
-            <Card>
-              <CardHeader>
-                <CardTitle>User Management</CardTitle>
               </CardHeader>
               <CardContent>
-                {usersLoading ? (
-                  <div>Loading users...</div>
-                ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Name</TableHead>
-                        <TableHead>Email</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Created</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {users.map((user: any) => (
-                        <TableRow key={user.id}>
-                          <TableCell>
-                            {user.firstName} {user.lastName}
-                          </TableCell>
-                          <TableCell>{user.email || "N/A"}</TableCell>
-                          <TableCell>
-                            <Badge variant={user.isBlocked ? "destructive" : "secondary"}>
-                              {user.isBlocked ? "Blocked" : "Active"}
-                            </Badge>
-                          </TableCell>
-                          <TableCell>{new Date(user.createdAt).toLocaleDateString()}</TableCell>
-                        </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                )}
+                <div className="space-y-2">
+                  <Badge variant={canViewUsers ? "default" : "secondary"} className="text-xs">
+                    {canViewUsers ? "✓" : "✗"} User Management
+                  </Badge>
+                  <Badge variant={canManageProjects ? "default" : "secondary"} className="text-xs">
+                    {canManageProjects ? "✓" : "✗"} Project Management
+                  </Badge>
+                  <Badge variant={canManageAdmins ? "default" : "secondary"} className="text-xs">
+                    {canManageAdmins ? "✓" : "✗"} Admin Management
+                  </Badge>
+                </div>
               </CardContent>
             </Card>
           </div>
         )}
 
-        {canManageProjects && (
-          <div className="mt-8">
-            <Card>
+        {/* Quick Links Section */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {canViewUsers && (
+            <Card className="hover:shadow-md transition-shadow cursor-pointer" 
+                  onClick={() => window.location.href = '/users'}>
               <CardHeader>
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                  <CardTitle>Project Requests</CardTitle>
-                  <div className="flex flex-wrap gap-2 text-sm">
-                    <Badge variant="secondary">Pending: {statusCounts.pending}</Badge>
-                    <Badge variant="default">In Review: {statusCounts.in_review}</Badge>
-                    <Badge variant="default">Approved: {statusCounts.approved}</Badge>
-                    <Badge variant="destructive">Rejected: {statusCounts.rejected}</Badge>
-                    <Badge variant="default">Completed: {statusCounts.completed}</Badge>
-                  </div>
-                </div>
+                <CardTitle className="flex items-center gap-2">
+                  <Users className="h-5 w-5" />
+                  User Management
+                </CardTitle>
               </CardHeader>
               <CardContent>
-                {requestsLoading ? (
-                  <div className="space-y-2">
-                    {[...Array(3)].map((_, i) => (
-                      <Skeleton key={i} className="h-12 w-full" />
-                    ))}
-                  </div>
-                ) : (
-                  <Table>
-                    <TableHeader>
-                      <TableRow>
-                        <TableHead>Title</TableHead>
-                        <TableHead>User</TableHead>
-                        <TableHead>Status</TableHead>
-                        <TableHead>Created</TableHead>
-                        <TableHead className="text-right">Actions</TableHead>
-                      </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                      {requests.length === 0 ? (
-                        <TableRow>
-                          <TableCell colSpan={5} className="text-center py-8 text-muted-foreground">
-                            No project requests found
-                          </TableCell>
-                        </TableRow>
-                      ) : (
-                        requests.map((request: any) => (
-                          <TableRow key={request.id}>
-                            <TableCell className="font-medium max-w-[200px] truncate">
-                              {request.title}
-                            </TableCell>
-                            <TableCell>
-                              <span className="text-sm text-muted-foreground">
-                                {request.userId.substring(0, 8)}...
-                              </span>
-                            </TableCell>
-                            <TableCell>
-                              <ProjectStatusSelector
-                                currentStatus={request.status}
-                                onStatusChange={(newStatus) => handleStatusChange(request.id, newStatus)}
-                                disabled={updateStatusLoading}
-                              />
-                            </TableCell>
-                            <TableCell>
-                              <span className="text-sm text-muted-foreground">
-                                {new Date(request.createdAt).toLocaleDateString()}
-                              </span>
-                            </TableCell>
-                            <TableCell className="text-right space-x-2">
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                onClick={() => {
-                                  // TODO: Implement project details modal/view
-                                  alert('Project details view coming soon');
-                                }}
-                              >
-                                View
-                              </Button>
-                              <Button
-                                variant="destructive"
-                                size="sm"
-                                onClick={() => deleteRequest(request.id)}
-                                disabled={deleteLoading}
-                              >
-                                Delete
-                              </Button>
-                            </TableCell>
-                          </TableRow>
-                        ))
-                      )}
-                    </TableBody>
-                  </Table>
-                )}
-                
-                {(updateStatusLoading || deleteLoading) && (
-                  <Alert className="mt-4">
-                    <AlertDescription>
-                      {updateStatusLoading ? 'Updating project status...' : 'Deleting project request...'}
-                    </AlertDescription>
-                  </Alert>
-                )}
+                <p className="text-sm text-muted-foreground">
+                  Manage user accounts, block/unblock users, and view user statistics.
+                </p>
+                <Button variant="outline" className="mt-4 w-full">
+                  Go to User Management
+                </Button>
               </CardContent>
             </Card>
-          </div>
+          )}
+
+          {canManageProjects && (
+            <Card className="hover:shadow-md transition-shadow cursor-pointer"
+                  onClick={() => window.location.href = '/projects'}>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <FileText className="h-5 w-5" />
+                  Project Requests
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground">
+                  Review, approve, reject, and manage project submission requests.
+                </p>
+                <Button variant="outline" className="mt-4 w-full">
+                  Go to Project Management
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
+          {canManageAdmins && (
+            <Card className="hover:shadow-md transition-shadow cursor-pointer"
+                  onClick={() => window.location.href = '/admin/info'}>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <ShieldAlert className="h-5 w-5" />
+                  Admin Credentials
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground">
+                  Manage administrator accounts, change passwords, and assign roles.
+                </p>
+                <Button variant="outline" className="mt-4 w-full">
+                  Go to Admin Management
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Role-specific quick actions */}
+          {adminRole === 'owner' && (
+            <Card className="hover:shadow-md transition-shadow cursor-pointer"
+                  onClick={() => window.location.href = '/admin/create'}>
+              <CardHeader>
+                <CardTitle className="flex items-center gap-2">
+                  <User className="h-5 w-5" />
+                  Create New Admin
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <p className="text-sm text-muted-foreground">
+                  Create new administrator accounts with custom roles and permissions.
+                </p>
+                <Button variant="outline" className="mt-4 w-full">
+                  Create Admin Account
+                </Button>
+              </CardContent>
+            </Card>
+          )}
+        </div>
+
+        {/* Empty state for users without permissions */}
+        {!canViewStats && (
+          <Card className="mt-8">
+            <CardHeader>
+              <CardTitle>Access Restricted</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-muted-foreground">
+                You don't have permission to view dashboard statistics. 
+                Please contact your system administrator for access.
+              </p>
+            </CardContent>
+          </Card>
         )}
       </div>
     </div>

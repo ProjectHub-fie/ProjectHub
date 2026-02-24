@@ -190,6 +190,16 @@ export async function registerRoutes(app: Express): Promise<Server> {
     req.session!.destroy(() => res.json({ success: true }));
   });
 
+  app.get('/api/admin/current-role', requireAuth, async (req: Request, res: any) => {
+    try {
+      const adminRole = req.session?.adminRole || 'moderator';
+      res.json({ role: adminRole });
+    } catch (error) {
+      console.error('Error fetching admin role:', error);
+      res.status(500).json({ message: "Failed to fetch admin role" });
+    }
+  });
+
   app.get('/api/users', requireRole('moderator'), async (req: Request, res: any) => {
     try {
       const allUsers = await storage.getAllUsers();

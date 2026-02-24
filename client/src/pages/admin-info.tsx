@@ -4,19 +4,24 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Trash2, UserPlus, ArrowLeft, KeyRound } from "lucide-react";
+import { Trash2, UserPlus, ArrowLeft, KeyRound, Shield, Crown, User, Eye, Calendar } from "lucide-react";
 import { useState } from "react";
 import { Link, useLocation } from "wouter";
+import { useAdminAuth } from '@/hooks/useAdminAuth';
 
 // Admin Info 页面组件 / Admin Info page component
 export default function AdminInfo() {
+  const { canManageAdmins } = useAdminAuth();
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+
   // 获取管理员列表 / Get admin list
   const { data: admins, isLoading, error } = useQuery<any[]>({
     queryKey: ["/api/admin/list"],
+    enabled: canManageAdmins
   });
 
   // 状态管理用于密码更改功能 / State management for password change functionality
@@ -101,13 +106,75 @@ export default function AdminInfo() {
     });
   };
 
-  if (isLoading) return <div className="p-6">Loading admins...</div>; // 正在加载管理员... / Loading admins...
-  if (error) return <div className="p-6 text-destructive">Error loading admins: {(error as Error).message}</div>; // 加载管理员时出错 / Error loading admins
+  // Role badge component
+  const getRoleBadge = (role: string) => {
+    const roleStyles = {
+      owner: "bg-yellow-100 text-yellow-800 border-yellow-200",
+      admin: "bg-blue-100 text-blue-800 border-blue-200", 
+      moderator: "bg-green-100 text-green-800 border-green-200"
+    };
+    
+    const roleIcons = {
+      owner: <Crown className="h-3 w-3" />,
+      admin: <User className="h-3 w-3" />,
+      moderator: <Eye className="h-3 w-3" />
+    };
+
+    return (
+      <Badge className={`${roleStyles[role as keyof typeof roleStyles]} flex items-center gap-1`}>
+        {roleIcons[role as keyof typeof roleIcons]}
+        {role.charAt(0).toUpperCase() + role.slice(1)}
+      </Badge>
+    );
+  };
+
+  if (isLoading) {
+    return (
+      <div className="flex items-center justify-center min-h-screen">
+        <div className="flex items-center gap-2">
+          <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent"></div>
+          <span>Loading admins...</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div className="p-8">
+        <Card>
+          <CardHeader>
+            <CardTitle>Error</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-destructive">Error loading admins: {(error as Error).message}</p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  if (!canManageAdmins) {
+    return (
+      <div className="p-8">
+        <Card>
+          <CardHeader>
+            <CardTitle>Access Denied</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-muted-foreground">
+              You don't have permission to manage administrators. Only owners can access this page.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div className="p-6 space-y-6">
       {/* 页面标题和导航 / Page title and navigation */}
-      <div className="flex justify-between items-center gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div className="flex items-center gap-4">
           <Button 
             variant="ghost" 
@@ -117,8 +184,14 @@ export default function AdminInfo() {
           >
             <ArrowLeft className="h-4 w-4" />
           </Button>
-          <h1 className="text-3xl font-bold">Admin Information</h1>
+          <div>
+            <h1 className="text-3xl font-bold">Admin Management</h1>
+            <p className="text-muted-foreground">
+              Manage administrator accounts and credentials
+            </p>
+          </div>
         </div>
+        
         <Link href="/admin/create">
           <Button data-testid="button-create-admin">
             <UserPlus className="mr-2 h-4 w-4" />
@@ -127,17 +200,76 @@ export default function AdminInfo() {
         </Link>
       </div>
 
+      {/* Stats Cards */}
+      {canViewAdmins && (
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium">Total Admins</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold">{admins?.length || 0}</div>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-yellow-600">Owners</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-yellow-600">
+                {admins?.filter(a => a.role === 'owner').length || 0}
+              </div>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-blue-600">Admins</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-blue-600">
+                {admins?.filter(a => a.role === 'admin').length || 0}
+              </div>
+            </CardContent>
+          </Card>
+          
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-green-600">Moderators</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="text-2xl font-bold text-green-600">
+                {admins?.filter(a => a.role === 'moderator').length || 0}
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
       {/* 管理员卡片网格 / Admin card grid */}
       <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
         {(!admins || admins.length === 0) ? (
-          <div className="col-span-full text-center py-10 text-muted-foreground">
-            No administrators found.
+          <div className="col-span-full">
+            <Card>
+              <CardContent className="text-center py-10 text-muted-foreground">
+                No administrators found.
+              </CardContent>
+            </Card>
           </div>
         ) : (
           admins.map((admin) => (
-            <Card key={admin.id} className="hover-elevate">
+            <Card key={admin.id} className="hover:shadow-md transition-shadow">
               <CardHeader className="flex flex-row items-center justify-between gap-2 space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">PIN: {admin.pin}</CardTitle>
+                <div className="flex items-center gap-2">
+                  <div className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center">
+                    {admin.role === 'owner' ? <Crown className="h-4 w-4 text-yellow-500" /> :
+                     admin.role === 'admin' ? <User className="h-4 w-4 text-blue-500" /> :
+                     <Eye className="h-4 w-4 text-green-500" />}
+                  </div>
+                  <CardTitle className="text-sm font-medium">PIN: {admin.pin}</CardTitle>
+                </div>
+                
                 <div className="flex space-x-1">
                   {/* 密码更改对话框 / Password change dialog */}
                   <Dialog>
@@ -222,26 +354,54 @@ export default function AdminInfo() {
                     variant="ghost"
                     size="icon"
                     onClick={() => {
-                      if (window.confirm(`Are you sure you want to delete admin with PIN ${admin.pin}?`)) { /* 确定要删除PIN为${admin.pin}的管理员吗？ / Are you sure you want to delete admin with PIN ${admin.pin}? */
+                      if (window.confirm(`Are you sure you want to delete admin with PIN ${admin.pin}? This action cannot be undone.`)) { /* 确定要删除PIN为${admin.pin}的管理员吗？ / Are you sure you want to delete admin with PIN ${admin.pin}? */
                         deleteMutation.mutate(admin.id);
                       }
                     }}
-                    disabled={admins.length <= 1 || deleteMutation.isPending}
+                    disabled={admins.length <= 1 || deleteMutation.isPending || admin.role === "owner"}
                     data-testid={`button-delete-admin-${admin.id}`}
                   >
                     <Trash2 className="h-4 w-4 text-destructive" />
                   </Button>
                 </div>
               </CardHeader>
+              
               <CardContent>
-                <p className="text-xs text-muted-foreground">
-                  Last updated: {admin.updatedAt ? new Date(admin.updatedAt).toLocaleString() : 'Never'} {/* 最后更新时间 / Last updated */}
-                </p>
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm text-muted-foreground">Role:</span>
+                    {getRoleBadge(admin.role)}
+                  </div>
+                  
+                  <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                    <Calendar className="h-3 w-3" />
+                    Last updated: {admin.updatedAt ? new Date(admin.updatedAt).toLocaleString() : 'Never'} {/* 最后更新时间 / Last updated */}
+                  </div>
+                  {admin.email && (
+                    <div className="text-xs text-muted-foreground truncate">
+                      Email: {admin.email}
+                    </div>
+                  )}
+                </div>
               </CardContent>
             </Card>
           ))
         )}
       </div>
+
+
+      {(changePasswordMutation.isPending || deleteMutation.isPending) && (
+        <div className="fixed bottom-4 right-4">
+          <Card className="p-4 shadow-lg">
+            <div className="flex items-center gap-2">
+              <div className="h-4 w-4 animate-spin rounded-full border-2 border-primary border-t-transparent"></div>
+              <span className="text-sm">
+                {changePasswordMutation.isPending ? 'Changing password...' : 'Deleting admin...'}
+              </span>
+            </div>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }
