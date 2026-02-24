@@ -186,6 +186,42 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  app.post('/api/admin/change-password', requireAuth, async (req: Request, res: any) => {
+    try {
+      const { id, currentPin, newPassword } = req.body;
+      
+      if (!id || !currentPin || !newPassword) {
+        return res.status(400).json({ message: "ID, current PIN and new password are required" });
+      }
+
+      // Check if trying to change someone else's password (only owners can do this)
+      if (id !== req.session!.adminId && req.session!.adminRole !== 'owner') {
+        return res.status(403).json({ message: "Only owners can change other administrators' passwords" });
+      }
+
+      // Verify the current PIN matches the target admin
+      const targetAdmin = await storage.getAdminByPin(currentPin);
+      if (!targetAdmin || targetAdmin.id !== id) {
+        return res.status(400).json({ message: "Invalid current PIN" });
+      }
+
+      const hash = await bcrypt.hash(newPassword, 10);
+      
+      // Update the password hash in the database
+      // Using setAdminPassword logic but we need to update existing record
+      // Let's add an updatePassword method to storage or reuse existing logic if possible
+      // Looking at storage.ts, it has setAdminPassword which uses insert with conflict or something? 
+      // Actually setAdminPassword in storage.ts uses db.insert().values(). 
+      // I should check storage.ts again.
+      
+      await storage.setAdminPassword(targetAdmin.pin, targetAdmin.email, hash, targetAdmin.role);
+      res.json({ success: true, message: "Password updated successfully" });
+    } catch (error) {
+      console.error('Password change error:', error);
+      res.status(500).json({ message: "Failed to change password" });
+    }
+  });
+
   app.post('/api/admin/logout', (req: Request, res: any) => {
     req.session!.destroy(() => res.json({ success: true }));
   });

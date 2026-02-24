@@ -242,12 +242,24 @@ export class DatabaseStorage implements IStorage {
   }
 
   async setAdminPassword(pin: string, email: string, hash: string, role: string = "moderator"): Promise<void> {
-    await db.insert(adminCredentials).values({
-      pin,
-      email: email || null,
-      passwordHash: hash,
-      role: role as any
-    });
+    const existing = await this.getAdminByPin(pin);
+    if (existing) {
+      await db.update(adminCredentials)
+        .set({ 
+          passwordHash: hash,
+          email: email || existing.email,
+          role: role as any,
+          updatedAt: new Date()
+        })
+        .where(eq(adminCredentials.id, existing.id));
+    } else {
+      await db.insert(adminCredentials).values({
+        pin,
+        email: email || null,
+        passwordHash: hash,
+        role: role as any
+      });
+    }
   }
 
   async deleteAdmin(id: string): Promise<void> {
