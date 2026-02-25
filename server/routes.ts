@@ -162,7 +162,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
         adminCount: admins.length,
         admins: admins.map(a => ({ id: a.id, pin: a.pin })),
         isSessionLoggedIn: (req.session as any).isAdminLoggedIn || false,
-        sessionId: req.sessionID,
+        sessionId: (req.session as any).id || 'unknown',
         sessionData: {
           isAdminLoggedIn: (req.session as any).isAdminLoggedIn,
           adminId: (req.session as any).adminId,

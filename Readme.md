@@ -101,7 +101,7 @@ These are sensitive credentials that should be added through the **Secrets** tab
 
 | Variable Name | Description | Default Value |
 | :--- | :--- | :--- |
-| `CLIENT_ORIGIN` | Your deployed URL (e.g., `https://pbad.vercel.app`) |
+| `CLIENT_ORIGIN` | Your deployed URL for CORS configuration | `https://pbad.vercel.app` |
 | `NODE_ENV` | Environment mode (development/production) | `development` |
 | `PORT` | The port the server listens on (defaults to `5000` in our setup). |
 
@@ -173,7 +173,7 @@ To deploy this application to Vercel, follow these steps:
 
 8. **Troubleshooting Login Issues**:
    - If you're experiencing login issues after deployment, ensure that:
-     - The `CLIENT_ORIGIN` environment variable is set to your Vercel deployment URL (default: `https://pbad.vercel.app`)
+     - The `CLIENT_ORIGIN` environment variable is set to your Vercel deployment URL
      - Your database connection is working properly
      - The sessions table was created during initialization
      - The `SESSION_SECRET` is consistent across all deployments

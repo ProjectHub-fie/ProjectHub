@@ -12,20 +12,16 @@ export function useAdminAuth() {
       try {
         const response = await fetch("/api/admin/current-role");
         if (response.ok) {
-<<<<<<< HEAD
-          const data = await response.json();
-          setAdminRole(data.role);
-=======
           // If we can access stats, we're authenticated
           // The actual role comes from session
-          const roleResponse = await apiRequest("/api/admin/current-role", "GET");
+          const roleResponse = await fetch("/api/admin/current-role");
           if (roleResponse.ok) {
             const data = await roleResponse.json();
             setAdminRole(data.role);
           } else {
             // Fallback - check if we can access admin management (owner/admin only)
             try {
-              const adminListResponse = await apiRequest("/api/admin/list", "GET");
+              const adminListResponse = await fetch("/api/admin/list");
               if (adminListResponse.ok) {
                 setAdminRole('admin'); // Can manage admins but not owner
               } else {
@@ -37,7 +33,6 @@ export function useAdminAuth() {
           }
         } else {
           setAdminRole(null);
->>>>>>> 8e7d6ff (re)
         }
       } catch (error) {
         console.error("Failed to fetch admin role:", error);
