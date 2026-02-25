@@ -12,8 +12,32 @@ export function useAdminAuth() {
       try {
         const response = await fetch("/api/admin/current-role");
         if (response.ok) {
+<<<<<<< HEAD
           const data = await response.json();
           setAdminRole(data.role);
+=======
+          // If we can access stats, we're authenticated
+          // The actual role comes from session
+          const roleResponse = await apiRequest("/api/admin/current-role", "GET");
+          if (roleResponse.ok) {
+            const data = await roleResponse.json();
+            setAdminRole(data.role);
+          } else {
+            // Fallback - check if we can access admin management (owner/admin only)
+            try {
+              const adminListResponse = await apiRequest("/api/admin/list", "GET");
+              if (adminListResponse.ok) {
+                setAdminRole('admin'); // Can manage admins but not owner
+              } else {
+                setAdminRole('moderator'); // Basic permissions only
+              }
+            } catch {
+              setAdminRole('moderator');
+            }
+          }
+        } else {
+          setAdminRole(null);
+>>>>>>> 8e7d6ff (re)
         }
       } catch (error) {
         console.error("Failed to fetch admin role:", error);
@@ -36,17 +60,17 @@ export function useAdminAuth() {
       moderator: ['manage_projects', 'view_users']
     };
 
-    if (adminRole === 'owner') return true;
+    if (adminRole === 'owner') return true; // Owner has all permissions
     return PERMISSIONS[adminRole as keyof typeof PERMISSIONS]?.includes(permission) || false;
   };
 
-  // Role-based checks
-  const canViewStats = hasPermission('view_users');
-  const canViewUsers = hasPermission('view_users');
-  const canManageProjects = hasPermission('manage_projects');
-  const canManageAdmins = adminRole === 'owner';
-  const canCreateAdmins = adminRole === 'owner' || adminRole === 'admin';
-  const canDeleteAdmins = adminRole === 'owner' || adminRole === 'admin';
+  // Role-based checks - owner has all permissions
+  const canViewStats = adminRole === 'owner' || adminRole === 'admin' || adminRole === 'moderator';
+  const canViewUsers = adminRole === 'owner' || adminRole === 'admin' || adminRole === 'moderator';
+  const canManageProjects = adminRole === 'owner' || adminRole === 'admin' || adminRole === 'moderator';
+  const canManageAdmins = adminRole === 'owner'; // Only owner can manage admins
+  const canCreateAdmins = adminRole === 'owner' || adminRole === 'admin'; // Owner and admin can create
+  const canDeleteAdmins = adminRole === 'owner'; // Only owner can delete admins
 
   return {
     adminRole,

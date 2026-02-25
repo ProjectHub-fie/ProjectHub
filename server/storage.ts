@@ -5,9 +5,15 @@ import {
   type InsertProjectInteraction,
 } from "./../shared/schema.js";
 import { type User as IUser, type UpsertUser } from "@shared/models/auth.js";
+import { eq } from "drizzle-orm";
 import { db } from "./db.js";
-import { eq, and, sql } from "drizzle-orm";
-import { users, projectRequests, projectInteractions, adminCredentials } from "../drizzle/schema.js";
+import {
+  users,
+  projectRequests,
+  projectInteractions,
+  sessions,
+  adminCredentials,
+} from "../drizzle/schema.js";
 
 export interface IStorage {
   // User operations
@@ -242,6 +248,7 @@ export class DatabaseStorage implements IStorage {
   }
 
   async setAdminPassword(pin: string, email: string, hash: string, role: string = "moderator"): Promise<void> {
+<<<<<<< HEAD
     const existing = await this.getAdminByPin(pin);
     if (existing) {
       await db.update(adminCredentials)
@@ -253,6 +260,22 @@ export class DatabaseStorage implements IStorage {
         })
         .where(eq(adminCredentials.id, existing.id));
     } else {
+=======
+    const existingAdmin = await db.select().from(adminCredentials).where(eq(adminCredentials.pin, pin));
+    
+    if (existingAdmin.length > 0) {
+      // Update existing admin
+      await db.update(adminCredentials)
+        .set({
+          email: email || null,
+          passwordHash: hash,
+          role: role as any,
+          updatedAt: new Date()
+        })
+        .where(eq(adminCredentials.pin, pin));
+    } else {
+      // Insert new admin
+>>>>>>> 8e7d6ff (re)
       await db.insert(adminCredentials).values({
         pin,
         email: email || null,

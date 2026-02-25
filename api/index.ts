@@ -31,12 +31,15 @@ export default async function handler(req: IncomingMessage, res: ServerResponse)
     const isVercel = !!process.env.VERCEL;
     
     if (isProduction && isVercel) {
-      // In Vercel production, we need to allow the deployed URL specifically
-      // The origin would typically be your deployed Vercel app URL
-      expressRes.header('Access-Control-Allow-Origin', process.env.CLIENT_ORIGIN || 'https://' + process.env.VERCEL_URL);
+      // In Vercel production, use the configured CLIENT_ORIGIN or fallback to VERCEL_URL
+      const allowedOrigin = process.env.CLIENT_ORIGIN || 
+                           (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : '') ||
+                           'https://pbad.vercel.app'; // Default fallback
+      expressRes.header('Access-Control-Allow-Origin', allowedOrigin);
     } else if (isProduction) {
       // For other production environments, use the CLIENT_ORIGIN environment variable
-      expressRes.header('Access-Control-Allow-Origin', process.env.CLIENT_ORIGIN || '');
+      const allowedOrigin = process.env.CLIENT_ORIGIN || 'https://pbad.vercel.app';
+      expressRes.header('Access-Control-Allow-Origin', allowedOrigin);
     } else {
       // In development, wildcard is acceptable
       expressRes.header('Access-Control-Allow-Origin', '*');

@@ -99,11 +99,10 @@ These are sensitive credentials that should be added through the **Secrets** tab
 
 ### System Environment Variables
 
-These are usually provided automatically by the Replit environment, but ensure they are present if you are moving the project elsewhere.
-
-| Variable Name | Description |
-| :--- | :--- |
-| `NODE_ENV` | Set to `development` for local testing or `production` for live deployment. |
+| Variable Name | Description | Default Value |
+| :--- | :--- | :--- |
+| `CLIENT_ORIGIN` | Your deployed URL (e.g., `https://pbad.vercel.app`) |
+| `NODE_ENV` | Environment mode (development/production) | `development` |
 | `PORT` | The port the server listens on (defaults to `5000` in our setup). |
 
 ## How to Add Them in Replit
@@ -174,7 +173,7 @@ To deploy this application to Vercel, follow these steps:
 
 8. **Troubleshooting Login Issues**:
    - If you're experiencing login issues after deployment, ensure that:
-     - The `CLIENT_ORIGIN` environment variable is set to your Vercel deployment URL
+     - The `CLIENT_ORIGIN` environment variable is set to your Vercel deployment URL (default: `https://pbad.vercel.app`)
      - Your database connection is working properly
      - The sessions table was created during initialization
      - The `SESSION_SECRET` is consistent across all deployments

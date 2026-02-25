@@ -154,6 +154,26 @@ export async function registerRoutes(app: Express): Promise<Server> {
     }
   });
 
+  // Debug endpoint - check if admin exists
+  app.get('/api/admin/check', async (req, res) => {
+    try {
+      const admins = await storage.getAllAdmins();
+      res.json({ 
+        adminCount: admins.length,
+        admins: admins.map(a => ({ id: a.id, pin: a.pin })),
+        isSessionLoggedIn: (req.session as any).isAdminLoggedIn || false,
+        sessionId: req.sessionID,
+        sessionData: {
+          isAdminLoggedIn: (req.session as any).isAdminLoggedIn,
+          adminId: (req.session as any).adminId,
+          adminPin: (req.session as any).adminPin
+        }
+      });
+    } catch (error: any) {
+      res.status(500).json({ message: "Error checking admins", error: error.message });
+    }
+  });
+
   app.post('/api/admin/login', async (req: Request, res: any) => {
     try {
       const { pin, password } = req.body;
