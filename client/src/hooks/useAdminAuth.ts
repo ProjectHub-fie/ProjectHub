@@ -1,11 +1,5 @@
 import { useState, useEffect } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
-
-interface AdminUser {
-  id: string;
-  role: string;
-}
 
 export function useAdminAuth() {
   const queryClient = useQueryClient();
@@ -16,18 +10,10 @@ export function useAdminAuth() {
   useEffect(() => {
     const fetchAdminRole = async () => {
       try {
-        const response = await apiRequest("/api/admin/stats", "GET");
+        const response = await fetch("/api/admin/current-role");
         if (response.ok) {
-          // If we can access stats, we're authenticated
-          // The actual role would come from session, but for now we'll determine it
-          const roleResponse = await apiRequest("/api/admin/current-role", "GET");
-          if (roleResponse.ok) {
-            const data = await roleResponse.json();
-            setAdminRole(data.role);
-          } else {
-            // Fallback - determine role based on permissions
-            setAdminRole('moderator'); // Default assumption
-          }
+          const data = await response.json();
+          setAdminRole(data.role);
         }
       } catch (error) {
         console.error("Failed to fetch admin role:", error);
