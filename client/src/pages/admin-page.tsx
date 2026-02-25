@@ -116,7 +116,7 @@ export default function AdminPage() {
 
         {/* Stats Cards - Only visible to authorized roles */}
         {canViewStats && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
             {canViewUsers && (
               <Card>
                 <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
@@ -152,30 +152,6 @@ export default function AdminPage() {
                 </CardContent>
               </Card>
             )}
-
-            <Card>
-              <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                <CardTitle className="text-sm font-medium">Your Permissions</CardTitle>
-                <div className="h-4 w-4 text-muted-foreground">
-                  {adminRole === 'owner' ? <Crown className="h-4 w-4 text-yellow-500" /> :
-                   adminRole === 'admin' ? <User className="h-4 w-4 text-blue-500" /> :
-                   <Eye className="h-4 w-4 text-green-500" />}
-                </div>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  <Badge variant={canViewUsers ? "default" : "secondary"} className="text-xs">
-                    {canViewUsers ? "✓" : "✗"} User Management
-                  </Badge>
-                  <Badge variant={canManageProjects ? "default" : "secondary"} className="text-xs">
-                    {canManageProjects ? "✓" : "✗"} Project Management
-                  </Badge>
-                  <Badge variant={canManageAdmins ? "default" : "secondary"} className="text-xs">
-                    {canManageAdmins ? "✓" : "✗"} Admin Management
-                  </Badge>
-                </div>
-              </CardContent>
-            </Card>
           </div>
         )}
 
