@@ -17,11 +17,21 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 const formSchema = z.object({
-  email: z.string().email({ message: "Invalid email address" }).optional(),  // Corrected Zod validation
+  email: z.string().email({ message: "Invalid email address" }).optional().or(z.literal("")),
   pin: z.string().min(4, { message: "PIN must be at least 4 characters" }),
   password: z.string().min(6, { message: "Password must be at least 6 characters" }),
+  role: z.enum(["moderator", "admin", "owner"], {
+    required_error: "Please select a role",
+  }),
 });
 
 export default function CreateAdmin() {
@@ -30,9 +40,10 @@ export default function CreateAdmin() {
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
-      email: "",  // Keep as empty string by default
+      email: "",
       pin: "",
       password: "",
+      role: "moderator",
     },
   });
 
@@ -117,6 +128,28 @@ export default function CreateAdmin() {
                     <FormControl>
                       <Input type="password" {...field} data-testid="input-new-admin-password" />
                     </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+              <FormField
+                control={form.control}
+                name="role"
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Access Role</FormLabel>
+                    <Select onValueChange={field.onChange} defaultValue={field.value}>
+                      <FormControl>
+                        <SelectTrigger data-testid="select-new-admin-role">
+                          <SelectValue placeholder="Select a role" />
+                        </SelectTrigger>
+                      </FormControl>
+                      <SelectContent>
+                        <SelectItem value="moderator">Moderator (Manage Projects)</SelectItem>
+                        <SelectItem value="admin">Admin (Create Moderators)</SelectItem>
+                        <SelectItem value="owner">Owner (Full Control)</SelectItem>
+                      </SelectContent>
+                    </Select>
                     <FormMessage />
                   </FormItem>
                 )}

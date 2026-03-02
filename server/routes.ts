@@ -82,15 +82,17 @@ export async function registerRoutes(app: Express): Promise<Server> {
 
   app.post('/api/admin/create', requireRole('admin'), async (req: Request, res: any) => {
     try {
-      const { pin, email, password, role = 'moderator' } = req.body;
+      const { pin, email, password, role } = req.body;
       
       if (!pin || !password) {
         return res.status(400).json({ message: "PIN and password are required" });
       }
 
+      const finalRole = role || 'moderator';
+
       // Validate role assignment permissions
       const creatorRole = req.session!.adminRole;
-      if (creatorRole === 'admin' && role !== 'moderator') {
+      if (creatorRole === 'admin' && finalRole !== 'moderator') {
         return res.status(403).json({ message: "Admins can only create moderators" });
       }
 
@@ -101,7 +103,7 @@ export async function registerRoutes(app: Express): Promise<Server> {
       }
 
       const hash = await bcrypt.hash(password, 10);
-      await storage.setAdminPassword(pin, email || null, hash, role);
+      await storage.setAdminPassword(pin, email || null, hash, finalRole);
       res.json({ success: true, message: "Admin created successfully" });
     } catch (error) {
       console.error('Admin creation error:', error);
