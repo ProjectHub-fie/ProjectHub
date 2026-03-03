@@ -13,7 +13,7 @@ import { useAdminAuth } from '@/hooks/useAdminAuth';
 import { ProjectStatusSelector } from "@/components/project-status-selector";
 
 export default function ProjectsPage() {
-  const { canManageProjects } = useAdminAuth();
+  const { canManageProjects, canDeleteProjects } = useAdminAuth();
   const { toast } = useToast();
   const [searchTerm, setSearchTerm] = useState("");
   
@@ -267,19 +267,21 @@ export default function ProjectsPage() {
                             View
                           </Button>
                           
-                          <Button
-                            variant="destructive"
-                            size="sm"
-                            onClick={() => {
-                              if (window.confirm(`Are you sure you want to delete project "${project.title}"? This action cannot be undone.`)) {
-                                deleteMutation.mutate(project.id);
-                              }
-                            }}
-                            disabled={deleteMutation.isPending}
-                          >
-                            <Trash2 className="h-4 w-4 mr-1" />
-                            Delete
-                          </Button>
+                          {canDeleteProjects && (
+                            <Button
+                              variant="destructive"
+                              size="sm"
+                              onClick={() => {
+                                if (window.confirm(`Are you sure you want to delete project "${project.title}"? This action cannot be undone.`)) {
+                                  deleteMutation.mutate(project.id);
+                                }
+                              }}
+                              disabled={deleteMutation.isPending}
+                            >
+                              <Trash2 className="h-4 w-4 mr-1" />
+                              Delete
+                            </Button>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>

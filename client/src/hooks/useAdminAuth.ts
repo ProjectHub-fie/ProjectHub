@@ -46,6 +46,7 @@ export function useAdminAuth() {
   const canViewStats = !!adminRole;
   const canViewUsers = adminRole === 'owner' || adminRole === 'admin' || adminRole === 'moderator';
   const canManageProjects = adminRole === 'owner' || adminRole === 'admin' || adminRole === 'moderator';
+  const canDeleteProjects = adminRole === 'owner' || adminRole === 'admin';
   const canManageAdmins = adminRole === 'owner';
   const canCreateAdmins = adminRole === 'owner' || adminRole === 'admin';
   const canDeleteAdmins = adminRole === 'owner';
@@ -58,6 +59,7 @@ export function useAdminAuth() {
     canViewStats,
     canViewUsers,
     canManageProjects,
+    canDeleteProjects,
     canManageAdmins,
     canCreateAdmins,
     canDeleteAdmins

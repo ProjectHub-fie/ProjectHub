@@ -37,6 +37,7 @@ const formSchema = z.object({
 export default function CreateAdmin() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+  const { adminRole: currentAdminRole } = useAdminAuth();
   const form = useForm<z.infer<typeof formSchema>>({
     resolver: zodResolver(formSchema),
     defaultValues: {
@@ -72,6 +73,14 @@ export default function CreateAdmin() {
       });
     },
   });
+
+  const availableRoles = [
+    { value: "moderator", label: "Moderator (Manage Projects)" },
+    ...(currentAdminRole === 'owner' ? [
+      { value: "admin", label: "Admin (Create Moderators)" },
+      { value: "owner", label: "Owner (Full Control)" }
+    ] : [])
+  ];
 
   return (
     <div className="p-6 flex flex-col items-center">
@@ -145,9 +154,11 @@ export default function CreateAdmin() {
                         </SelectTrigger>
                       </FormControl>
                       <SelectContent>
-                        <SelectItem value="moderator">Moderator (Manage Projects)</SelectItem>
-                        <SelectItem value="admin">Admin (Create Moderators)</SelectItem>
-                        <SelectItem value="owner">Owner (Full Control)</SelectItem>
+                        {availableRoles.map((role) => (
+                          <SelectItem key={role.value} value={role.value}>
+                            {role.label}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                     <FormMessage />
