@@ -17,6 +17,11 @@ export default defineConfig({
   root: path.resolve(__dirname, "client"),
   server: {
     middlewareMode: true,
+    allowedHosts: [
+      "f581b519-b4c2-4de6-8b38-e9523abe09c4-00-2q9xw0xfmsdkv.spock.replit.dev",
+      ".replit.dev",
+      ".repl.co"
+    ],
   },
   build: {
     outDir: path.resolve(__dirname, "dist/public"),
