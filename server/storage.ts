@@ -151,9 +151,9 @@ class InMemoryStorage implements IStorage {
         db.select().from(verifiedProjects).where(eq(verifiedProjects.isActive, true)).orderBy(verifiedProjects.sortOrder)
       );
       
-      // If database returns empty but we have in-memory seeds, use seeds
-      if (result.length === 0 && this.verifiedProjects.size > 0) {
-        return Array.from(this.verifiedProjects.values())
+      // If database returns empty but we have fallback seeds, use seeds
+      if (result.length === 0 && this.fallbackProjects.size > 0) {
+        return Array.from(this.fallbackProjects.values())
           .filter(project => project.isActive)
           .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
       }
@@ -161,7 +161,7 @@ class InMemoryStorage implements IStorage {
       return result;
     } catch (error: any) {
       console.error('getAllVerifiedProjects error:', error.message);
-      return Array.from(this.verifiedProjects.values())
+      return Array.from(this.fallbackProjects.values())
         .filter(project => project.isActive)
         .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
     }
@@ -180,22 +180,13 @@ class InMemoryStorage implements IStorage {
       
       if (result.length === 0) {
         // Fallback to in-memory
-        for (const project of this.verifiedProjects.values()) {
-          if (project.slug === slug && project.isActive) {
-            return project;
-          }
-        }
+        return this.fallbackProjects.get(slug) || null;
       }
       
       return result[0] || null;
     } catch (error: any) {
       console.error('getVerifiedProjectBySlug error:', error.message);
-      for (const project of this.verifiedProjects.values()) {
-        if (project.slug === slug && project.isActive) {
-          return project;
-        }
-      }
-      return null;
+      return this.fallbackProjects.get(slug) || null;
     }
   }
 
@@ -380,6 +371,19 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
+  private fallbackProjects: Map<string, any> = new Map();
+
+  constructor() {
+    seedProjects.forEach(project => {
+      this.fallbackProjects.set(project.slug, {
+        ...project,
+        id: crypto.randomUUID(),
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
+    });
+  }
+
   // User operations
   async getUser(id: string): Promise<IUser | null> {
     try {
