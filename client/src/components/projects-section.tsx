@@ -99,6 +99,7 @@ function ProjectInteractions({ projectId }: { projectId: string }) {
 
 interface Project {
   id: string;
+  slug: string;
   title: string;
   description: string;
   image: string;
@@ -117,6 +118,7 @@ interface Project {
 const projects: Project[] = [
   {
     id: "PrimeBot",
+    slug: "primebot",
     title: "PrimeBot",
     description: "PrimeBot is a sleek, multipurpose Discord bot built to supercharge your server with essential tools. It features a dynamic giveaway system with customizable entries, interactive polls for instant feedback, and a ticket system for seamless support handling.",
     image: "/primebot.gif",
@@ -130,6 +132,7 @@ const projects: Project[] = [
   },
   {
     id: "pbo",
+    slug: "primebot-dashboard",
     title: "PrimeBot",
     description: "Interactive and dynamic website with dashboard of PrimeBot discord bot (Dashboard will come soon)",
     image: "/primebot.gif",
@@ -143,6 +146,7 @@ const projects: Project[] = [
   },
   {
     id: "Sky",
+    slug: "sky-bot",
     title: "Sky",
     description: "Collaborative task management application with real-time updates, team collaboration features, and project tracking capabilities.",
     image: "/api/placeholder/400/300",
@@ -155,6 +159,7 @@ const projects: Project[] = [
   },
   {
     id: "db",
+    slug: "database-dashboard",
     title: "Database",
     description: "Online based database dashboard for your PostgreeSQL.",
     image: "/api/placeholder/400/300",
@@ -169,6 +174,7 @@ const projects: Project[] = [
   },
   {
     id: "wh",
+    slug: "webhost",
     title: "Hosting ",
     description: "Discord bot hosting",
     image: "/api/placeholder/400/300",
@@ -259,7 +265,7 @@ export default function ProjectsSection() {
             <div
               key={project.id}
               className="group bg-card rounded-2xl overflow-hidden border border-border hover:border-primary/50 transition-all duration-300 hover:-translate-y-2 hover:shadow-2xl cursor-pointer"
-              onClick={() => setLocation(`/project/${project.id}`)}
+              onClick={() => setLocation(`/project/${project.slug}`)}
               data-testid={`project-card-${project.id}`}
             >
               <div className="relative overflow-hidden">

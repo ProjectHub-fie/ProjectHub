@@ -29,8 +29,8 @@ interface ProjectDetailProps {
     timeline?: string;
     teamSize?: string;
     userCount?: string;
-    createdAt: Date;
-    updatedAt: Date;
+    createdAt: string;
+    updatedAt: string;
   };
 }
 
@@ -115,7 +115,8 @@ export default function ProjectDetail({ project }: ProjectDetailProps) {
     }
   };
 
-  const getStatusColor = (status: string) => {
+  const getStatusColor = (status: string | undefined) => {
+    if (!status) return "bg-gray-500";
     switch (status.toLowerCase()) {
       case "active": return "bg-green-500";
       case "developing": return "bg-red-500";
@@ -147,7 +148,7 @@ export default function ProjectDetail({ project }: ProjectDetailProps) {
               {project.title}
             </h1>
             <Badge className={`${getStatusColor(project.status)} text-white px-4 py-1.5 rounded-full text-sm font-semibold uppercase tracking-wider border-0 shadow-sm`}>
-              {project.status.charAt(0).toUpperCase() + project.status.slice(1)}
+              {String(project.status || 'Unknown').charAt(0).toUpperCase() + String(project.status || 'unknown').slice(1)}
             </Badge>
           </div>
           <p className="text-xl text-muted-foreground leading-relaxed max-w-3xl">

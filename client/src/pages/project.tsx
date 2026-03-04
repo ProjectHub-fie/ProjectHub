@@ -76,7 +76,8 @@ export default function ProjectDetailPage() {
       
       try {
         const response = await apiRequest<Project>(`/api/projects/${slug}`, "GET");
-        if (!response || !response.id) {
+        // Hono might return the error object if we're not careful with types
+        if (!response || (response as any).message === "Project not found") {
           throw new Error("Project not found");
         }
         return response;
@@ -97,6 +98,17 @@ export default function ProjectDetailPage() {
       setLocation("/projects");
     }
   }, [error, setLocation]);
+
+  // Handle error display
+  useEffect(() => {
+    if (error && (error as any).message !== "Project not found") {
+      toast({
+        title: "Error loading project",
+        description: "Failed to load project details. Please try again.",
+        variant: "destructive",
+      });
+    }
+  }, [error, toast]);
 
   if (isLoading) {
     return (
@@ -127,11 +139,6 @@ export default function ProjectDetailPage() {
   }
 
   if (error) {
-    toast({
-      title: "Error loading project",
-      description: "Failed to load project details. Please try again.",
-      variant: "destructive",
-    });
     return (
       <div className="min-h-screen bg-background pt-20 px-4 pb-20">
         <div className="max-w-4xl mx-auto text-center py-12">

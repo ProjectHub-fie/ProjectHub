@@ -53,7 +53,7 @@ function Router() {
         <Route path="/login" component={Login} />
         <Route path="/projects" component={Projects} />
         <Route path="/dashboard" component={ProjectRequest} />
-        <Route path="/project/:id" component={ProjectPage} />
+        <Route path="/project/:slug" component={ProjectPage} />
         <Route path="/error" component={ErrorPage} />
         <Route path="/reset-password" component={ResetPassword} />
         <Route path="/404" component={NotFound} />

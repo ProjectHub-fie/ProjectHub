@@ -239,6 +239,44 @@ export async function registerRoutes(expressApp: any): Promise<Server> {
     }
   });
 
+  expressApp.get('/api/projects/:slug', async (req: any, res: any) => {
+    try {
+      const project = await storage.getVerifiedProjectBySlug(req.params.slug);
+      if (!project) {
+        return res.status(404).json({ message: "Project not found" });
+      }
+      res.json(project);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch project details" });
+    }
+  });
+
+  expressApp.post('/api/projects/:projectId/interactions', requireAuth, async (req: any, res: any) => {
+    try {
+      const interaction = await storage.upsertProjectInteraction({
+        ...req.body,
+        projectId: req.params.projectId,
+        userId: req.user.id
+      });
+      res.json(interaction);
+    } catch (error) {
+      res.status(500).json({ message: "Failed to record interaction" });
+    }
+  });
+
+  expressApp.get('/api/projects/:projectId/interactions', async (req: any, res: any) => {
+    try {
+      const stats = await storage.getProjectInteractions(req.params.projectId);
+      let userInteraction = null;
+      if (req.isAuthenticated()) {
+        userInteraction = await storage.getUserInteraction(req.params.projectId, req.user.id);
+      }
+      res.json({ ...stats, userInteraction });
+    } catch (error) {
+      res.status(500).json({ message: "Failed to fetch interactions" });
+    }
+  });
+
   expressApp.get('/api/health', (req: any, res: any) => {
     res.json({
       status: 'ok',

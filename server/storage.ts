@@ -144,20 +144,59 @@ class InMemoryStorage implements IStorage {
     }
   }
 
-  // Verified projects operations
   async getAllVerifiedProjects(): Promise<VerifiedProject[]> {
-    return Array.from(this.verifiedProjects.values())
-      .filter(project => project.isActive)
-      .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+    try {
+      // Try database first
+      const result = await withTimeout(
+        db.select().from(verifiedProjects).where(eq(verifiedProjects.isActive, true)).orderBy(verifiedProjects.sortOrder)
+      );
+      
+      // If database returns empty but we have in-memory seeds, use seeds
+      if (result.length === 0 && this.verifiedProjects.size > 0) {
+        return Array.from(this.verifiedProjects.values())
+          .filter(project => project.isActive)
+          .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+      }
+      
+      return result;
+    } catch (error: any) {
+      console.error('getAllVerifiedProjects error:', error.message);
+      return Array.from(this.verifiedProjects.values())
+        .filter(project => project.isActive)
+        .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
+    }
   }
 
   async getVerifiedProjectBySlug(slug: string): Promise<VerifiedProject | null> {
-    for (const project of this.verifiedProjects.values()) {
-      if (project.slug === slug && project.isActive) {
-        return project;
+    try {
+      const result = await withTimeout(
+        db.select().from(verifiedProjects).where(
+          and(
+            eq(verifiedProjects.slug, slug),
+            eq(verifiedProjects.isActive, true)
+          )
+        ).limit(1)
+      );
+      
+      if (result.length === 0) {
+        // Fallback to in-memory
+        for (const project of this.verifiedProjects.values()) {
+          if (project.slug === slug && project.isActive) {
+            return project;
+          }
+        }
       }
+      
+      return result[0] || null;
+    } catch (error: any) {
+      console.error('getVerifiedProjectBySlug error:', error.message);
+      for (const project of this.verifiedProjects.values()) {
+        if (project.slug === slug && project.isActive) {
+          return project;
+        }
+      }
+      return null;
     }
-    return null;
   }
 
   async createVerifiedProject(projectData: InsertVerifiedProjectInput): Promise<VerifiedProject> {

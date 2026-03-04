@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -86,8 +86,8 @@ interface Project {
   status: string;
   authorName?: string;
   architecture?: string;
-  createdAt: Date;
-  updatedAt: Date;
+  createdAt: string;
+  updatedAt: string;
 }
 
 export default function ProjectsPage() {
@@ -116,13 +116,15 @@ export default function ProjectsPage() {
   });
 
   // Handle error display
-  if (error) {
-    toast({
-      title: "Error loading projects",
-      description: "Failed to fetch projects. Please try again.",
-      variant: "destructive",
-    });
-  }
+  useEffect(() => {
+    if (error) {
+      toast({
+        title: "Error loading projects",
+        description: "Failed to fetch projects. Please try again.",
+        variant: "destructive",
+      });
+    }
+  }, [error, toast]);
 
   // Loading skeleton
   if (isLoading) {
@@ -246,7 +248,7 @@ export default function ProjectsPage() {
           {filteredProjects.map((project) => (
             <div
               key={project.id}
-              className="group bg-card rounded-2xl overflow-hidden border border-border hover:border-primary/50 transition-all duration-300 hover:-translate-y-2 cursor-pointer"
+              className="group relative bg-card rounded-2xl overflow-hidden border border-border/50 hover:border-primary/50 transition-all duration-300 hover:shadow-2xl hover:shadow-primary/5 cursor-pointer"
               onClick={() => setLocation(`/project/${project.slug}`)}
             >
               <div className="relative h-48 overflow-hidden">
