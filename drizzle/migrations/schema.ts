@@ -1,4 +1,4 @@
-import { pgTable, unique, uuid, text, timestamp, index, boolean, integer, foreignKey, pgEnum } from "drizzle-orm/pg-core"
+import { pgTable, unique, uuid, text, timestamp, foreignKey, boolean, pgEnum } from "drizzle-orm/pg-core"
 import { sql } from "drizzle-orm"
 
 export const adminRole = pgEnum("admin_role", ['owner', 'admin', 'moderator'])
@@ -15,38 +15,6 @@ export const adminCredentials = pgTable("admin_credentials", {
 }, (table) => [
 	unique("admin_credentials_email_unique").on(table.email),
 	unique("admin_credentials_pin_unique").on(table.pin),
-]);
-
-export const verifiedProjects = pgTable("verified_projects", {
-	id: uuid().defaultRandom().primaryKey().notNull(),
-	slug: text().notNull(),
-	title: text().notNull(),
-	description: text().notNull(),
-	longDescription: text("long_description"),
-	imageUrl: text("image_url"),
-	category: text().notNull(),
-	technologies: text().array(),
-	features: text().array(),
-	highlights: text().array(),
-	liveUrl: text("live_url"),
-	githubUrl: text("github_url"),
-	status: text().notNull(),
-	authorName: text("author_name"),
-	authorAvatar: text("author_avatar"),
-	architecture: text(),
-	timeline: text(),
-	teamSize: text("team_size"),
-	userCount: text("user_count"),
-	isActive: boolean("is_active").default(true).notNull(),
-	sortOrder: integer("sort_order").default(0).notNull(),
-	createdAt: timestamp("created_at", { mode: 'string' }).defaultNow().notNull(),
-	updatedAt: timestamp("updated_at", { mode: 'string' }).defaultNow().notNull(),
-}, (table) => [
-	index("idx_verified_projects_active").using("btree", table.isActive.asc().nullsLast().op("bool_ops")),
-	index("idx_verified_projects_category").using("btree", table.category.asc().nullsLast().op("text_ops")),
-	index("idx_verified_projects_slug").using("btree", table.slug.asc().nullsLast().op("text_ops")),
-	index("idx_verified_projects_status").using("btree", table.status.asc().nullsLast().op("text_ops")),
-	unique("verified_projects_slug_key").on(table.slug),
 ]);
 
 export const projectRequests = pgTable("project_requests", {
