@@ -47,7 +47,7 @@ export function DiscordWidget({ onClose }: DiscordWidgetProps) {
             </CardTitle>
             <div className="flex gap-2">
               <Button variant="ghost" size="sm" onClick={() => setShowFullWidget(false)} className="text-xs">
-                <
+                ←
               </Button>
               <Button variant="ghost" size="icon" onClick={onClose} className="rounded-full">
                 <X className="h-4 w-4" />
