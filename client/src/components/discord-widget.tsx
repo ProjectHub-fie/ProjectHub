@@ -63,7 +63,13 @@ export function DiscordWidget({ onClose }: DiscordWidgetProps) {
               frameBorder="0" 
               sandbox="allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts"
               className="w-full h-[500px]"
+              style={{ colorScheme: 'dark' }}
             ></iframe>
+            <style dangerouslySetInnerHTML={{ __html: `
+              iframe {
+                mask-image: linear-gradient(to bottom, black 0%, black 100%);
+              }
+            ` }} />
           </CardContent>
         </Card>
       </div>
@@ -141,7 +147,7 @@ export function DiscordWidget({ onClose }: DiscordWidgetProps) {
                     Show More <ExternalLink className="ml-2 h-4 w-4" />
                   </Button>
                 </div>
-                <Button variant="ghost" className="w-full" onClick={onClose}>
+                <Button variant="outline" className=" hover:bg-[#4752C4]: bg-blue-600" onClick={onClose}>
                   Close
                 </Button>
               </div>
