@@ -806,12 +806,16 @@ export class DatabaseStorage implements IStorage {
 // Export storage instance with fallback to in-memory storage when database fails
 let storage: IStorage;
 
+// For tsx -e or environments that struggle with top-level await in certain contexts,
+// we provide a way to get the storage instance asynchronously.
+// In the main app (ESM), top-level await is used for the export.
+
+const dbStorage = new DatabaseStorage();
 try {
-  // Try to initialize database storage
-  storage = new DatabaseStorage();
   // Test database connection
   await withTimeout(db.select().from(users).limit(1), 2000);
   console.log('✅ Database storage initialized successfully');
+  storage = dbStorage;
 } catch (error: any) {
   console.warn('⚠️ Database storage failed, falling back to in-memory storage:', error.message);
   storage = new InMemoryStorage();

@@ -1,83 +1,59 @@
-import { Context } from 'hono';
 import { users } from '../drizzle/schema.js';
 import { db } from './db.js';
 import { eq } from 'drizzle-orm';
+import passport from 'passport';
+import { Strategy as LocalStrategy } from 'passport-local';
+import bcrypt from 'bcryptjs';
 
-// Extract session token from request headers
-export function getSessionToken(c: Context): string | null {
-  const authHeader = c.req.header('Authorization');
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    return authHeader.substring(7);
-  }
-  
-  const sessionHeader = c.req.header('X-User-Session');
-  if (sessionHeader) {
-    return sessionHeader;
-  }
-  
-  return null;
+// Passport configuration
+export function setupPassport(app: any) {
+  passport.use(
+    new LocalStrategy({ usernameField: 'email' }, async (email, password, done) => {
+      try {
+        const [user] = await db.select().from(users).where(eq(users.email, email));
+        if (!user || !user.password) {
+          return done(null, false, { message: 'Invalid email or password' });
+        }
+        const isMatch = await bcrypt.compare(password, user.password);
+        if (!isMatch) {
+          return done(null, false, { message: 'Invalid email or password' });
+        }
+        return done(null, user);
+      } catch (err) {
+        return done(err);
+      }
+    })
+  );
+
+  passport.serializeUser((user: any, done) => {
+    done(null, user.id);
+  });
+
+  passport.deserializeUser(async (id: string, done) => {
+    try {
+      const [user] = await db.select().from(users).where(eq(users.id, id));
+      done(null, user);
+    } catch (err) {
+      done(err);
+    }
+  });
+
+  app.use(passport.initialize());
+  app.use(passport.session());
 }
 
-// Decode session token
-export function decodeSessionToken(token: string): { id: string; email: string } | null {
-  try {
-    const decoded = Buffer.from(token, 'base64').toString('utf-8');
-    const parsed = JSON.parse(decoded);
-    if (parsed.id && parsed.email) {
-      return { id: parsed.id, email: parsed.email };
+export const authenticate = (strategy: string, options: any, callback?: any) => {
+  return passport.authenticate(strategy, options, callback);
+};
+
+// Middleware to check if user is authenticated and not blocked
+export function requireAuth(req: any, res: any, next: any) {
+  if (req.isAuthenticated()) {
+    if (req.user?.isBlocked) {
+      req.logout(() => {});
+      return res.status(403).json({ message: "Your account has been blocked" });
     }
-    return null;
-  } catch {
-    return null;
+    return next();
   }
+  res.status(401).json({ message: "Authentication required" });
 }
-
-// Authenticate request middleware
-export const authenticateRequest = async (c: Context, next: () => Promise<void>) => {
-  const token = getSessionToken(c);
-  
-  if (!token) {
-    return c.json({ error: 'Authentication required' }, 401);
-  }
-
-  const sessionData = decodeSessionToken(token);
-  if (!sessionData) {
-    return c.json({ error: 'Invalid session token' }, 401);
-  }
-
-  try {
-    // Fetch user from database
-    const [user] = await db
-      .select()
-      .from(users)
-      .where(eq(users.id, sessionData.id));
-
-    if (!user) {
-      return c.json({ error: 'User not found' }, 401);
-    }
-
-    if (user.isBlocked) {
-      return c.json({ error: 'Account is blocked' }, 403);
-    }
-
-    // Attach user info to context
-    c.set('user', user);
-
-    await next();
-  } catch (error) {
-    console.error('Authentication error:', error);
-    return c.json({ error: 'Authentication failed' }, 500);
-  }
-};
-
-// Mock initialize and session for passport compatibility in routes
-export const initialize = () => (req: any, res: any, next: any) => next();
-export const session = () => (req: any, res: any, next: any) => next();
-export const authenticate = (strategy: string, options: any, callback?: any) => (req: any, res: any, next: any) => {
-  if (typeof options === 'function') {
-    options(null, {}, {});
-  } else if (callback) {
-    callback(null, {}, {});
-  }
-  next();
-};

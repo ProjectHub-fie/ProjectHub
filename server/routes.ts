@@ -2,7 +2,7 @@ import { createServer, type Server } from "http";
 import session from "express-session";
 import bcrypt from "bcryptjs";
 import { storage } from "./storage.js";
-import * as passport from "./auth.js";
+import { setupPassport, authenticate, requireAuth } from "./auth.js";
 import { insertProjectRequestSchema } from "./../shared/schema.js";
 import pg from "pg";
 import connectPgSimple from "connect-pg-simple";
@@ -84,18 +84,6 @@ declare global {
   }
 }
 
-// Middleware to check if user is authenticated and not blocked
-function requireAuth(req: any, res: any, next: any) {
-  if (req.isAuthenticated()) {
-    if (req.user?.isBlocked) {
-      req.logout(() => {});
-      return res.status(403).json({ message: "Your account has been blocked" });
-    }
-    return next();
-  }
-  res.status(401).json({ message: "Authentication required" });
-}
-
 export async function registerRoutes(expressApp: any): Promise<Server> {
   // Trust proxy for Vercel
   if (typeof expressApp.set === 'function') {
@@ -147,9 +135,8 @@ export async function registerRoutes(expressApp: any): Promise<Server> {
     }
   }));
 
-  // Initialize passport mock/compatibility
-  expressApp.use(passport.initialize());
-  expressApp.use(passport.session());
+  // Initialize passport
+  setupPassport(expressApp);
 
   // Auth routes
   expressApp.post('/api/auth/register', async (req: any, res: any) => {
@@ -180,7 +167,7 @@ export async function registerRoutes(expressApp: any): Promise<Server> {
     const { email, password } = req.body;
     if (!email || !password) return res.status(400).json({ message: "Email and password are required" });
 
-    passport.authenticate('local', (err: any, user: any, info: any) => {
+    authenticate('local', (err: any, user: any, info: any) => {
       if (err) return res.status(500).json({ message: "Authentication failed" });
       if (!user) return res.status(401).json({ message: info?.message || "Invalid credentials" });
 
