@@ -47,7 +47,7 @@ export function DiscordWidget({ onClose }: DiscordWidgetProps) {
             </CardTitle>
             <div className="flex gap-2">
               <Button variant="ghost" size="sm" onClick={() => setShowFullWidget(false)} className="text-xs">
-                Back
+                <
               </Button>
               <Button variant="ghost" size="icon" onClick={onClose} className="rounded-full">
                 <X className="h-4 w-4" />
@@ -63,13 +63,7 @@ export function DiscordWidget({ onClose }: DiscordWidgetProps) {
               frameBorder="0" 
               sandbox="allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-scripts"
               className="w-full h-[500px]"
-              style={{ colorScheme: 'dark' }}
             ></iframe>
-            <style dangerouslySetInnerHTML={{ __html: `
-              iframe {
-                mask-image: linear-gradient(to bottom, black 0%, black 100%);
-              }
-            ` }} />
           </CardContent>
         </Card>
       </div>
