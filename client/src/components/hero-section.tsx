@@ -5,7 +5,6 @@ import { FaDiscord } from "react-icons/fa";
 import { useIsMobile } from "@/hooks/use-mobile";
 import { useLocation } from "wouter";
 import { DiscordWidget } from "./discord-widget";
-import { GithubWidget } from "./github-widget";
 
 export default function HeroSection() {
   const [, setLocation] = useLocation();
@@ -13,7 +12,6 @@ export default function HeroSection() {
   const [currentCharIndex, setCurrentCharIndex] = useState(0);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDiscordWidget, setShowDiscordWidget] = useState(false);
-  const [showGithubWidget, setShowGithubWidget] = useState(false);
   const isMobile = useIsMobile();
 
   const typingTexts = isMobile ? [
@@ -140,14 +138,14 @@ export default function HeroSection() {
 
         {/* Social Links */}
         <div className="flex justify-center space-x-4 md:space-x-6">
-          <button 
-            onClick={() => setShowGithubWidget(true)}
+          <a 
+            href="https://github.com/rajroy1313/" 
             className="text-muted-foreground hover:text-primary transition-colors duration-200 text-xl md:text-2xl p-2 hover:bg-secondary rounded-lg" 
             data-testid="social-github"
             aria-label="GitHub Profile"
           >
             <Github />
-          </button>
+          </a>
           <button 
             onClick={() => setShowDiscordWidget(true)}
             className="text-muted-foreground hover:text-primary transition-colors duration-200 text-xl md:text-2xl p-2 hover:bg-secondary rounded-lg" 
@@ -177,9 +175,6 @@ export default function HeroSection() {
 
       {showDiscordWidget && (
         <DiscordWidget onClose={() => setShowDiscordWidget(false)} />
-      )}
-      {showGithubWidget && (
-        <GithubWidget onClose={() => setShowGithubWidget(false)} />
       )}
 
       {/* Scroll Indicator */}

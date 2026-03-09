@@ -136,9 +136,10 @@ export function GithubWidget({ onClose }: GithubWidgetProps) {
               <div className="p-4 bg-secondary/50 rounded-xl border border-border flex justify-center">
                 <img 
                   src="https://github-readme-stats.vercel.app/api?username=ProjectHub-fie&show_icons=true&theme=default" 
-                  alt="GitHub stats for ProjectHub-fie"
+                 
                   className="max-w-full h-auto"
                 />
+
               </div>
 
               {/* Profile Summary */}

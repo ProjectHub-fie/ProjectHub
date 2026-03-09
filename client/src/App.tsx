@@ -20,7 +20,6 @@ const ProjectPage = React.lazy(() => import("@/pages/project"));
 const ErrorPage = React.lazy(() => import("@/pages/error"));
 const NotFound = React.lazy(() => import("@/pages/not-found"));
 const ResetPassword = React.lazy(() => import("@/pages/reset-password"));
-const GithubPage = React.lazy(() => import("@/pages/github"));
 
 function ThemeToggle() {
   const { theme, setTheme } = useTheme();
@@ -55,7 +54,6 @@ function Router() {
         <Route path="/projects" component={Projects} />
         <Route path="/dashboard" component={ProjectRequest} />
         <Route path="/project/:slug" component={ProjectPage} />
-        <Route path="/github" component={GithubPage} />
         <Route path="/error" component={ErrorPage} />
         <Route path="/reset-password" component={ResetPassword} />
         <Route path="/404" component={NotFound} />
