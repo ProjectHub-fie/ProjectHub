@@ -4,6 +4,7 @@ import { cva, type VariantProps } from "class-variance-authority"
 import { X } from "lucide-react"
 
 import { cn } from "@/lib/utils"
+import { TOAST_COLORS } from "@/config/toast-config"
 
 const ToastProvider = ToastPrimitives.Provider
 
@@ -30,8 +31,8 @@ const toastVariants = cva(
         default: "border bg-background text-foreground",
         destructive:
           "destructive group border-destructive bg-destructive text-destructive-foreground",
-        success: "border-green-500 bg-green-600 text-white font-medium",
-        error: "border-orange-500 bg-orange-600 text-white font-medium",
+        success: `${TOAST_COLORS.success.border} ${TOAST_COLORS.success.background} ${TOAST_COLORS.success.text} font-medium`,
+        error: `${TOAST_COLORS.error.border} ${TOAST_COLORS.error.background} ${TOAST_COLORS.error.text} font-medium`,
       },
     },
     defaultVariants: {
