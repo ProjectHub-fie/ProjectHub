@@ -138,14 +138,14 @@ export default function HeroSection() {
 
         {/* Social Links */}
         <div className="flex justify-center space-x-4 md:space-x-6">
-          <a 
-            href="https://github.com/rajroy1313/" 
+          <button 
+            onClick={() => window.dispatchEvent(new CustomEvent("show-github-widget"))}
             className="text-muted-foreground hover:text-primary transition-colors duration-200 text-xl md:text-2xl p-2 hover:bg-secondary rounded-lg" 
             data-testid="social-github"
             aria-label="GitHub Profile"
           >
             <Github />
-          </a>
+          </button>
           <button 
             onClick={() => setShowDiscordWidget(true)}
             className="text-muted-foreground hover:text-primary transition-colors duration-200 text-xl md:text-2xl p-2 hover:bg-secondary rounded-lg" 

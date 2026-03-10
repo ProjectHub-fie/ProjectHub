@@ -67,7 +67,14 @@ export default function Footer() {
           <div className="md:col-span-1">
             <h3 className="text-lg font-semibold text-slate-200 mb-4">Connect</h3>
             <div className="flex space-x-4 mb-4">
-              {socialLinks.map((link) => (
+              <button
+                onClick={() => window.dispatchEvent(new CustomEvent("show-github-widget"))}
+                className="text-slate-400 hover:text-blue-400 transition-colors duration-200 text-xl"
+                data-testid="footer-social-github"
+              >
+                <Github />
+              </button>
+              {socialLinks.slice(1).map((link) => (
                 <a
                   key={link.name}
                   href={link.href}
