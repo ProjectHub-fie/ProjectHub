@@ -65,5 +65,26 @@ Preferred communication style: Simple, everyday language.
 ### Required Environment Variables
 - `DATABASE_URL`: PostgreSQL connection string (required)
 - `SESSION_SECRET`: Secret for session encryption
-- `RESEND_API_KEY`: For email functionality
+- `RESEND_API_KEY`: For email functionality (CRITICAL for production - contact form won't send without this)
 - `DISCORD_CLIENT_ID`, `DISCORD_CLIENT_SECRET`: For Discord OAuth
+- `TURNSTILE_SECRET_KEY`: For Cloudflare Turnstile CAPTCHA verification in production
+- `VITE_TURNSTILE_SITE_KEY`: Frontend Turnstile site key
+
+## Recent Fixes
+
+### Contact Form Email Issue (Production Bug Fix)
+**Problem**: Contact form was receiving data on server but emails weren't being sent in Vercel production.
+
+**Solution**: 
+- Added `/api/contact` endpoint in `server/routes.ts` with full Resend email integration
+- Endpoint accepts: name, email, subject, message, captchaToken
+- Sends formatted HTML email to `dev.projecthub.fie@gmail.com` with reply-to set to sender
+- Includes Turnstile CAPTCHA verification for production
+
+**Action Required for Vercel**:
+1. Go to your Vercel project settings
+2. Add environment variable: `RESEND_API_KEY=<your_resend_api_key>`
+3. Get your Resend API key from https://resend.com (if not already created)
+4. Redeploy the project
+
+Without RESEND_API_KEY set in Vercel, the contact form will fail with "Email service is not configured" error.

@@ -7,68 +7,8 @@ import { insertProjectRequestSchema } from "./../shared/schema.js";
 import pg from "pg";
 import connectPgSimple from "connect-pg-simple";
 import { sql } from 'drizzle-orm';
-import { Hono } from 'hono';
-import { cors } from 'hono/cors';
 import * as z from 'zod';
-import { db } from './db.js';
-
-const app = new Hono();
-
-// CORS middleware
-app.use(
-  '*',
-  cors({
-    origin: ['http://localhost:3000', 'https://projecthub.vercel.app'],
-    credentials: true,
-  })
-);
-
-// Health check endpoint
-app.get('/health', async (c) => {
-  try {
-    return c.json({ 
-      status: 'ok', 
-      timestamp: new Date().toISOString(),
-      database: 'connected'
-    });
-  } catch (error) {
-    console.error('Health check failed:', error);
-    return c.json({ 
-      status: 'error', 
-      timestamp: new Date().toISOString(),
-      database: 'disconnected',
-      error: error instanceof Error ? error.message : 'Unknown error'
-    }, 500);
-  }
-});
-
-// 404 handler
-app.notFound((c) => {
-  return c.json({ 
-    error: 'Route not found',
-    path: c.req.path,
-    method: c.req.method
-  }, 404);
-});
-
-// Error handler
-app.onError((err, c) => {
-  console.error('API Error:', err);
-  
-  if (err instanceof z.ZodError) {
-    return c.json({ 
-      error: 'Validation error',
-      details: err.errors 
-    }, 400);
-  }
-  
-  return c.json({ 
-    error: 'Internal server error',
-    message: err instanceof Error ? err.message : 'Unknown error'
-  }, 500);
-});
-
-export default app;
+import { Resend } from 'resend';
 
 // Extend Express Request type to include user
 declare global {
@@ -261,6 +201,74 @@ export async function registerRoutes(expressApp: any): Promise<Server> {
       res.json({ ...stats, userInteraction });
     } catch (error) {
       res.status(500).json({ message: "Failed to fetch interactions" });
+    }
+  });
+
+  expressApp.post('/api/contact', async (req: any, res: any) => {
+    try {
+      const { name, email, subject, message, captchaToken } = req.body;
+
+      if (!name || !email || !subject || !message) {
+        return res.status(400).json({ message: "All fields are required" });
+      }
+
+      // Verify Turnstile captcha if in production
+      if (process.env.NODE_ENV === 'production' && captchaToken) {
+        const turnstileSecret = process.env.TURNSTILE_SECRET_KEY;
+        if (turnstileSecret) {
+          try {
+            const verifyResponse = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+              body: `secret=${turnstileSecret}&response=${captchaToken}`
+            });
+            const verifyData: any = await verifyResponse.json();
+            if (!verifyData.success) {
+              return res.status(400).json({ message: "Captcha verification failed" });
+            }
+          } catch (err) {
+            console.error('Captcha verification error:', err);
+            return res.status(500).json({ message: "Security verification failed" });
+          }
+        }
+      }
+
+      // Send email using Resend
+      const resendApiKey = process.env.RESEND_API_KEY;
+      if (!resendApiKey) {
+        console.error('RESEND_API_KEY is not configured');
+        return res.status(500).json({ message: "Email service is not configured" });
+      }
+
+      const resend = new Resend(resendApiKey);
+
+      // Send email to yourself (project owner)
+      const ownerEmail = 'dev.projecthub.fie@gmail.com';
+      
+      const emailResult = await resend.emails.send({
+        from: 'Contact Form <onboarding@resend.dev>',
+        to: ownerEmail,
+        replyTo: email,
+        subject: `New Contact Form Submission: ${subject}`,
+        html: `
+          <h2>New Contact Form Submission</h2>
+          <p><strong>From:</strong> ${name} (${email})</p>
+          <p><strong>Subject:</strong> ${subject}</p>
+          <h3>Message:</h3>
+          <p>${message.replace(/\n/g, '<br>')}</p>
+        `
+      });
+
+      if (emailResult.error) {
+        console.error('Email sending error:', emailResult.error);
+        return res.status(500).json({ message: "Failed to send email" });
+      }
+
+      console.log('Contact form email sent successfully:', emailResult.data);
+      res.json({ message: "Message sent successfully" });
+    } catch (error: any) {
+      console.error('Contact endpoint error:', error);
+      res.status(500).json({ message: "Failed to process contact form" });
     }
   });
 
