@@ -1,4 +1,4 @@
-import { Home, LogIn, FileText, User, Mail, Briefcase, Settings } from "lucide-react";
+import { Home, LogIn, FileText, User, Mail, Briefcase, Settings, Github } from "lucide-react";
 import {
   Sidebar,
   SidebarContent,
@@ -66,6 +66,17 @@ export function AppSidebar({ className }: { className?: string }) {
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
+              <SidebarMenuItem>
+                <SidebarMenuButton 
+                  onClick={() => window.dispatchEvent(new CustomEvent("show-github-widget"))}
+                  className="hover:bg-primary/10"
+                >
+                  <span className="flex items-center gap-2">
+                    <Github className="h-4 w-4" />
+                    <span>GitHub</span>
+                  </span>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
               {!isAuthenticated && (
                 <SidebarMenuItem>
                   <SidebarMenuButton asChild isActive={location === "/login"} className="hover:bg-primary/10 data-[active=true]:bg-primary data-[active=true]:text-primary-foreground">

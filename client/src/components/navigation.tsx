@@ -1,12 +1,17 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { Sun, Moon, Menu, X } from "lucide-react";
+import { Sun, Moon, Menu, X, Github } from "lucide-react";
 import { useTheme } from "./theme-provider";
 
 export default function Navigation() {
   const [isOpen, setIsOpen] = useState(false);
   const { theme, setTheme } = useTheme();
+
+  const handleShowGithub = () => {
+    window.dispatchEvent(new CustomEvent("show-github-widget"));
+    setIsOpen(false);
+  };
 
   const handleScroll = (sectionId: string) => {
     const element = document.getElementById(sectionId);
@@ -53,6 +58,14 @@ export default function Navigation() {
             <NavLink href="skills">Skills</NavLink>
             <NavLink href="about">About</NavLink>
             <NavLink href="contact">Contact</NavLink>
+            <button
+              onClick={handleShowGithub}
+              className="text-muted-foreground hover:text-primary transition-colors duration-200 flex items-center gap-1"
+              data-testid="nav-link-github"
+            >
+              <Github className="h-4 w-4" />
+              GitHub
+            </button>
           </div>
 
           <div className="flex items-center space-x-4">
@@ -101,6 +114,14 @@ export default function Navigation() {
                   <NavLink href="skills">Skills</NavLink>
                   <NavLink href="about">About</NavLink>
                   <NavLink href="contact">Contact</NavLink>
+                  <button
+                    onClick={handleShowGithub}
+                    className="text-muted-foreground hover:text-primary transition-colors duration-200 text-center flex items-center justify-center gap-2"
+                    data-testid="mobile-nav-link-github"
+                  >
+                    <Github className="h-4 w-4" />
+                    GitHub
+                  </button>
                   <div className="px-3 py-2 space-y-2">
                   <Button
                     variant="ghost"

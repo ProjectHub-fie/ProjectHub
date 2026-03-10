@@ -11,6 +11,7 @@ import { Button } from "@/components/ui/button";
 import { Sun, Moon } from "lucide-react";
 import { useTheme } from "@/components/theme-provider";
 import { useAuth } from "@/hooks/useAuth";
+import { GithubWidget } from "@/components/github-widget";
 
 const Home = React.lazy(() => import("@/pages/home"));
 const Login = React.lazy(() => import("@/pages/login"));
@@ -65,9 +66,14 @@ function Router() {
 
 function App() {
   const [mounted, setMounted] = useState(false);
+  const [showGithub, setShowGithub] = useState(false);
 
   useEffect(() => {
     setMounted(true);
+    // Listen for custom event to show github widget
+    const handleShowGithub = () => setShowGithub(true);
+    window.addEventListener("show-github-widget", handleShowGithub);
+    return () => window.removeEventListener("show-github-widget", handleShowGithub);
   }, []);
   
   if (!mounted) {
@@ -100,6 +106,7 @@ function App() {
                 </main>
               </div>
             </div>
+            {showGithub && <GithubWidget onClose={() => setShowGithub(false)} />}
             <Toaster />
           </SidebarProvider>
         </TooltipProvider>
