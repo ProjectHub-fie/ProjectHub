@@ -26,14 +26,14 @@ function ProjectInteractions({ projectId }: { projectId: string }) {
       toast({
         title: "Success",
         description: "Your interaction has been recorded.",
-        className: "bg-emerald-500 border-emerald-600 text-white",
+        variant: "success",
       });
     },
     onError: (error: any) => {
       toast({
         title: "Action failed",
         description: error.message || "You must be logged in to like or rate projects.",
-        className: "bg-emerald-500 border-emerald-600 text-white",
+        variant: "error",
       });
     }
   });
@@ -43,7 +43,7 @@ function ProjectInteractions({ projectId }: { projectId: string }) {
       toast({
         title: "Authentication required",
         description: "You must be logged in to like projects.",
-        variant: "destructive",
+        variant: "error",
       });
       return;
     }
@@ -55,7 +55,7 @@ function ProjectInteractions({ projectId }: { projectId: string }) {
       toast({
         title: "Authentication required",
         description: "You must be logged in to rate projects.",
-        variant: "destructive",
+        variant: "error",
       });
       return;
     }

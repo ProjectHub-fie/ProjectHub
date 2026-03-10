@@ -116,7 +116,7 @@ export default function LoginPage() {
       toast({ 
         title: "Captcha Required", 
         description: "Please complete the Turnstile verification.", 
-        className: "bg-emerald-500 border-emerald-600 text-white" 
+        variant: "error"
       });
       return;
     }
@@ -136,7 +136,7 @@ export default function LoginPage() {
       toast({
         title: "Login Failed",
         description: error.message || "Please check your credentials and try again.",
-        className: "bg-emerald-500 border-emerald-600 text-white",
+        variant: "error",
       });
       // Reset captcha on failure
       setCaptchaToken(null);
@@ -149,7 +149,7 @@ export default function LoginPage() {
       toast({ 
         title: "Captcha Required", 
         description: "Please complete the Turnstile verification.", 
-        className: "bg-emerald-500 border-emerald-600 text-white" 
+        variant: "error"
       });
       return;
     }
@@ -165,7 +165,7 @@ export default function LoginPage() {
       toast({
         title: "Registration Failed",
         description: error.message || "Please try again.",
-        className: "bg-emerald-500 border-emerald-600 text-white",
+        variant: "error",
       });
       // Reset captcha on failure
       setCaptchaToken(null);
@@ -178,7 +178,7 @@ export default function LoginPage() {
       toast({ 
         title: "Captcha Required", 
         description: "Please complete the Turnstile verification.", 
-        className: "bg-emerald-500 border-emerald-600 text-white" 
+        variant: "error"
       });
       return;
     }
@@ -206,7 +206,7 @@ export default function LoginPage() {
       toast({
         title: "Reset Failed",
         description: error.message || "Please try again.",
-        className: "bg-emerald-500 border-emerald-600 text-white",
+        variant: "error",
       });
       // Reset captcha on failure
       setCaptchaToken(null);
@@ -221,7 +221,7 @@ export default function LoginPage() {
       toast({ 
         title: "Captcha Required", 
         description: "Please complete the Turnstile verification.", 
-        className: "bg-emerald-500 border-emerald-600 text-white" 
+        variant: "error" 
       });
       return;
     }
@@ -258,7 +258,7 @@ export default function LoginPage() {
       toast({
         title: "Reset Failed",
         description: error.message || "Please try again.",
-        className: "bg-emerald-500 border-emerald-600 text-white",
+        variant: "error",
       });
     } finally {
       setIsResettingPassword(false);
@@ -594,7 +594,7 @@ export default function LoginPage() {
               className="w-full bg-blue-600 border-input hover:bg-accent hover:text-accent-foreground flex items-center justify-center gap-2"
               onClick={() => {
                 if (!captchaToken) {
-                  toast({ title: "Captcha Required", description: "Please complete the Turnstile verification before using Discord login.", variant: "destructive" });
+                  toast({ title: "Captcha Required", description: "Please complete the Turnstile verification before using Discord login.", variant: "error" });
                   return;
                 }
                 window.location.href = `/api/auth/discord?captchaToken=${captchaToken}`;

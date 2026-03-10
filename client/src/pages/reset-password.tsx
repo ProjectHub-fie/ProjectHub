@@ -38,13 +38,14 @@ export default function ResetPassword() {
       toast({
         title: "Success",
         description: "Your password has been reset successfully.",
+        variant: "success",
       });
       setLocation("/login");
     } catch (error: any) {
       toast({
         title: "Error",
         description: error.message || "Failed to reset password",
-        variant: "destructive",
+        variant: "error",
       });
     } finally {
       setLoading(false);

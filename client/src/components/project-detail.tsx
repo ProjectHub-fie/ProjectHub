@@ -60,7 +60,7 @@ export default function ProjectDetail({ project }: ProjectDetailProps) {
       toast({
         title: "Action failed",
         description: error.message || "You must be logged in to like or rate projects.",
-        variant: "destructive",
+        variant: "error",
       });
     }
   });
@@ -70,7 +70,7 @@ export default function ProjectDetail({ project }: ProjectDetailProps) {
       toast({
         title: "Authentication required",
         description: "You must be logged in to like projects.",
-        variant: "destructive",
+        variant: "error",
       });
       return;
     }
@@ -82,7 +82,7 @@ export default function ProjectDetail({ project }: ProjectDetailProps) {
       toast({
         title: "Authentication required",
         description: "You must be logged in to rate projects.",
-        variant: "destructive",
+        variant: "error",
       });
       return;
     }

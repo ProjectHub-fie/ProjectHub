@@ -33,7 +33,7 @@ function ProjectInteractions({ projectId }: { projectId: string }) {
       toast({
         title: "Action failed",
         description: error.message || "You must be logged in to like or rate projects.",
-        variant: "destructive",
+        variant: "error",
       });
     }
   });
@@ -121,7 +121,7 @@ export default function ProjectsPage() {
       toast({
         title: "Error loading projects",
         description: "Failed to fetch projects. Please try again.",
-        variant: "destructive",
+        variant: "error",
       });
     }
   }, [error, toast]);

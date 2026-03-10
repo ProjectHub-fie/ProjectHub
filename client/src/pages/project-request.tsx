@@ -109,7 +109,7 @@ export default function ProjectRequestPage() {
       toast({
         title: "Submission Failed",
         description: error.message || "Failed to submit project request. Please try again.",
-        variant: "destructive",
+        variant: "error",
       });
     },
   });
@@ -133,7 +133,7 @@ export default function ProjectRequestPage() {
       toast({
         title: "Update Failed",
         description: error.message || "Failed to update profile. Please try again.",
-        variant: "destructive",
+        variant: "error",
       });
     }
   };
