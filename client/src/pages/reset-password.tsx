@@ -30,8 +30,7 @@ export default function ResetPassword() {
 
     try {
       await apiRequest("POST", "/api/auth/recovery?action=reset", {
-        email,
-        code,
+        token: code,
         newPassword,
       });
 
