@@ -66,7 +66,7 @@ export function AppSidebar({ className }: { className?: string }) {
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
-              <SidebarMenuItem>
+              {/* <SidebarMenuItem>
                 <SidebarMenuButton 
                   onClick={() => window.dispatchEvent(new CustomEvent("show-github-widget"))}
                   className="hover:bg-primary/10"
@@ -76,7 +76,7 @@ export function AppSidebar({ className }: { className?: string }) {
                     <span>GitHub</span>
                   </span>
                 </SidebarMenuButton>
-              </SidebarMenuItem>
+              </SidebarMenuItem>*/}
               {!isAuthenticated && (
                 <SidebarMenuItem>
                   <SidebarMenuButton asChild isActive={location === "/login"} className="hover:bg-primary/10 data-[active=true]:bg-primary data-[active=true]:text-primary-foreground">
