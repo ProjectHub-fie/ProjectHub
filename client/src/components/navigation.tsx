@@ -1,17 +1,12 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet";
-import { Sun, Moon, Menu, X, Github } from "lucide-react";
+import { Sun, Moon, Menu } from "lucide-react";
 import { useTheme } from "./theme-provider";
 
 export default function Navigation() {
   const [isOpen, setIsOpen] = useState(false);
   const { theme, setTheme } = useTheme();
-
-  const handleShowGithub = () => {
-    window.dispatchEvent(new CustomEvent("show-github-widget"));
-    setIsOpen(false);
-  };
 
   const handleScroll = (sectionId: string) => {
     const element = document.getElementById(sectionId);
@@ -24,7 +19,7 @@ export default function Navigation() {
   const NavLink = ({ href, children }: { href: string; children: React.ReactNode }) => (
     <button
       onClick={() => handleScroll(href)}
-      className="text-muted-foreground hover bg-white-500:text-primary transition-colors duration-200"
+      className="text-muted-foreground hover:text-primary transition-colors duration-200"
       data-testid={`nav-link-${href}`}
     >
       {children}
@@ -58,14 +53,6 @@ export default function Navigation() {
             <NavLink href="skills">Skills</NavLink>
             <NavLink href="about">About</NavLink>
             <NavLink href="contact">Contact</NavLink>
-            <button
-              onClick={handleShowGithub}
-              className="text-muted-foreground hover:text-primary transition-colors duration-200 flex items-center gap-1"
-              data-testid="nav-link-github"
-            >
-              <Github className="h-4 w-4" />
-              GitHub
-            </button>
           </div>
 
           <div className="flex items-center space-x-4">
@@ -114,42 +101,34 @@ export default function Navigation() {
                   <NavLink href="skills">Skills</NavLink>
                   <NavLink href="about">About</NavLink>
                   <NavLink href="contact">Contact</NavLink>
-                  <button
-                    onClick={handleShowGithub}
-                    className="text-muted-foreground hover:text-primary transition-colors duration-200 text-center flex items-center justify-center gap-2"
-                    data-testid="mobile-nav-link-github"
-                  >
-                    <Github className="h-4 w-4" />
-                    GitHub
-                  </button>
                   <div className="px-3 py-2 space-y-2">
-                  <Button
-                    variant="ghost"
-                    onClick={() => setTheme(theme === "dark" ? "light" : theme === "light" ? "system" : "dark")}
-                    className="bg-secondary hover:bg-secondary/80 border-border justify-start w-full"
-                    data-testid="mobile-theme-toggle"
-                  >
-                    {theme === "dark" ? (
-                      <>
-                        <Sun className="h-4 w-4 text-yellow-500 mr-2" />
-                        Switch to Light
-                      </>
-                    ) : theme === "light" ? (
-                      <>
-                        <Moon className="h-4 w-4 text-muted-foreground mr-2" />
-                        Switch to System
-                      </>
-                    ) : (
-                      <>
-                        <Moon className="h-4 w-4 text-primary mr-2" />
-                        Switch to Dark
-                      </>
-                    )}
-                  </Button>
-                  <div className="text-xs text-muted-foreground px-2">
-                    Current: {theme === "system" ? "System" : theme === "dark" ? "Dark" : "Light"}
+                    <Button
+                      variant="ghost"
+                      onClick={() => setTheme(theme === "dark" ? "light" : theme === "light" ? "system" : "dark")}
+                      className="bg-secondary hover:bg-secondary/80 border-border justify-start w-full"
+                      data-testid="mobile-theme-toggle"
+                    >
+                      {theme === "dark" ? (
+                        <>
+                          <Sun className="h-4 w-4 text-yellow-500 mr-2" />
+                          Switch to Light
+                        </>
+                      ) : theme === "light" ? (
+                        <>
+                          <Moon className="h-4 w-4 text-muted-foreground mr-2" />
+                          Switch to System
+                        </>
+                      ) : (
+                        <>
+                          <Moon className="h-4 w-4 text-primary mr-2" />
+                          Switch to Dark
+                        </>
+                      )}
+                    </Button>
+                    <div className="text-xs text-muted-foreground px-2">
+                      Current: {theme === "system" ? "System" : theme === "dark" ? "Dark" : "Light"}
+                    </div>
                   </div>
-                </div>
                 </div>
               </SheetContent>
             </Sheet>

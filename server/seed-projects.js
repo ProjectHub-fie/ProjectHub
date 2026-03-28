@@ -1,6 +1,37 @@
 // Seed data for verified projects
 const seedProjects = [
   {
+    slug: "blaze-audio-player",
+    title: "Blaze Audio Player",
+    description: "A free open source web audio player with advanced features directly accessible from your browser!",
+    longDescription: "Blaze Audio Player is a powerful, open-source browser-based audio player built for audiophiles and casual listeners alike. It supports a wide range of audio formats, provides equalizer controls, playlist management, and a beautiful visualizer — all without any installation required.",
+    imageUrl: "/blaze.png",
+    category: "websites",
+    technologies: ["JavaScript", "Web Audio API", "HTML5", "CSS3"],
+    features: [
+      "Supports multiple audio formats (MP3, WAV, FLAC, OGG)",
+      "Built-in audio visualizer with customizable themes",
+      "Playlist management with drag-and-drop support",
+      "10-band equalizer for fine-tuned audio control",
+      "Keyboard shortcuts for power users",
+      "Local file playback without server upload",
+      "Responsive design for desktop and mobile"
+    ],
+    highlights: [
+      "100% browser-based — no installation needed",
+      "Open source and free to use",
+      "Built with Blaze & RadFlame"
+    ],
+    liveUrl: "https://blaze-audio-player.vercel.app/",
+    status: "active",
+    authorName: "Blaze & RadFlame",
+    architecture: "Pure frontend application using the Web Audio API for processing and visualization.",
+    timeline: "Ongoing",
+    teamSize: "2 developers",
+    isActive: true,
+    sortOrder: 0
+  },
+  {
     slug: "primebot",
     title: "PrimeBot",
     description: "PrimeBot is a sleek, multipurpose Discord bot built to supercharge your server with essential tools. It features a dynamic giveaway system with customizable entries, interactive polls for instant feedback, and a ticket system for seamless support handling.",
@@ -64,7 +95,6 @@ const seedProjects = [
       "Comprehensive admin tools for server management"
     ],
     liveUrl: "https://primebot-online.vercel.app",
-    githubUrl: "https://github.com/yourusername/primebot-dashboard",
     status: "developing",
     authorName: "Team ProjectHub",
     architecture: "React-based frontend with a Node.js backend using a micro-frontend approach for dashboard modules.",

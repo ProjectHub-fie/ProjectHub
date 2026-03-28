@@ -70,7 +70,29 @@ Preferred communication style: Simple, everyday language.
 - `TURNSTILE_SECRET_KEY`: For Cloudflare Turnstile CAPTCHA verification in production
 - `VITE_TURNSTILE_SITE_KEY`: Frontend Turnstile site key
 
+## Database Seeding
+
+The `verified_projects` table is seeded via `server/run-seed.ts`. To re-run the seed:
+```
+npx tsx server/run-seed.ts
+```
+Projects defined in `server/seed-projects.js` are upserted (insert or update on slug conflict). The table was created by `server/run-migration.ts`.
+
+Current seeded projects (6 total):
+- Blaze Audio Player (websites, active)
+- PrimeBot (bots, active)
+- PrimeBot Dashboard (websites, developing)
+- Sky Bot (bots, active)
+- Database Dashboard (websites, developing)
+- Webhost (websites, developing)
+
 ## Recent Fixes
+
+### Projects Section — Database-Driven
+- `client/src/components/projects-section.tsx` now fetches from `/api/projects` instead of using a hardcoded array
+- `client/src/pages/projects.tsx` (All Projects page) already fetched from the API
+- `client/src/pages/project-detail.tsx` already fetched by slug from the API
+- All three views are now fully database-driven
 
 ### Contact Form Email Issue (Production Bug Fix)
 **Problem**: Contact form was receiving data on server but emails weren't being sent in Vercel production.
