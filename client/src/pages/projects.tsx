@@ -100,11 +100,12 @@ export default function ProjectsPage() {
     queryKey: ["/api/projects"],
     queryFn: async () => {
       try {
-        const response = await apiRequest("/api/projects", "GET");
+        const res = await apiRequest("/api/projects", "GET");
+        const response = await res.json();
         if (!Array.isArray(response)) {
           throw new Error("Invalid response format");
         }
-        return response;
+        return response as Project[];
       } catch (error: any) {
         console.error("Failed to fetch projects:", error);
         throw error;

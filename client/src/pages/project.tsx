@@ -75,8 +75,8 @@ export default function ProjectDetailPage() {
       }
       
       try {
-        const response = await apiRequest<Project>(`/api/projects/${slug}`, "GET");
-        // Hono might return the error object if we're not careful with types
+        const res = await apiRequest(`/api/projects/${slug}`, "GET");
+        const response = await res.json() as Project;
         if (!response || (response as any).message === "Project not found") {
           throw new Error("Project not found");
         }
