@@ -117,6 +117,19 @@ interface Project {
 
 const projects: Project[] = [
   {
+    id: "blaze",
+    slug: "blaze",
+    title: "Blaze Audio Player",
+    description: "A free open source web audio player with advanced features directly accessible from your browser!",
+    image: "/blaze.png",
+    category: "websites",
+    tech: ["Javascript"],
+    liveUrl: "https://blaze-audio-player.vercel.app/",
+    status: " Activ",
+    statusColor: "bg-green-500",
+    author: { name:"Blaze & RadFlame" },
+  },
+  {
     id: "PrimeBot",
     slug: "primebot",
     title: "PrimeBot",
