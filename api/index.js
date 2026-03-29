@@ -54,7 +54,12 @@ export default async function handler(request, response) {
       return handleContactEndpoint(request, response);
     }
 
-    // Projects endpoints
+    // Projects list endpoint
+    if (path === '/api/projects') {
+      return handleProjectsListEndpoint(request, response);
+    }
+
+    // Projects detail + interactions endpoints
     if (path.startsWith('/api/projects/')) {
       return handleProjectsEndpoints(request, response, path);
     }
@@ -90,6 +95,8 @@ export default async function handler(request, response) {
       path: path,
       availableEndpoints: [
         "GET /api/health",
+        "GET /api/projects",
+        "GET /api/projects/:slug",
         "POST /api/auth/login",
         "POST /api/auth/register", 
         "POST /api/auth/logout",
@@ -98,7 +105,7 @@ export default async function handler(request, response) {
         "POST /api/project-requests",
         "GET /api/project-requests",
         "POST /api/contact",
-        "POST /api/projects/{id}/interactions",
+        "POST /api/projects/:id/interactions",
         "POST /api/auth/recovery?action=forgot",
         "POST /api/auth/recovery?action=reset"
       ]
@@ -439,13 +446,26 @@ async function handleContactEndpoint(request, response) {
   });
 }
 
-// Handle projects endpoints
+// Handle GET /api/projects - return all active verified projects
+async function handleProjectsListEndpoint(request, response) {
+  if (request.method !== 'GET') {
+    return response.status(405).json({ message: 'Method not allowed' });
+  }
+  try {
+    const projects = await storage.getAllVerifiedProjects();
+    return response.status(200).json(projects);
+  } catch (error) {
+    console.error('Get projects error:', error);
+    return response.status(500).json({ message: 'Failed to fetch projects' });
+  }
+}
+
+// Handle /api/projects/:slug and /api/projects/:id/interactions
 async function handleProjectsEndpoints(request, response, path) {
-  const projectIdMatch = path.match(/\/api\/projects\/([^\/]+)\/interactions/);
-  
-  if (projectIdMatch) {
-    const projectId = projectIdMatch[1];
-    
+  // POST /api/projects/:id/interactions
+  const interactionsMatch = path.match(/^\/api\/projects\/([^\/]+)\/interactions$/);
+  if (interactionsMatch) {
+    const projectId = interactionsMatch[1];
     if (request.method === 'POST') {
       let body = {};
       if (request.headers['content-type']?.includes('application/json')) {
@@ -455,16 +475,33 @@ async function handleProjectsEndpoints(request, response, path) {
         }
         body = JSON.parse(Buffer.concat(chunks).toString());
       }
-
-      // Mock project interaction tracking
       console.log(`Project interaction recorded for project ${projectId}:`, body);
-      
       return response.status(200).json({
         success: true,
         interactionId: 'int_' + Date.now(),
         projectId: projectId
       });
     }
+    return response.status(405).json({ message: 'Method not allowed' });
+  }
+
+  // GET /api/projects/:slug
+  const slugMatch = path.match(/^\/api\/projects\/([^\/]+)$/);
+  if (slugMatch) {
+    const slug = slugMatch[1];
+    if (request.method === 'GET') {
+      try {
+        const project = await storage.getVerifiedProjectBySlug(slug);
+        if (!project) {
+          return response.status(404).json({ message: 'Project not found' });
+        }
+        return response.status(200).json(project);
+      } catch (error) {
+        console.error('Get project by slug error:', error);
+        return response.status(500).json({ message: 'Failed to fetch project' });
+      }
+    }
+    return response.status(405).json({ message: 'Method not allowed' });
   }
 
   return response.status(404).json({ message: 'Project endpoint not found' });
