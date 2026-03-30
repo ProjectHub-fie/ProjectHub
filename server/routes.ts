@@ -7,6 +7,14 @@ import path from "path";
 import fs from "fs";
 import { fileURLToPath } from "url";
 
+declare module "express-session" {
+  interface SessionData {
+    isAdminLoggedIn?: boolean;
+    adminId?: string;
+    adminRole?: string;
+  }
+}
+
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
@@ -28,20 +36,6 @@ const upload = multer({
     else cb(new Error("Only image files are allowed"));
   },
 });
-
-// Extend Express Request type to include session properties
-declare global {
-  namespace Express {
-    interface Request {
-      session?: {
-        isAdminLoggedIn?: boolean;
-        adminId?: string;
-        adminRole?: string;
-        [key: string]: any;
-      };
-    }
-  }
-}
 
 // Role-based permissions
 const PERMISSIONS = {
