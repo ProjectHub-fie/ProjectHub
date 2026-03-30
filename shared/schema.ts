@@ -6,6 +6,7 @@ import {
   users,
   projectRequests,
   projectInteractions,
+  verifiedProjects,
 } from '../drizzle/schema.js';
 
 // Re-export types from Drizzle schema using $inferSelect/$inferInsert
@@ -51,6 +52,16 @@ export const insertProjectInteractionSchema = createInsertSchema(projectInteract
   id: true,
   createdAt: true,
   updatedAt: true
+});
+
+// Verified Projects types
+export type VerifiedProject = typeof verifiedProjects.$inferSelect;
+export type InsertVerifiedProject = typeof verifiedProjects.$inferInsert;
+
+export const insertVerifiedProjectSchema = createInsertSchema(verifiedProjects).omit({
+  id: true,
+  createdAt: true,
+  updatedAt: true,
 });
 
 // Type exports for schemas

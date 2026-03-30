@@ -1,4 +1,4 @@
-import { LayoutDashboard, Users, FileEdit, ShieldCheck } from "lucide-react";
+import { LayoutDashboard, Users, FileEdit, ShieldCheck, CheckCircle } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
   Sidebar,
@@ -18,6 +18,7 @@ const items = [
   { title: "Dashboard", url: "/admin", icon: LayoutDashboard },
   { title: "User Management", url: "/users", icon: Users },
   { title: "Project Requests", url: "/", icon: FileEdit },
+  { title: "Verified Projects", url: "/verified-projects", icon: CheckCircle },
   { title: "Admin Credentials", url: "/admin/info", icon: ShieldCheck },
 ];
 

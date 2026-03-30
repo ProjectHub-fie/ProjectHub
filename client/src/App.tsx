@@ -8,6 +8,7 @@ import UsersPage from "@/pages/users-page";
 import AdminPage from "@/pages/admin-page";
 import AdminInfo from "@/pages/admin-info";
 import CreateAdmin from "@/pages/create-admin";
+import VerifiedProjectsPage from "@/pages/verified-projects-page";
 import NotFound from "./pages/not-found";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
@@ -162,6 +163,7 @@ function Router() {
           </div>
           <Switch>
             <Route path="/" component={ProjectsPage} />
+            <Route path="/verified-projects" component={VerifiedProjectsPage} />
             <Route path="/users" component={UsersPage} />
             <Route path="/admin" component={AdminPage} />
             <Route path="/admin/info" component={AdminInfo} />

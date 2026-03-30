@@ -1,12 +1,33 @@
 import "dotenv/config";
 import path from "path";
 import express, { type Request, Response, NextFunction } from "express";
+import session from "express-session";
+import PostgresStoreModule from "connect-pg-simple";
 import { registerRoutes } from "./routes.js";
 import { setupVite, serveStatic, log } from "./vite.js";
 
 const app = express();
 app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
+
+const PostgresStore = PostgresStoreModule(session);
+app.use(session({
+  store: new PostgresStore({
+    conString: process.env.DATABASE_URL,
+    tableName: "sessions",
+    createTableIfMissing: true,
+  }),
+  secret: process.env.SESSION_SECRET || "fallback-secret-key",
+  resave: false,
+  saveUninitialized: false,
+  proxy: true,
+  cookie: {
+    secure: process.env.NODE_ENV === "production",
+    sameSite: process.env.NODE_ENV === "production" ? "none" : "lax",
+    maxAge: 24 * 60 * 60 * 1000,
+    httpOnly: true,
+  },
+}));
 
 // Logging middleware
 app.use((req, res, next) => {

@@ -3,6 +3,8 @@ import {
   type IProjectInteraction,
   type InsertProjectRequest,
   type InsertProjectInteraction,
+  type VerifiedProject,
+  type InsertVerifiedProject,
 } from "./../shared/schema.js";
 import { type User as IUser, type UpsertUser } from "@shared/models/auth.js";
 import { eq, sql, and } from "drizzle-orm";
@@ -13,6 +15,7 @@ import {
   projectInteractions,
   sessions,
   adminCredentials,
+  verifiedProjects,
 } from "../drizzle/schema.js";
 
 export interface IStorage {
@@ -42,6 +45,13 @@ export interface IStorage {
   setAdminPassword(pin: string, email: string, hash: string, role?: string): Promise<void>;
   deleteAdmin(id: string): Promise<void>;
   updateAdminRole(id: string, role: string): Promise<void>;
+
+  // Verified projects
+  getAllVerifiedProjects(): Promise<VerifiedProject[]>;
+  getVerifiedProject(id: string): Promise<VerifiedProject | null>;
+  createVerifiedProject(project: InsertVerifiedProject): Promise<VerifiedProject>;
+  updateVerifiedProject(id: string, data: Partial<InsertVerifiedProject>): Promise<VerifiedProject | null>;
+  deleteVerifiedProject(id: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -276,7 +286,36 @@ export class DatabaseStorage implements IStorage {
     await db.update(adminCredentials).set({ role: role as any }).where(eq(adminCredentials.id, id));
   }
 
-  // Contact request operations
+  // Verified projects operations
+  async getAllVerifiedProjects(): Promise<VerifiedProject[]> {
+    return await db.select().from(verifiedProjects).orderBy(verifiedProjects.sortOrder, verifiedProjects.createdAt);
+  }
+
+  async getVerifiedProject(id: string): Promise<VerifiedProject | null> {
+    const result = await db.select().from(verifiedProjects).where(eq(verifiedProjects.id, id)).limit(1);
+    return result[0] || null;
+  }
+
+  async createVerifiedProject(projectData: InsertVerifiedProject): Promise<VerifiedProject> {
+    const result = await db.insert(verifiedProjects).values({
+      ...projectData,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    }).returning();
+    return result[0];
+  }
+
+  async updateVerifiedProject(id: string, data: Partial<InsertVerifiedProject>): Promise<VerifiedProject | null> {
+    const result = await db.update(verifiedProjects)
+      .set({ ...data, updatedAt: new Date() })
+      .where(eq(verifiedProjects.id, id))
+      .returning();
+    return result[0] || null;
+  }
+
+  async deleteVerifiedProject(id: string): Promise<void> {
+    await db.delete(verifiedProjects).where(eq(verifiedProjects.id, id));
+  }
 }
 
 export const storage = new DatabaseStorage();

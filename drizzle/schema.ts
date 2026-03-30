@@ -1,4 +1,4 @@
-import { pgTable, text, serial, timestamp, boolean, uuid, pgEnum } from "drizzle-orm/pg-core";
+import { pgTable, text, serial, timestamp, boolean, uuid, pgEnum, integer } from "drizzle-orm/pg-core";
 import { sql } from "drizzle-orm";
 
 export const users = pgTable("users", {
@@ -51,6 +51,35 @@ export const sessions = pgTable("sessions", {
   sid: text("sid").primaryKey(),
   sess: text("sess").notNull(),
   expire: timestamp("expire").notNull(),
+});
+
+export const projectCategoryEnum = pgEnum("project_category", ["websites", "bots", "utilities"]);
+export const projectStatusEnum = pgEnum("project_status", ["active", "developing", "live", "beta", "archived"]);
+
+export const verifiedProjects = pgTable("verified_projects", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  slug: text("slug").notNull(),
+  title: text("title").notNull(),
+  description: text("description").notNull(),
+  longDescription: text("long_description"),
+  imageUrl: text("image_url"),
+  category: projectCategoryEnum("category").notNull(),
+  technologies: text("technologies").array(),
+  features: text("features").array(),
+  highlights: text("highlights").array(),
+  liveUrl: text("live_url"),
+  githubUrl: text("github_url"),
+  status: projectStatusEnum("status").notNull(),
+  authorName: text("author_name"),
+  authorAvatar: text("author_avatar"),
+  architecture: text("architecture"),
+  timeline: text("timeline"),
+  teamSize: text("team_size"),
+  userCount: text("user_count"),
+  isActive: boolean("is_active").default(true).notNull(),
+  sortOrder: integer("sort_order").default(0).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().notNull(),
 });
 
 export const adminCredentials = pgTable("admin_credentials", {

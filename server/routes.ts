@@ -2,6 +2,32 @@ import type { Express, Request } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage.js";
 import bcrypt from "bcryptjs";
+import multer from "multer";
+import path from "path";
+import fs from "fs";
+import { fileURLToPath } from "url";
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const uploadsDir = path.resolve(__dirname, "..", "client", "public", "uploads");
+if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+
+const diskStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, uploadsDir),
+  filename: (_req, file, cb) => {
+    const ext = path.extname(file.originalname);
+    cb(null, `${Date.now()}-${Math.random().toString(36).slice(2)}${ext}`);
+  },
+});
+const upload = multer({
+  storage: diskStorage,
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (_req, file, cb) => {
+    if (file.mimetype.startsWith("image/")) cb(null, true);
+    else cb(new Error("Only image files are allowed"));
+  },
+});
 
 // Extend Express Request type to include session properties
 declare global {
@@ -351,6 +377,65 @@ export async function registerRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Status update error:', error);
       res.status(500).json({ message: "Failed to update status" });
+    }
+  });
+
+  // Image upload route
+  app.post('/api/upload', requireAuth, upload.single('image'), (req: Request, res: any) => {
+    if (!req.file) return res.status(400).json({ message: "No image file provided" });
+    res.json({ url: `/uploads/${req.file.filename}` });
+  });
+
+  // Verified Projects routes
+  app.get('/api/verified-projects', requireAuth, async (req: Request, res: any) => {
+    try {
+      const projects = await storage.getAllVerifiedProjects();
+      res.json(projects);
+    } catch (error) {
+      console.error('Error fetching verified projects:', error);
+      res.status(500).json({ message: "Failed to fetch verified projects" });
+    }
+  });
+
+  app.get('/api/verified-projects/:id', requireAuth, async (req: Request, res: any) => {
+    try {
+      const project = await storage.getVerifiedProject(req.params.id);
+      if (!project) return res.status(404).json({ message: "Project not found" });
+      res.json(project);
+    } catch (error) {
+      console.error('Error fetching verified project:', error);
+      res.status(500).json({ message: "Failed to fetch project" });
+    }
+  });
+
+  app.post('/api/verified-projects', requireRole('moderator'), async (req: Request, res: any) => {
+    try {
+      const project = await storage.createVerifiedProject(req.body);
+      res.status(201).json(project);
+    } catch (error: any) {
+      console.error('Error creating verified project:', error);
+      res.status(500).json({ message: error.message || "Failed to create project" });
+    }
+  });
+
+  app.put('/api/verified-projects/:id', requireRole('moderator'), async (req: Request, res: any) => {
+    try {
+      const updated = await storage.updateVerifiedProject(req.params.id, req.body);
+      if (!updated) return res.status(404).json({ message: "Project not found" });
+      res.json(updated);
+    } catch (error: any) {
+      console.error('Error updating verified project:', error);
+      res.status(500).json({ message: error.message || "Failed to update project" });
+    }
+  });
+
+  app.delete('/api/verified-projects/:id', requireRole('admin'), async (req: Request, res: any) => {
+    try {
+      await storage.deleteVerifiedProject(req.params.id);
+      res.json({ message: "Project deleted" });
+    } catch (error) {
+      console.error('Error deleting verified project:', error);
+      res.status(500).json({ message: "Failed to delete project" });
     }
   });
 
