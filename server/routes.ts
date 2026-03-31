@@ -18,8 +18,16 @@ declare module "express-session" {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const uploadsDir = path.resolve(__dirname, "..", "client", "public", "uploads");
-if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+// On Vercel, the filesystem is read-only except for /tmp
+const uploadsDir = process.env.NODE_ENV === "production"
+  ? "/tmp/uploads"
+  : path.resolve(__dirname, "..", "client", "public", "uploads");
+
+try {
+  if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+} catch (e) {
+  console.warn("Could not create uploads directory:", e);
+}
 
 const diskStorage = multer.diskStorage({
   destination: (_req, _file, cb) => cb(null, uploadsDir),
