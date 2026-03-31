@@ -98,109 +98,53 @@
   }
 }
 
-/* Theme-specific sidebar styles */
-.theme-light .sidebar {
+/* Sidebar CSS variables — light mode (default) */
+:root {
   --sidebar-background: 0 0% 100%;
   --sidebar-foreground: 222.2 84% 4.9%;
-  --sidebar-primary: 221.2 83.2% 53.3%;
-  --sidebar-primary-foreground: 210 40% 98%;
-  --sidebar-accent: 210 40% 96.1%;
+  --sidebar-accent: 210 40% 93%;
   --sidebar-accent-foreground: 222.2 47.4% 11.2%;
   --sidebar-border: 214.3 31.8% 91.4%;
-  --sidebar-radius: calc(var(--radius) - 2px);
 }
 
-.theme-dark .sidebar {
+/* Sidebar CSS variables — dark mode */
+.dark {
   --sidebar-background: 222.2 84% 4.9%;
   --sidebar-foreground: 210 40% 98%;
-  --sidebar-primary: 217.2 91.2% 59.8%;
-  --sidebar-primary-foreground: 222.2 47.4% 11.2%;
   --sidebar-accent: 217.2 32.6% 17.5%;
   --sidebar-accent-foreground: 210 40% 98%;
   --sidebar-border: 217.2 32.6% 17.5%;
-  --sidebar-radius: calc(var(--radius) - 2px);
 }
 
-.sidebar {
+/* Sidebar base styles — theme-aware */
+[data-sidebar="sidebar"] {
   background-color: hsl(var(--sidebar-background));
-  color: #ffffff; /* Always use white text */
+  color: hsl(var(--sidebar-foreground));
   border-right: 1px solid hsl(var(--sidebar-border));
-  opacity: 1; /* Remove any transparency */
 }
 
-.sidebar .sidebar-header {
-  background-color: hsl(var(--sidebar-background));
-  color: #ffffff; /* Ensure header text is white */
+/* Active sidebar nav item — dark bg + white text in light, white bg + dark text in dark */
+.sidebar-nav-active,
+.sidebar-nav-active:hover {
+  background-color: hsl(var(--foreground)) !important;
+  color: hsl(var(--background)) !important;
 }
 
-.sidebar .sidebar-footer {
-  background-color: hsl(var(--sidebar-background));
-  border-top: 1px solid hsl(var(--sidebar-border));
-  color: #ffffff; /* Ensure footer text is white */
-}
-
-.sidebar .sidebar-group-label {
-  color: #ffffff; /* Force white color for labels */
-}
-
-.sidebar .sidebar-menu-button {
-  color: #ffffff; /* Force white color for menu buttons */
-  margin: 0.25rem 0; /* Add spacing for mobile touch targets */
-}
-
-.sidebar .sidebar-menu-button:hover {
-  background-color: hsl(var(--sidebar-accent));
-  color: #ffffff; /* Keep text white on hover */
-}
-
-.sidebar .sidebar-menu-button[data-active] {
-  background-color: hsl(var(--sidebar-primary));
-  color: #ffffff; /* Keep text white when active */
+.sidebar-nav-active svg,
+.sidebar-nav-active span {
+  color: hsl(var(--background)) !important;
 }
 
 /* Mobile-specific optimizations */
 @media (max-width: 768px) {
-  .sidebar {
-    width: 240px; /* Wider sidebar on mobile for better touch targets */
+  [data-sidebar="sidebar"] {
+    width: 240px;
   }
-  
-  .sidebar .sidebar-menu-button {
+
+  [data-sidebar="menu-button"] {
     padding: 0.75rem 1rem;
     font-size: 1rem;
     margin: 0.25rem 0.5rem;
     border-radius: 0.5rem;
-  }
-  
-  .sidebar .sidebar-header {
-    padding: 1rem 1.25rem;
-  }
-  
-  .sidebar .sidebar-group-label {
-    padding: 0.5rem 1rem;
-    font-size: 0.85rem;
-  }
-  
-  .sidebar .sidebar-footer {
-    padding: 0.75rem;
-  }
-  
-  .sidebar .sidebar-footer .flex {
-    padding: 0.25rem;
-  }
-  
-  /* Ensure theme toggle is visible and usable on mobile */
-  [data-sidebar="sidebar"] {
-    background-color: hsl(var(--sidebar-background));
-  }
-  
-  /* Override for theme toggle in mobile sidebar */
-  .sidebar .sidebar-footer button {
-    background-color: transparent;
-    border: 1px solid hsl(var(--sidebar-border)/0.3);
-  }
-  
-  /* Make sure theme toggle icons are visible in mobile sidebar */
-  .sidebar .sidebar-footer .theme-toggle svg {
-    color: #ffffff;
   }
 }

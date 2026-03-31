@@ -1,5 +1,5 @@
 import { LayoutDashboard, Users, FileEdit, ShieldCheck, CheckCircle } from "lucide-react";
-import { Link, useLocation } from "wouter";
+import { useLocation } from "wouter";
 import {
   Sidebar,
   SidebarContent,
@@ -16,14 +16,16 @@ import { ThemeToggle } from "@/components/ui/theme-toggle";
 
 const items = [
   { title: "Dashboard", url: "/admin", icon: LayoutDashboard },
-  { title: "User Management", url: "/users", icon: Users },
+  { title: "Users", url: "/users", icon: Users },
   { title: "Project Requests", url: "/", icon: FileEdit },
-  { title: "Verified Projects", url: "/verified-projects", icon: CheckCircle },
-  { title: "Admin Credentials", url: "/admin/info", icon: ShieldCheck },
+  { title: "Add Projects", url: "/verified-projects", icon: CheckCircle },
+  { title: "Admin Management", url: "/admin/info", icon: ShieldCheck },
 ];
 
 export function AppSidebar() {
-  const [location] = useLocation();
+  const [location, setLocation] = useLocation();
+
+  const isActive = (url: string) => location === url;
 
   return (
     <Sidebar className="border-r data-[state=collapsed]:w-20 data-[state=expanded]:w-64 bg-background">
@@ -42,17 +44,14 @@ export function AppSidebar() {
             <SidebarMenu>
               {items.map((item) => (
                 <SidebarMenuItem key={item.title} className="mb-1">
-                  <SidebarMenuButton 
-                    asChild 
-                    isActive={location === item.url || (item.url === '/' && location.startsWith('/admin') && location !== '/admin')}
-                    className="rounded-lg px-3 py-2 data-[active=true]:bg-sidebar-accent data-[active=true]:text-sidebar-accent-foreground"
+                  <SidebarMenuButton
+                    onClick={() => setLocation(item.url)}
+                    className={`rounded-lg px-3 py-2 cursor-pointer ${isActive(item.url) ? "sidebar-nav-active" : ""}`}
                   >
-                    <Link href={item.url} className="flex items-center gap-3">
-                      <item.icon className="h-4 w-4" />
-                      <span className="group-data-[collapsible=icon]:!hidden md:group-data-[collapsible=icon]:hidden truncate">
-                        {item.title}
-                      </span>
-                    </Link>
+                    <item.icon className="h-4 w-4" />
+                    <span className="group-data-[collapsible=icon]:!hidden md:group-data-[collapsible=icon]:hidden truncate">
+                      {item.title}
+                    </span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
