@@ -5,8 +5,8 @@ export const TOAST_COLORS = {
     text: "text-white",
   },
   error: {
-    border: "border-orange-500",
-    background: "bg-orange-600",
+    border: "border-red-400",
+    background: "bg-red-500",
     text: "text-white",
   },
 };
