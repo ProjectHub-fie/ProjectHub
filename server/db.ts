@@ -16,6 +16,9 @@ const client = postgres(databaseUrl, {
 
 export const db = drizzle(client, { schema });
 
+// Export raw client for queries that bypass Drizzle ORM
+export { client as pgClient };
+
 // Export for cleanup
 export const closeDB = async () => {
   await client.end();

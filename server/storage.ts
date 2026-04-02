@@ -9,10 +9,39 @@ import {
   type InsertVerifiedProjectInput,
   type VerifiedProject,
 } from "./../shared/schema.js";
-import { db } from "./db.js";
+import { db, pgClient } from "./db.js";
 import { eq, and, sql } from "drizzle-orm";
 import { users, projectRequests, projectInteractions, verifiedProjects } from "../drizzle/schema.js";
 import seedProjects from './seed-projects.js';
+
+// Maps a raw DB row (snake_case) to VerifiedProject (camelCase)
+function mapRowToProject(r: any): VerifiedProject {
+  return {
+    id: r.id,
+    slug: r.slug,
+    title: r.title,
+    description: r.description,
+    longDescription: r.long_description ?? null,
+    imageUrl: r.image_url ?? null,
+    category: r.category,
+    technologies: r.technologies ?? null,
+    features: r.features ?? null,
+    highlights: r.highlights ?? null,
+    liveUrl: r.live_url ?? null,
+    githubUrl: r.github_url ?? null,
+    status: r.status,
+    authorName: r.author_name ?? null,
+    authorAvatar: r.author_avatar ?? null,
+    architecture: r.architecture ?? null,
+    timeline: r.timeline ?? null,
+    teamSize: r.team_size ?? null,
+    userCount: r.user_count ?? null,
+    isActive: r.is_active,
+    sortOrder: r.sort_order,
+    createdAt: r.created_at,
+    updatedAt: r.updated_at,
+  };
+}
 
 // Simple in-memory storage for development/testing when database is unavailable
 class InMemoryStorage implements IStorage {
@@ -146,19 +175,15 @@ class InMemoryStorage implements IStorage {
 
   async getAllVerifiedProjects(): Promise<VerifiedProject[]> {
     try {
-      // Try database first
-      const result = await withTimeout(
-        db.select().from(verifiedProjects).where(eq(verifiedProjects.isActive, true)).orderBy(verifiedProjects.sortOrder)
+      const rows = await withTimeout(
+        pgClient`SELECT * FROM verified_projects WHERE is_active = true ORDER BY sort_order`
       );
-      
-      // If database returns empty but we have fallback seeds, use seeds
-      if (result.length === 0 && this.fallbackProjects.size > 0) {
+      if (rows.length === 0 && this.fallbackProjects.size > 0) {
         return Array.from(this.fallbackProjects.values())
           .filter(project => project.isActive)
           .sort((a, b) => (a.sortOrder || 0) - (b.sortOrder || 0));
       }
-      
-      return result;
+      return rows.map(mapRowToProject);
     } catch (error: any) {
       console.error('getAllVerifiedProjects error:', error.message);
       return Array.from(this.fallbackProjects.values())
@@ -169,21 +194,13 @@ class InMemoryStorage implements IStorage {
 
   async getVerifiedProjectBySlug(slug: string): Promise<VerifiedProject | null> {
     try {
-      const result = await withTimeout(
-        db.select().from(verifiedProjects).where(
-          and(
-            eq(verifiedProjects.slug, slug),
-            eq(verifiedProjects.isActive, true)
-          )
-        ).limit(1)
+      const rows = await withTimeout(
+        pgClient`SELECT * FROM verified_projects WHERE slug = ${slug} AND is_active = true LIMIT 1`
       );
-      
-      if (result.length === 0) {
-        // Fallback to in-memory
+      if (rows.length === 0) {
         return this.fallbackProjects.get(slug) || null;
       }
-      
-      return result[0] || null;
+      return mapRowToProject(rows[0]);
     } catch (error: any) {
       console.error('getVerifiedProjectBySlug error:', error.message);
       return this.fallbackProjects.get(slug) || null;
@@ -544,38 +561,24 @@ export class DatabaseStorage implements IStorage {
   // Verified projects operations
   async getAllVerifiedProjects(): Promise<VerifiedProject[]> {
     try {
-      return await withTimeout(
-        db.select()
-          .from(verifiedProjects)
-          .where(eq(verifiedProjects.isActive, true))
-          .orderBy(verifiedProjects.sortOrder)
+      const rows = await withTimeout(
+        pgClient`SELECT * FROM verified_projects WHERE is_active = true ORDER BY sort_order`
       );
+      return rows.map(mapRowToProject);
     } catch (error: any) {
       console.error('getAllVerifiedProjects error:', error.message);
-      if (error.message?.includes('timeout')) {
-        throw new Error('Database timeout');
-      }
       throw error;
     }
   }
 
   async getVerifiedProjectBySlug(slug: string): Promise<VerifiedProject | null> {
     try {
-      const result = await withTimeout(
-        db.select()
-          .from(verifiedProjects)
-          .where(and(
-            eq(verifiedProjects.slug, slug),
-            eq(verifiedProjects.isActive, true)
-          ))
-          .limit(1)
+      const rows = await withTimeout(
+        pgClient`SELECT * FROM verified_projects WHERE slug = ${slug} AND is_active = true LIMIT 1`
       );
-      return result[0] || null;
+      return rows.length > 0 ? mapRowToProject(rows[0]) : null;
     } catch (error: any) {
       console.error('getVerifiedProjectBySlug error:', error.message);
-      if (error.message?.includes('timeout')) {
-        throw new Error('Database timeout');
-      }
       throw error;
     }
   }
@@ -812,8 +815,8 @@ let storage: IStorage;
 
 const dbStorage = new DatabaseStorage();
 try {
-  // Test database connection
-  await withTimeout(db.select().from(users).limit(1), 2000);
+  // Test database connection using raw client (more reliable, no Drizzle ORM overhead)
+  await withTimeout(pgClient`SELECT 1`, 5000);
   console.log('✅ Database storage initialized successfully');
   storage = dbStorage;
 } catch (error: any) {
