@@ -122,3 +122,56 @@
     transform: translateY(-10px);
   }
 }
+
+/* ---------------------------------------------------------------------------
+   Administration dashboard (/pbad)
+   Scoped under .admin-portal so dashboard-only rules never affect the public
+   website. The dashboard keeps its own blue accent (--primary) while inheriting
+   the public site's fonts and base tokens.
+--------------------------------------------------------------------------- */
+.admin-portal {
+  --primary: 221.2 83.2% 53.3%;
+  --primary-foreground: 210 40% 98%;
+  --ring: 221.2 83.2% 53.3%;
+  --sidebar-background: 0 0% 100%;
+  --sidebar-foreground: 222.2 84% 4.9%;
+  --sidebar-accent: 210 40% 93%;
+  --sidebar-accent-foreground: 222.2 47.4% 11.2%;
+  --sidebar-border: 214.3 31.8% 91.4%;
+}
+
+.dark .admin-portal {
+  --primary: 217.2 91.2% 59.8%;
+  --ring: 224.3 76.3% 48%;
+  --sidebar-background: 222.2 84% 4.9%;
+  --sidebar-foreground: 210 40% 98%;
+  --sidebar-accent: 217.2 32.6% 17.5%;
+  --sidebar-accent-foreground: 210 40% 98%;
+  --sidebar-border: 217.2 32.6% 17.5%;
+}
+
+.admin-portal [data-sidebar="sidebar"] {
+  background-color: hsl(var(--sidebar-background));
+  color: hsl(var(--sidebar-foreground));
+}
+
+/* Active dashboard nav item: inverted colours in both themes. */
+.admin-portal .sidebar-nav-active,
+.admin-portal .sidebar-nav-active:hover {
+  background-color: hsl(var(--foreground)) !important;
+  color: hsl(var(--background)) !important;
+}
+
+.admin-portal .sidebar-nav-active svg,
+.admin-portal .sidebar-nav-active span {
+  color: hsl(var(--background)) !important;
+}
+
+@media (max-width: 768px) {
+  .admin-portal [data-sidebar="menu-button"] {
+    padding: 0.75rem 1rem;
+    font-size: 1rem;
+    margin: 0.25rem 0.5rem;
+    border-radius: 0.5rem;
+  }
+}

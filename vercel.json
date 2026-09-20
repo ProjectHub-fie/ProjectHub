@@ -2,10 +2,36 @@
   "version": 2,
   "buildCommand": "npm run build",
   "outputDirectory": "dist/public",
+  "functions": {
+    "api/admin/index.js": {
+      "memory": 1024,
+      "maxDuration": 30
+    }
+  },
   "rewrites": [
+    {
+      "source": "/api/admin/(.*)",
+      "destination": "/api/admin/index.js"
+    },
+    {
+      "source": "/api/admin",
+      "destination": "/api/admin/index.js"
+    },
     {
       "source": "/api/(.*)",
       "destination": "/api/index.js"
+    },
+    {
+      "source": "/pbad",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/pbad/",
+      "destination": "/index.html"
+    },
+    {
+      "source": "/pbad/(.*)",
+      "destination": "/index.html"
     },
     {
       "source": "/reset-password",
@@ -34,6 +60,15 @@
   ],
   "headers": [
     {
+      "source": "/api/admin/(.*)",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "no-store"
+        }
+      ]
+    },
+    {
       "source": "/api/(.*)",
       "headers": [
         {
@@ -42,11 +77,11 @@
         },
         {
           "key": "Access-Control-Allow-Methods",
-          "value": "GET, POST, PUT, DELETE, OPTIONS"
+          "value": "GET, POST, PUT, PATCH, DELETE, OPTIONS"
         },
         {
           "key": "Access-Control-Allow-Headers",
-          "value": "Content-Type, Authorization"
+          "value": "Content-Type, Authorization, X-User-Session"
         }
       ]
     }
