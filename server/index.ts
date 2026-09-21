@@ -2,6 +2,7 @@ import express, { type Request, type Response, type NextFunction } from "express
 import path from "path";
 import { fileURLToPath } from "url";
 import { registerRoutes } from "./routes.js";
+import { registerAdminRoutes } from "./admin-routes.js";
 import { setupVite, serveStatic, log } from "./vite.js";
 
 // Polyfill for __dirname in ES modules
@@ -38,6 +39,8 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
 
 // Register API routes
 await registerRoutes(app);
+// Register the /pbad administration dashboard API (auth-gated under /api/admin)
+await registerAdminRoutes(app);
 
 // ALWAYS serve the app on the port specified in the environment variable PORT
 // Other ports are firewalled. Default to 5000 if not specified.

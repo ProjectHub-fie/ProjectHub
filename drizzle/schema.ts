@@ -104,6 +104,18 @@ export const projectInteractionsRelations = relations(projectInteractions, ({ on
   }),
 }));
 
+// Admin credentials used by the /pbad administration dashboard
+export const adminCredentials = pgTable('admin_credentials', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  email: text('email').unique(),
+  pin: text('pin').unique().notNull(),
+  passwordHash: text('password_hash').notNull(),
+  role: text('role').default('moderator').notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+export const adminCredentialsRelations = relations(adminCredentials, () => ({}));
+
 // Types
 export type User = typeof users.$inferSelect;
 export type NewUser = typeof users.$inferInsert;
