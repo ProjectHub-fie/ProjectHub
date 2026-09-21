@@ -10,7 +10,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuth, SESSION_TOKEN_KEY } from "@/hooks/useAuth";
 import { useLocation } from "wouter";
 import { FaDiscord } from "react-icons/fa";
 import { Turnstile } from "@marsidev/react-turnstile";
@@ -43,7 +43,7 @@ const resetPasswordSchema = z.object({
 export default function LoginPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-  const { login, register, isLoggingIn, isRegistering, isAuthenticated } = useAuth();
+  const { login, register, isLoggingIn, isRegistering, isAuthenticated, refreshAuth } = useAuth();
   const [activeTab, setActiveTab] = useState("login");
   const [showForgotPassword, setShowForgotPassword] = useState(false);
   const [showResetPassword, setShowResetPassword] = useState(false);
@@ -95,6 +95,46 @@ export default function LoginPage() {
       setLocation("/dashboard");
     }
   }, [isAuthenticated, setLocation]);
+
+  // Complete the Discord OAuth handshake.
+  //
+  // The callback redirects back with `?discord=success#token=...`: the token
+  // lives in the fragment so it never reaches the server logs, and it is stored
+  // exactly like a password login before the fragment is cleared.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const discordResult = params.get("discord");
+    if (!discordResult) return;
+
+    if (discordResult === "success") {
+      const hash = new URLSearchParams(window.location.hash.replace(/^#/, ""));
+      const token = hash.get("token");
+
+      if (token) {
+        localStorage.setItem(SESSION_TOKEN_KEY, token);
+        window.history.replaceState(null, "", "/login");
+        refreshAuth().finally(() => setLocation("/dashboard"));
+        return;
+      }
+      toast({
+        title: "Discord Login Failed",
+        description: "No session was returned. Please try again.",
+        variant: "error",
+      });
+    } else {
+      const reason = params.get("reason") || "unknown";
+      toast({
+        title: "Discord Login Failed",
+        description:
+          reason === "not_configured"
+            ? "Discord login is not configured on this deployment."
+            : `Discord did not complete the sign-in (${reason}).`,
+        variant: "error",
+      });
+    }
+
+    window.history.replaceState(null, "", "/login");
+  }, [refreshAuth, setLocation, toast]);
 
   // Listen for auth updates from the auth hook
   useEffect(() => {
@@ -591,17 +631,16 @@ export default function LoginPage() {
 
             <Button
               variant="outline"
-              className="w-full bg-blue-600 border-input hover:bg-accent hover:text-accent-foreground flex items-center justify-center gap-2"
+              className="w-full border-input hover:bg-accent hover:text-accent-foreground flex items-center justify-center gap-2"
               onClick={() => {
-                if (!captchaToken) {
-                  toast({ title: "Captcha Required", description: "Please complete the Turnstile verification before using Discord login.", variant: "error" });
-                  return;
-                }
-                window.location.href = `/api/auth/discord?captchaToken=${captchaToken}`;
+                // Discord sign-in runs through Discord's own OAuth screen, so it
+                // does not share the form captcha: the signed `state` nonce
+                // protects the handshake instead.
+                window.location.href = "/api/auth/discord";
               }}
               data-testid="button-discord-login"
             >
-              <FaDiscord className="h-4 w-4 " />
+              <FaDiscord className="h-4 w-4 text-[#5865F2]" />
               Continue with Discord
             </Button>
           </div>

@@ -10,7 +10,7 @@ interface User {
 }
 
 const USER_STORAGE_KEY = "projecthub_user";
-const SESSION_TOKEN_KEY = "projecthub_session_token";
+export const SESSION_TOKEN_KEY = "projecthub_session_token";
 
 export function useAuth() {
   const queryClient = useQueryClient();

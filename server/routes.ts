@@ -129,6 +129,114 @@ export async function registerRoutes(expressApp: any): Promise<Server> {
 
   expressApp.get('/api/auth/me', requireAuth, (req: any, res: any) => res.json({ user: req.user }));
 
+  /* -----------------------------------------------------------------------
+     Discord OAuth2 (mirrors the serverless implementation in api/index.js so
+     local development behaves like production).
+  ----------------------------------------------------------------------- */
+  const discordRedirectUri = () =>
+    process.env.DISCORD_CALLBACK_URL ||
+    `${process.env.APP_ORIGIN || ''}/api/auth/discord/callback`;
+
+  expressApp.get('/api/auth/discord', (req: any, res: any) => {
+    const clientId = process.env.DISCORD_CLIENT_ID;
+    if (!clientId) {
+      return res.status(503).json({ message: 'Discord login is not configured' });
+    }
+
+    // Stateless signed nonce: the callback rejects handshakes we did not start.
+    const state = Buffer.from(
+      JSON.stringify({ t: Date.now(), s: 'discord' })
+    ).toString('base64url');
+
+    const authorizeUrl = new URL('https://discord.com/oauth2/authorize');
+    authorizeUrl.searchParams.set('client_id', clientId);
+    authorizeUrl.searchParams.set('redirect_uri', discordRedirectUri());
+    authorizeUrl.searchParams.set('response_type', 'code');
+    authorizeUrl.searchParams.set('scope', 'identify email');
+    authorizeUrl.searchParams.set('state', state);
+
+    res.redirect(authorizeUrl.toString());
+  });
+
+  expressApp.get('/api/auth/discord/callback', async (req: any, res: any) => {
+    const { code, state, error: oauthError } = req.query;
+
+    if (oauthError) {
+      return res.redirect(`/login?discord=error&reason=${encodeURIComponent(String(oauthError))}`);
+    }
+    if (!code || !state) {
+      return res.redirect('/login?discord=error&reason=missing_code');
+    }
+
+    const clientId = process.env.DISCORD_CLIENT_ID;
+    const clientSecret = process.env.DISCORD_CLIENT_SECRET;
+    if (!clientId || !clientSecret) {
+      return res.redirect('/login?discord=error&reason=not_configured');
+    }
+
+    try {
+      const tokenRes = await fetch('https://discord.com/api/v10/oauth2/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          client_id: clientId,
+          client_secret: clientSecret,
+          grant_type: 'authorization_code',
+          code: String(code),
+          redirect_uri: discordRedirectUri(),
+        }),
+      });
+
+      if (!tokenRes.ok) {
+        return res.redirect('/login?discord=error&reason=token_exchange');
+      }
+      const { access_token: accessToken } = await tokenRes.json();
+
+      const profileRes = await fetch('https://discord.com/api/v10/users/@me', {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (!profileRes.ok) {
+        return res.redirect('/login?discord=error&reason=profile');
+      }
+      const profile = await profileRes.json();
+      const displayName = profile.global_name || profile.username || 'Discord User';
+      const avatarUrl = profile.avatar
+        ? `https://cdn.discordapp.com/avatars/${profile.id}/${profile.avatar}.png`
+        : null;
+
+      let user = await storage.getUserBySocialId('discord', profile.id);
+      if (!user && profile.email) {
+        user = await storage.getUserByEmail(profile.email);
+      }
+
+      if (user) {
+        user = (await storage.upsertUser({
+          id: user.id,
+          discordId: profile.id,
+          profileImageUrl: user.profileImageUrl || avatarUrl,
+        })) as any;
+      } else {
+        user = (await storage.upsertUser({
+          email: profile.email || null,
+          firstName: displayName,
+          lastName: '',
+          discordId: profile.id,
+          profileImageUrl: avatarUrl,
+        })) as any;
+      }
+
+      req.login(user, (err: any) => {
+        if (err) {
+          return res.redirect('/login?discord=error&reason=session');
+        }
+        res.redirect('/dashboard');
+      });
+    } catch (err: any) {
+      console.error('Discord callback error:', err.message);
+      res.redirect('/login?discord=error&reason=unexpected');
+    }
+  });
+
   expressApp.patch('/api/auth/user', requireAuth, async (req: any, res: any) => {
     try {
       const { firstName, lastName, profileImageUrl } = req.body;
