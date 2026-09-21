@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/"
+title = "Dev Project Hub"
+description = "A developer portfolio and project hub for browsing verified projects, viewing project details, managing accounts, and submitting project requests."
+version = "1.0.0"
+id = "artifacts/dev-project-hub"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/" ]
+localPort = 21972
+
+[services.development]
+run = "pnpm --filter @workspace/dev-project-hub run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/dev-project-hub", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/dev-project-hub/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "21972"
+BASE_PATH = "/"

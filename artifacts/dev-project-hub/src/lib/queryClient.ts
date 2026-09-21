@@ -1,0 +1,87 @@
+import { QueryClient, QueryFunction } from "@tanstack/react-query";
+
+async function throwIfResNotOk(res: Response) {
+  if (!res.ok) {
+    const text = (await res.text()) || res.statusText;
+    throw new Error(`${res.status}: ${text}`);
+  }
+}
+
+export async function apiRequest(
+  url: string,
+  method: string,
+  data?: unknown | undefined,
+): Promise<Response> {
+  // Get session token for authentication
+  const sessionToken = localStorage.getItem('projecthub_session_token');
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json"
+  };
+  
+  if (sessionToken) {
+    headers['X-User-Session'] = sessionToken;
+  }
+
+  const res = await fetch(url, {
+    method,
+    headers,
+    body: data ? JSON.stringify(data) : undefined,
+    credentials: "include",
+  });
+
+  await throwIfResNotOk(res);
+  return res;
+}
+
+type UnauthorizedBehavior = "returnNull" | "throw";
+export const getQueryFn: <T>(options: {
+  on401: UnauthorizedBehavior;
+}) => QueryFunction<T> =
+  ({ on401: unauthorizedBehavior }) =>
+  async ({ queryKey }) => {
+    // Get session token for authentication
+    const sessionToken = localStorage.getItem('projecthub_session_token');
+    const headers: Record<string, string> = {};
+    
+    if (sessionToken) {
+      headers['X-User-Session'] = sessionToken;
+    }
+
+    const res = await fetch(queryKey.join("/") as string, {
+      credentials: "include",
+      headers,
+    });
+
+    if (unauthorizedBehavior === "returnNull" && res.status === 401) {
+      return null;
+    }
+
+    await throwIfResNotOk(res);
+    return await res.json();
+  };
+
+export const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      queryFn: getQueryFn({ on401: "returnNull" }),
+      refetchInterval: false,
+      refetchOnWindowFocus: false,
+      staleTime: Infinity,
+      retry: false,
+    },
+    mutations: {
+      retry: false,
+      onError: (error: Error) => {
+        // Don't redirect for common auth/validation errors
+        const isAuthError = error.message.includes('401') || 
+                           error.message.includes('Invalid') || 
+                           error.message.includes('password');
+                           
+        if (!isAuthError) {
+          console.error('Mutation error:', error);
+          window.location.href = '/error';
+        }
+      }
+    },
+  },
+});
