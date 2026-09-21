@@ -196,7 +196,7 @@ async function ensureTableAndSeed() {
 }
 
 // Run on module load
-ensureTableAndSeed();
+const schemaReady = ensureTableAndSeed();
 
 export class DatabaseStorage {
   // User operations
@@ -260,19 +260,37 @@ export class DatabaseStorage {
   }
 
   // Verified projects operations
+  //
+  // Reads fall back to the bundled seed list when the database is unavailable
+  // (bad credentials, cold/suspended Neon branch, missing schema). The public
+  // portfolio is a read-only showcase, so serving the curated list is far
+  // better than returning a 500 — which is what the /api/projects error in the
+  // incident log amounted to.
   async getAllVerifiedProjects() {
-    return await db.select()
-      .from(verifiedProjects)
-      .where(eq(verifiedProjects.isActive, true))
-      .orderBy(verifiedProjects.sortOrder);
+    try {
+      await schemaReady;
+      return await db.select()
+        .from(verifiedProjects)
+        .where(eq(verifiedProjects.isActive, true))
+        .orderBy(verifiedProjects.sortOrder);
+    } catch (error) {
+      console.error('getAllVerifiedProjects falling back to seed data:', error.message);
+      return SEED_PROJECTS.filter((p) => p.isActive).sort((a, b) => a.sortOrder - b.sortOrder);
+    }
   }
 
   async getVerifiedProjectBySlug(slug) {
-    const result = await db.select()
-      .from(verifiedProjects)
-      .where(and(eq(verifiedProjects.slug, slug), eq(verifiedProjects.isActive, true)))
-      .limit(1);
-    return result[0] || null;
+    try {
+      await schemaReady;
+      const result = await db.select()
+        .from(verifiedProjects)
+        .where(and(eq(verifiedProjects.slug, slug), eq(verifiedProjects.isActive, true)))
+        .limit(1);
+      return result[0] || null;
+    } catch (error) {
+      console.error('getVerifiedProjectBySlug falling back to seed data:', error.message);
+      return SEED_PROJECTS.find((p) => p.slug === slug && p.isActive) || null;
+    }
   }
 
   // Project request operations
