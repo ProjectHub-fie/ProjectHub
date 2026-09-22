@@ -22,6 +22,25 @@ export const closeDB = async () => {
 };
 
 /**
+ * Finds the Postgres error code on an error or any of its `cause` links.
+ *
+ * Drizzle wraps driver failures in a DrizzleQueryError and keeps the original
+ * PostgresError on `cause`. Reading only the outermost `code` therefore reports
+ * "unknown" for every database-level failure, including an authentication
+ * rejection, which is the case a health check most needs to explain.
+ */
+export function findDbErrorCode(error) {
+  const seen = new Set();
+  let current = error;
+  while (current && typeof current === 'object' && !seen.has(current)) {
+    seen.add(current);
+    if (typeof current.code === 'string') return current.code;
+    current = current.cause;
+  }
+  return undefined;
+}
+
+/**
  * Normalises a driver error into a short, safe message.
  *
  * Driver errors embed the full SQL statement and its bound parameters (and,
@@ -30,7 +49,7 @@ export const closeDB = async () => {
  * summary to the client instead.
  */
 export function describeDbError(error) {
-  const code = error?.code;
+  const code = findDbErrorCode(error);
   if (code === '28P01' || code === '28000') {
     return 'Database rejected the configured credentials';
   }
