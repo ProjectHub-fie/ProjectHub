@@ -12,7 +12,7 @@
     "db:bootstrap": "node scripts/db-bootstrap.mjs",
     "db:seed-admin": "node scripts/seed-admin.mjs",
     "test": "node --test --test-force-exit \"tests/*.test.mjs\"",
-    "test:unit": "node --test --test-force-exit tests/session-token.test.mjs tests/client-auth.test.mjs"
+    "test:unit": "node --test --test-force-exit tests/session-token.test.mjs tests/client-auth.test.mjs tests/db-config.test.mjs"
   },
   "dependencies": {
     "@firebasegen/default-connector": "file:dataconnect-generated/js/default-connector",

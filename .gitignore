@@ -14,6 +14,9 @@ vite.config.ts.*
 # Credential / session artifacts - never commit
 .env.vercel
 .env*.local
+.env.local
+.env.production
+.env.development
 cookies.txt
 fresh-cookies.txt
 test-cookies.txt
