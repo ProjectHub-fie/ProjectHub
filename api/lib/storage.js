@@ -199,11 +199,23 @@ async function ensureTableAndSeed() {
 const schemaReady = ensureTableAndSeed();
 
 export class DatabaseStorage {
+  /**
+   * Verifies the configured database is reachable and usable.
+   *
+   * Used by /api/health so a bad DATABASE_URL is reported as a failure rather
+   * than a healthy process. Throws the driver error; callers summarise it with
+   * describeDbError so connection details never reach the response.
+   */
+  async checkConnection() {
+    await db.execute(sql`SELECT 1`);
+  }
+
   // User operations
   async getUser(id) {
     const result = await db.select().from(users).where(eq(users.id, id)).limit(1);
     return result[0] || null;
   }
+
 
   async getUserByEmail(email) {
     const result = await db.select().from(users).where(eq(users.email, email)).limit(1);

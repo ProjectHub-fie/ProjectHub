@@ -3,6 +3,7 @@
  * Implements all required API endpoints for ProjectHub frontend with database integration
  */
 import { DatabaseStorage } from './lib/storage.js';
+import { describeDbError } from './lib/db.js';
 import bcrypt from 'bcryptjs';
 import crypto from 'node:crypto';
 
@@ -117,13 +118,30 @@ export default async function handler(request, response) {
   }
 
   try {
-    // Health check endpoint
+    // Health check endpoint.
+    //
+    // This reports the database as well as the process. Previously it returned
+    // 200 unconditionally, so a deployment whose DATABASE_URL did not work
+    // still looked healthy while every query failed with 28P01/28P01-style
+    // errors. A health check that cannot fail is of no use for diagnosing that.
     if (path === '/api/health') {
-      return response.status(200).json({
-        status: 'ok',
-        timestamp: new Date().toISOString(),
-        message: 'API is functioning properly'
-      });
+      try {
+        await storage.checkConnection();
+        return response.status(200).json({
+          status: 'ok',
+          database: 'connected',
+          timestamp: new Date().toISOString(),
+          message: 'API is functioning properly'
+        });
+      } catch (error) {
+        console.error('Health check database failure:', error);
+        return response.status(503).json({
+          status: 'error',
+          database: 'unavailable',
+          timestamp: new Date().toISOString(),
+          message: describeDbError(error)
+        });
+      }
     }
 
     // Password recovery endpoint (handle this before auth endpoints)
