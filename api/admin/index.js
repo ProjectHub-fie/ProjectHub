@@ -17,9 +17,9 @@ import connectPgSimple from 'connect-pg-simple';
 import bcrypt from 'bcryptjs';
 import multer from 'multer';
 import postgres from 'postgres';
-import { describeDbError } from '../lib/db.js';
+import { describeDbError, normalizeDatabaseUrl } from '../lib/db.js';
 
-const sql = postgres(process.env.DATABASE_URL, { ssl: 'require', max: 5 });
+const sql = postgres(normalizeDatabaseUrl(process.env.DATABASE_URL), { ssl: 'require', max: 5 });
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -502,7 +502,7 @@ function buildAdminApp() {
   const PgSession = connectPgSimple(session);
   app.use(session({
     store: new PgSession({
-      conString: process.env.DATABASE_URL,
+      conString: normalizeDatabaseUrl(process.env.DATABASE_URL),
       tableName: 'admin_sessions',
       createTableIfMissing: true,
     }),

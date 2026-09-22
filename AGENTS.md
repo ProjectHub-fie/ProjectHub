@@ -61,6 +61,15 @@ Two separate mechanisms, deliberately:
 literal fallback would be published in this repository, and anyone who read it
 could forge an authenticated session.
 
+`DATABASE_URL` is the single source of the connection string for the public API
+(`api/lib/db.js`), the admin function and its session store (`api/admin/index.js`).
+Both pass it through `normalizeDatabaseUrl` first, which drops `channel_binding`:
+Neon's dashboard appends `channel_binding=require`, which asks for
+SCRAM-SHA-256-PLUS, and postgres.js only implements plain SCRAM-SHA-256, so the
+parameter must not reach the driver. Put the real value in the deployment
+environment, never in a tracked file — a connection string in git is a
+credential leak even in a private repository, because it survives in history.
+
 Turnstile is optional and enabled only when `TURNSTILE_SECRET_KEY` is set on the
 server. The client mirrors that with `captchaRequired`, derived from
 `VITE_TURNSTILE_SITE_KEY`. If you set one, set both, or sign-in will appear broken
