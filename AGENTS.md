@@ -1,0 +1,79 @@
+# AGENTS.md
+
+## Testing
+
+Tests use the Node built-in runner (`node:test`) and the assertion module. There
+is no other test framework installed, so no new dependency is needed to run them.
+
+```bash
+npm run test:unit   # no database required
+npm test            # everything
+```
+
+`npm test` must be run with a real Postgres URL to exercise the auth flows,
+because the session store and the user tables live there. Tests that need it are
+skipped, not failed, when it is absent:
+
+```bash
+DATABASE_URL='postgres://...' npm test
+```
+
+The admin login tests additionally need a valid account, otherwise they are
+skipped:
+
+```bash
+ADMIN_PIN='...' ADMIN_PASSWORD='...' DATABASE_URL='postgres://...' npm test
+```
+
+Point `DATABASE_URL` at a development database. `tests/auth-flow.test.mjs` writes
+real rows, namespaces every one of them with a random per-run prefix, and deletes
+them in an `after` hook. `tests/admin-auth.test.mjs` creates real `admin_sessions`
+rows when it logs in; they expire on their own but can be cleared with
+`DELETE FROM admin_sessions`.
+
+Always use `--test-force-exit`. `api/lib/db.js` holds a postgres pool open, which
+keeps the event loop alive and otherwise hangs the runner.
+
+### What the suite covers
+
+- `session-token.test.mjs` — token signature, tampering, forged secrets, expiry,
+  and the input validation that runs before any database call.
+- `auth-flow.test.mjs` — register, login, duplicate emails, blocked accounts,
+  profile updates, and that a token resolves to its own subject.
+- `admin-auth.test.mjs` — unauthenticated access, cookie hardening (`HttpOnly`,
+  `Secure`, `SameSite=None`), session establishment, and logout invalidation.
+- `client-auth.test.mjs` — the client hook and page invariants, read from source
+  because no DOM test environment is installed.
+
+## Auth architecture
+
+Two separate mechanisms, deliberately:
+
+- **Public API** (`api/index.js`) is token based. The client stores an
+  HMAC-signed token in `localStorage` and sends it as `X-User-Session`. The
+  signature is verified with `SESSION_SECRET` and the payload carries `iat`/`exp`
+  (default 30 days, `SESSION_TTL_DAYS`).
+- **Admin dashboard** (`api/admin/index.js`) is cookie based, using
+  `express-session` with a Postgres store. An anonymous visitor must never reach
+  admin data, so the admin function owns every `/api/admin/*` route.
+
+`SESSION_SECRET` is required by both. Neither falls back to a default value: a
+literal fallback would be published in this repository, and anyone who read it
+could forge an authenticated session.
+
+Turnstile is optional and enabled only when `TURNSTILE_SECRET_KEY` is set on the
+server. The client mirrors that with `captchaRequired`, derived from
+`VITE_TURNSTILE_SITE_KEY`. If you set one, set both, or sign-in will appear broken
+in one direction or the other.
+
+### Admin credentials
+
+Ownership is recovered by running the script against the database rather than
+through an emailed link:
+
+```bash
+DATABASE_URL='postgres://...' node scripts/reset-owner-pin.mjs
+```
+
+It rotates the PIN and password to fresh random values and prints them once.
+`--keep-pin` rotates only the password.

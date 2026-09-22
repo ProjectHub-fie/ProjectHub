@@ -186,6 +186,15 @@ export function useAuth() {
       if (data && data.user) {
         setUser(data.user);
         localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(data.user));
+
+        // The register endpoint signs a session token exactly like /login, but
+        // it used to be dropped here. The user was then "signed in" from
+        // localStorage alone and dropped back to anonymous on the next reload,
+        // because /api/auth/me needs this token to identify them.
+        if (data.sessionToken) {
+          localStorage.setItem(SESSION_TOKEN_KEY, data.sessionToken);
+        }
+
         queryClient.invalidateQueries({ queryKey: ['auth'] });
       }
     },
@@ -193,6 +202,7 @@ export function useAuth() {
       console.error("Registration error:", error);
       setUser(null);
       localStorage.removeItem(USER_STORAGE_KEY);
+      localStorage.removeItem(SESSION_TOKEN_KEY);
     }
   });
 
