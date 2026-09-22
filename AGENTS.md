@@ -44,6 +44,24 @@ keeps the event loop alive and otherwise hangs the runner.
   `Secure`, `SameSite=None`), session establishment, and logout invalidation.
 - `client-auth.test.mjs` — the client hook and page invariants, read from source
   because no DOM test environment is installed.
+- `email-validation.test.mjs` / `password-validation.test.mjs` — the contact and
+  registration rules, loaded straight from `client/src/lib/*.ts` (Node 22 strips
+  the types, and those modules import nothing from React or the DOM). Both files
+  also grep `api/index.js` and `server/routes.ts` to assert the backends carry
+  the same validators, because the form is not a security boundary.
+
+### Client modules are loadable from node:test
+
+`client/src/lib/*.ts` has no path alias imports, so `import { x } from
+'../client/src/lib/foo.ts'` works under the Node test runner without a build
+step. Keep new shared-validation modules free of `@/` imports to preserve this.
+
+Tailwind class names must be checked in the built CSS, not only in the source,
+and against the newest bundle — `dist/public/assets/` accumulates one
+`index-*.css` per build, so grabbing the first match can verify stale output.
+`animate-in`/`slide-in-from-*` work, and `.duration-*` is emitted for both
+`animation-duration` and `transition-duration`, so it overrides the .15s default
+that `.animate-in` sets.
 
 ## Auth architecture
 
