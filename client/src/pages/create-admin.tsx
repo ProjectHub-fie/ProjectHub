@@ -63,14 +63,14 @@ export default function CreateAdmin() {
       return response.json();
     },
     onSuccess: () => {
-      toast({ title: "Admin created successfully" });
+      toast({ title: "Admin created successfully", variant: "success" });
       setLocation("/admins");
     },
     onError: (error: Error) => {
       toast({
         title: "Failed to create admin",
         description: error.message,
-        variant: "destructive",
+        variant: "error",
       });
     },
   });

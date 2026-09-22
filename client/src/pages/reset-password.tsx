@@ -32,6 +32,7 @@ export default function ResetPassword() {
       await apiRequest("POST", "/api/auth/recovery?action=reset", {
         token: code,
         newPassword,
+        email,
       });
 
       toast({
@@ -91,7 +92,7 @@ export default function ResetPassword() {
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
                 required
-                minLength={6}
+                minLength={8}
               />
             </div>
             <Button type="submit" className="w-full" disabled={loading}>

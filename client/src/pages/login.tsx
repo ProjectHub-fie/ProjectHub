@@ -14,15 +14,24 @@ import { useAuth, SESSION_TOKEN_KEY } from "@/hooks/useAuth";
 import { useLocation } from "wouter";
 import { FaDiscord } from "react-icons/fa";
 import { Turnstile } from "@marsidev/react-turnstile";
+import { PasswordStrength } from "@/components/password-strength";
+import { passwordProblem } from "@/lib/password-validation";
 
 const loginSchema = z.object({
   email: z.string().email("Invalid email address"),
   password: z.string().min(6, "Password must be at least 6 characters"),
 });
 
+const strongPassword = z
+  .string()
+  .superRefine((value, ctx) => {
+    const problem = passwordProblem(value);
+    if (problem) ctx.addIssue({ code: z.ZodIssueCode.custom, message: problem });
+  });
+
 const registerSchema = z.object({
   email: z.string().email("Invalid email address"),
-  password: z.string().min(6, "Password must be at least 6 characters"),
+  password: strongPassword,
   firstName: z.string().min(1, "First name is required"),
   lastName: z.string().min(1, "Last name is required"),
 });
@@ -33,8 +42,8 @@ const forgotPasswordSchema = z.object({
 
 const resetPasswordSchema = z.object({
   token: z.string().min(1, "Reset token is required"),
-  newPassword: z.string().min(6, "Password must be at least 6 characters"),
-  confirmPassword: z.string().min(6, "Password must be at least 6 characters"),
+  newPassword: strongPassword,
+  confirmPassword: z.string().min(1, "Please confirm your password"),
 }).refine(data => data.newPassword === data.confirmPassword, {
   message: "Passwords don't match",
   path: ["confirmPassword"],
@@ -128,12 +137,19 @@ export default function LoginPage() {
       });
     } else {
       const reason = params.get("reason") || "unknown";
+      const discordErrors: Record<string, string> = {
+        not_configured: "Discord login is not configured on this deployment.",
+        redirect_not_configured:
+          "Discord login is not configured correctly: set APP_ORIGIN or DISCORD_CALLBACK_URL to the public https URL.",
+        missing_verifier:
+          "The Discord sign-in was started in another browser or tab. Please try again from this window.",
+        token_exchange:
+          "Discord rejected the sign-in. Check that DISCORD_CLIENT_SECRET matches the application and that the callback URL is allow-listed.",
+      };
       toast({
         title: "Discord Login Failed",
         description:
-          reason === "not_configured"
-            ? "Discord login is not configured on this deployment."
-            : `Discord did not complete the sign-in (${reason}).`,
+          discordErrors[reason] || `Discord did not complete the sign-in (${reason}).`,
         variant: "error",
       });
     }
@@ -487,6 +503,7 @@ export default function LoginPage() {
                                       data-testid="input-new-password"
                                     />
                                   </FormControl>
+                                  <PasswordStrength value={field.value || ""} />
                                   <FormMessage />
                                 </FormItem>
                               )}
@@ -602,6 +619,7 @@ export default function LoginPage() {
                             data-testid="input-register-password"
                           />
                         </FormControl>
+                        <PasswordStrength value={field.value || ""} />
                         <FormMessage />
                       </FormItem>
                     )}

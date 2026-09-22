@@ -7,9 +7,8 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { ThemeProvider } from "@/components/theme-provider";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
-import { Button } from "@/components/ui/button";
-import { Sun, Moon } from "lucide-react";
-import { useTheme } from "@/components/theme-provider";
+import { UserMenu } from "@/components/user-menu";
+import { GoToTop } from "@/components/go-to-top";
 import { useAuth } from "@/hooks/useAuth";
 import { GithubWidget } from "@/components/github-widget";
 
@@ -21,22 +20,6 @@ const ProjectPage = React.lazy(() => import("@/pages/project"));
 const ErrorPage = React.lazy(() => import("@/pages/error"));
 const NotFound = React.lazy(() => import("@/pages/not-found"));
 const ResetPassword = React.lazy(() => import("@/pages/reset-password"));
-
-function ThemeToggle() {
-  const { theme, setTheme } = useTheme();
-  return (
-    <Button
-      variant="ghost"
-      size="icon"
-      onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-      className="hover-elevate"
-    >
-      <Sun className="h-[1.2rem] w-[1.2rem] rotate-0 scale-100 transition-all dark:-rotate-90 dark:scale-0" />
-      <Moon className="absolute h-[1.2rem] w-[1.2rem] rotate-90 scale-0 transition-all dark:rotate-0 dark:scale-100" />
-      <span className="sr-only">Toggle theme</span>
-    </Button>
-  );
-}
 
 function Router() {
   const { isAuthenticated } = useAuth();
@@ -99,10 +82,11 @@ function App() {
               <div className="flex flex-col flex-1 overflow-hidden">
                 <header className="flex items-center justify-between p-4 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
                   <SidebarTrigger data-testid="button-sidebar-toggle" className="hover-elevate" />
-                  <ThemeToggle />
+                  <UserMenu />
                 </header>
                 <main className="flex-1 overflow-y-auto">
                   <Router />
+                  <GoToTop />
                 </main>
               </div>
             </div>

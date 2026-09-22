@@ -1,5 +1,4 @@
 import { useState, useEffect } from "react";
-import Navigation from "@/components/navigation";
 import HeroSection from "@/components/hero-section";
 import ProjectsSection from "@/components/projects-section";
 import SkillsSection from "@/components/skills-section";
@@ -55,7 +54,6 @@ export default function Home() {
 
   return (
     <div className="bg-background text-foreground font-sans overflow-x-hidden">
-      <Navigation />
       <HeroSection />
       <ProjectsSection />
       <SkillsSection />

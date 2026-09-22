@@ -4,8 +4,85 @@
  */
 import { DatabaseStorage } from './lib/storage.js';
 import { describeDbError } from './lib/db.js';
+import {
+  isEmailConfigured,
+  sendEmail,
+  appOrigin,
+  passwordResetEmail,
+  contactNotificationEmail,
+} from './lib/email.js';
 import bcrypt from 'bcryptjs';
 import crypto from 'node:crypto';
+
+// Server-side email validation. The form validates too, but the browser is
+// trivially bypassed, so this is the check that actually holds.
+const EMAIL_PATTERN = /^[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?\.)+[A-Za-z]{2,}$/;
+const BLOCKED_EMAIL_DOMAINS = new Set([
+  'example.com',
+  'example.org',
+  'example.net',
+  'test.com',
+  'invalid.com',
+  'localhost',
+]);
+
+/** Returns an error message, or null when the address is acceptable. */
+function emailProblem(value) {
+  if (typeof value !== 'string' || !value.trim()) return 'Email is required';
+  const email = value.trim();
+  if (email.length > 254) return 'Email address is too long';
+  if (!EMAIL_PATTERN.test(email)) return 'Enter a valid email address';
+
+  const [local, domain] = email.split('@');
+  if (local.length > 64) return 'Email address is too long';
+  if (local.includes('..') || domain.includes('..')) return 'Enter a valid email address';
+  if (BLOCKED_EMAIL_DOMAINS.has(domain.toLowerCase())) return 'Please use a real email address';
+  return null;
+}
+
+// Password rules enforced on register and reset. Kept in step with
+// client/src/lib/password-validation.ts; the form is not a security boundary.
+const PASSWORD_MIN_LENGTH = 8;
+const COMMON_PASSWORDS = new Set([
+  'password',
+  'password1',
+  'password123',
+  '12345678',
+  '123456789',
+  '1234567890',
+  'qwerty123',
+  'letmein',
+  'welcome',
+  'admin123',
+  'iloveyou',
+  'monkey123',
+  'dragon123',
+  'football1',
+  'abc12345',
+  'passw0rd',
+  'projecthub',
+]);
+
+/** Returns an error message, or null when the password is acceptable. */
+function passwordProblem(value) {
+  if (typeof value !== 'string' || !value) return 'Password is required';
+  if (value.length < PASSWORD_MIN_LENGTH) {
+    return `Password must be at least ${PASSWORD_MIN_LENGTH} characters long`;
+  }
+  if (COMMON_PASSWORDS.has(value.toLowerCase())) {
+    return 'That password is too common; choose something less predictable';
+  }
+
+  const missing = [];
+  if (!/[a-z]/.test(value)) missing.push('a lowercase letter');
+  if (!/[A-Z]/.test(value)) missing.push('an uppercase letter');
+  if (!/[0-9]/.test(value)) missing.push('a number');
+  if (!/[^A-Za-z0-9]/.test(value)) missing.push('a special character');
+  if (/\s/.test(value)) missing.push('no spaces');
+
+  if (missing.length) return `Password must include ${missing.join(', ')}`;
+  return null;
+}
 
 // Initialize database storage
 const storage = new DatabaseStorage();
@@ -169,6 +246,17 @@ export default async function handler(request, response) {
       return handleRecoveryEndpoint(request, response, searchParams);
     }
 
+    // The sign-in page posts to /api/auth/forgot-password and
+    // /api/auth/reset-password, but only /api/auth/recovery?action=... was ever
+    // implemented, so both forms 404'd with "Auth endpoint not found". Map the
+    // flat routes onto the same handler instead of leaving them dead.
+    if (path === '/api/auth/forgot-password') {
+      return handleRecoveryEndpoint(request, response, new URLSearchParams({ action: 'forgot' }));
+    }
+    if (path === '/api/auth/reset-password') {
+      return handleRecoveryEndpoint(request, response, new URLSearchParams({ action: 'reset' }));
+    }
+
     // Discord OAuth: begin and complete the handshake.
     if (path === '/api/auth/discord') {
       return handleDiscordStart(request, response);
@@ -199,7 +287,7 @@ export default async function handler(request, response) {
 
     // Projects detail + interactions endpoints
     if (path.startsWith('/api/projects/')) {
-      return handleProjectsEndpoints(request, response, path);
+      return handleProjectsEndpoints(request, response, path, searchParams);
     }
 
     // Auth callback handler
@@ -267,11 +355,58 @@ export default async function handler(request, response) {
 
 const DISCORD_API = 'https://discord.com/api/v10';
 
+/** Name of the short-lived cookie that carries the PKCE verifier between the
+ *  authorize redirect and the callback. */
+const DISCORD_VERIFIER_COOKIE = 'discord_code_verifier';
+
 function discordRedirectUri() {
   return (
     process.env.DISCORD_CALLBACK_URL ||
-    `${process.env.APP_ORIGIN || ''}/api/auth/discord/callback`
+    (process.env.APP_ORIGIN ? `${process.env.APP_ORIGIN}/api/auth/discord/callback` : '')
   );
+}
+
+/** True for a callback URL Discord can actually match against its allow-list. */
+function isAbsoluteDiscordRedirect(uri) {
+  return /^https?:\/\/[^/]+/i.test(uri || '');
+}
+
+function parseCookies(request) {
+  const header = request.headers?.cookie || '';
+  const cookies = {};
+  for (const part of header.split(';')) {
+    const separator = part.indexOf('=');
+    if (separator === -1) continue;
+    const name = part.slice(0, separator).trim();
+    if (!name) continue;
+    cookies[name] = decodeURIComponent(part.slice(separator + 1).trim());
+  }
+  return cookies;
+}
+
+function setCookie(response, name, value, maxAgeSeconds) {
+  const attributes = [
+    `${name}=${encodeURIComponent(value)}`,
+    'Path=/',
+    'HttpOnly',
+    'SameSite=Lax',
+    `Max-Age=${maxAgeSeconds}`,
+  ];
+  if (process.env.APP_ORIGIN?.startsWith('https') || process.env.NODE_ENV === 'production') {
+    attributes.push('Secure');
+  }
+  response.setHeader('Set-Cookie', attributes.join('; '));
+}
+
+/**
+ * Discord requires PKCE (the S256 challenge) on the authorization code
+ * exchange. Without it the token endpoint rejects the request, and Discord
+ * reports that rejection as a bare 401, which is what the callback used to log.
+ */
+function createPkcePair() {
+  const verifier = crypto.randomBytes(32).toString('base64url');
+  const challenge = crypto.createHash('sha256').update(verifier).digest('base64url');
+  return { verifier, challenge };
 }
 
 function discordAvatarUrl(profile) {
@@ -285,6 +420,15 @@ function handleDiscordStart(request, response) {
     return response.status(503).json({ message: 'Discord login is not configured' });
   }
 
+  const redirectUri = discordRedirectUri();
+  if (!isAbsoluteDiscordRedirect(redirectUri)) {
+    // A relative or empty redirect_uri can never match Discord's allow-list.
+    return response.redirect('/login?discord=error&reason=redirect_not_configured');
+  }
+
+  const { verifier, challenge } = createPkcePair();
+  setCookie(response, DISCORD_VERIFIER_COOKIE, verifier, 600);
+
   // `state` is a signed nonce so the callback can reject a handshake this
   // deployment did not initiate (CSRF protection for the OAuth flow).
   const state = signSessionToken({
@@ -296,10 +440,12 @@ function handleDiscordStart(request, response) {
 
   const authorizeUrl = new URL('https://discord.com/oauth2/authorize');
   authorizeUrl.searchParams.set('client_id', clientId);
-  authorizeUrl.searchParams.set('redirect_uri', discordRedirectUri());
+  authorizeUrl.searchParams.set('redirect_uri', redirectUri);
   authorizeUrl.searchParams.set('response_type', 'code');
   authorizeUrl.searchParams.set('scope', 'identify email');
   authorizeUrl.searchParams.set('state', state);
+  authorizeUrl.searchParams.set('code_challenge', challenge);
+  authorizeUrl.searchParams.set('code_challenge_method', 'S256');
 
   return response.redirect(authorizeUrl.toString());
 }
@@ -325,6 +471,16 @@ async function handleDiscordCallback(request, response) {
     return response.redirect('/login?discord=error&reason=not_configured');
   }
 
+  const redirectUri = discordRedirectUri();
+  if (!isAbsoluteDiscordRedirect(redirectUri)) {
+    return response.redirect('/login?discord=error&reason=redirect_not_configured');
+  }
+
+  const codeVerifier = parseCookies(request)[DISCORD_VERIFIER_COOKIE];
+  if (!codeVerifier) {
+    return response.redirect('/login?discord=error&reason=missing_verifier');
+  }
+
   try {
     const tokenRes = await fetch(`${DISCORD_API}/oauth2/token`, {
       method: 'POST',
@@ -334,12 +490,17 @@ async function handleDiscordCallback(request, response) {
         client_secret: clientSecret,
         grant_type: 'authorization_code',
         code,
-        redirect_uri: discordRedirectUri(),
+        redirect_uri: redirectUri,
+        code_verifier: codeVerifier,
       }),
     });
 
     if (!tokenRes.ok) {
-      console.error('Discord token exchange failed:', tokenRes.status);
+      // Discord's error body (error/error_description) says whether the cause
+      // is the secret, the redirect URI or the verifier. The request body is
+      // never logged: it carries client_secret.
+      const detail = await tokenRes.json().catch(() => ({}));
+      console.error('Discord token exchange failed:', tokenRes.status, detail.error, detail.error_description);
       return response.redirect('/login?discord=error&reason=token_exchange');
     }
 
@@ -472,6 +633,11 @@ async function handleAuthEndpoints(request, response, path) {
 
         if (!email || !password || !firstName || !lastName) {
           return response.status(400).json({ message: 'All fields are required' });
+        }
+
+        const passwordError = passwordProblem(password);
+        if (passwordError) {
+          return response.status(400).json({ message: passwordError });
         }
 
         if (!(await verifyTurnstile(captchaToken, request.headers['x-forwarded-for']))) {
@@ -634,13 +800,47 @@ async function handleContactEndpoint(request, response) {
     return response.status(400).json({ message: 'All fields are required' });
   }
 
-  // Mock contact message processing
-  console.log('Contact message received:', { name, email, subject, message });
-  
-  return response.status(200).json({ 
-    message: 'Message sent successfully',
-    messageId: 'msg_' + Date.now()
+  const emailError = emailProblem(email);
+  if (emailError) {
+    return response.status(400).json({ message: emailError });
+  }
+
+  if (!(await verifyTurnstile(captchaToken, request.headers['x-forwarded-for']))) {
+    return response.status(400).json({ message: 'Captcha verification failed' });
+  }
+
+  // This endpoint used to log the message and return a fabricated messageId, so
+  // the form reported success while nothing was ever delivered. Send it for
+  // real and surface a failure instead of inventing one.
+  const ownerEmail = process.env.CONTACT_TO_EMAIL || process.env.OWNER_EMAIL;
+  if (!ownerEmail) {
+    console.error('Contact form not sent: CONTACT_TO_EMAIL is not configured');
+    return response.status(502).json({ message: 'Contact form is not configured on the server' });
+  }
+
+  const { subject: mailSubject, html } = contactNotificationEmail({
+    name,
+    email,
+    subject,
+    message,
   });
+
+  const result = await sendEmail({
+    to: ownerEmail,
+    subject: mailSubject,
+    html,
+    replyTo: email,
+  });
+
+  if (!result.sent) {
+    const reason =
+      result.reason === 'not_configured'
+        ? 'Email is not configured on the server'
+        : 'Failed to send your message';
+    return response.status(502).json({ message: reason });
+  }
+
+  return response.status(200).json({ message: 'Message sent successfully' });
 }
 
 // Handle GET /api/projects - return all active verified projects
@@ -658,21 +858,86 @@ async function handleProjectsListEndpoint(request, response) {
 }
 
 // Handle /api/projects/:slug and /api/projects/:id/interactions
-async function handleProjectsEndpoints(request, response, path) {
-  // POST /api/projects/:id/interactions
+async function handleProjectsEndpoints(request, response, path, searchParams) {
+  // GET/POST /api/projects/:slug/interactions
+  //
+  // Likes and ratings are per-user rows in project_interactions; the id in the
+  // path may be the project's UUID or its slug, so it is resolved first.
   const interactionsMatch = path.match(/^\/api\/projects\/([^\/]+)\/interactions$/);
   if (interactionsMatch) {
-    const projectId = interactionsMatch[1];
-    if (request.method === 'POST') {
-      const body = await readJsonBody(request);
-      console.log(`Project interaction recorded for project ${projectId}:`, body);
-      return response.status(200).json({
-        success: true,
-        interactionId: 'int_' + Date.now(),
-        projectId: projectId
-      });
+    const projectRef = interactionsMatch[1];
+    const sessionUser = readSessionToken(request.headers['x-user-session']);
+
+    try {
+      const project = await storage.resolveVerifiedProject(projectRef);
+      if (!project) {
+        return response.status(404).json({ message: 'Project not found' });
+      }
+
+      if (request.method === 'GET') {
+        const stats = await storage.getProjectInteractions(project.id);
+        const userInteraction = sessionUser?.id
+          ? await storage.getUserInteraction(project.id, sessionUser.id)
+          : null;
+
+        return response.status(200).json({
+          ...stats,
+          userInteraction: userInteraction
+            ? { isLiked: userInteraction.isLiked, rating: userInteraction.rating }
+            : null,
+        });
+      }
+
+      if (request.method === 'POST') {
+        if (!sessionUser?.id) {
+          return response.status(401).json({ message: 'You must be logged in to like or rate projects' });
+        }
+
+        const body = await readJsonBody(request);
+        const update = {};
+
+        if (body.isLiked !== undefined) {
+          if (typeof body.isLiked !== 'boolean') {
+            return response.status(400).json({ message: 'isLiked must be a boolean' });
+          }
+          update.isLiked = body.isLiked;
+        }
+
+        if (body.rating !== undefined && body.rating !== null) {
+          const rating = Number(body.rating);
+          // 1-5 is the "premium" range the client renders as stars.
+          if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+            return response.status(400).json({ message: 'rating must be an integer between 1 and 5' });
+          }
+          update.rating = rating;
+        }
+
+        if (Object.keys(update).length === 0) {
+          return response.status(400).json({ message: 'isLiked or rating is required' });
+        }
+
+        await storage.upsertProjectInteraction({
+          projectId: project.id,
+          userId: sessionUser.id,
+          ...update,
+        });
+
+        const stats = await storage.getProjectInteractions(project.id);
+        const userInteraction = await storage.getUserInteraction(project.id, sessionUser.id);
+
+        return response.status(200).json({
+          ...stats,
+          userInteraction: userInteraction
+            ? { isLiked: userInteraction.isLiked, rating: userInteraction.rating }
+            : null,
+        });
+      }
+
+      return response.status(405).json({ message: 'Method not allowed' });
+    } catch (error) {
+      console.error('Project interaction error:', error);
+      return response.status(500).json({ message: 'Failed to record project interaction' });
     }
-    return response.status(405).json({ message: 'Method not allowed' });
   }
 
   // GET /api/projects/:slug
@@ -707,8 +972,15 @@ async function handleRecoveryEndpoint(request, response, searchParams) {
   const action = searchParams.get('action');
 
   if (action === 'forgot') {
-    const { email } = body;
+    const { email, captchaToken } = body;
     if (!email) return response.status(400).json({ message: "Email is required" });
+
+    // The sign-in page sends a Turnstile token with this form; verifying it
+    // keeps the recovery flow consistent with login/register instead of
+    // silently trusting an unverified caller.
+    if (!(await verifyTurnstile(captchaToken, request.headers['x-forwarded-for']))) {
+      return response.status(400).json({ message: 'Captcha verification failed' });
+    }
 
     try {
       const user = await storage.getUserByEmail(email);
@@ -718,8 +990,26 @@ async function handleRecoveryEndpoint(request, response, searchParams) {
         const expiry = new Date(Date.now() + 3600000); // 1 hour
 
         await storage.updateUserResetToken(user.id, resetToken, expiry);
-        // The token itself is never logged: it grants account takeover.
-        console.log('Password reset token issued for user', user.id);
+
+        const resetUrl = `${appOrigin()}/reset-password?email=${encodeURIComponent(
+          email,
+        )}&token=${encodeURIComponent(resetToken)}`;
+        const { subject, html, text } = passwordResetEmail(resetToken, resetUrl);
+
+        const result = await sendEmail({ to: email, subject, html, text });
+
+        // This endpoint used to rotate the token and return a success message
+        // without sending anything, so the sign-in page reported "instructions
+        // sent" while no mail existed. Report a real failure when the send does
+        // not happen. The response stays deliberately vague only when the
+        // account lookup found nothing.
+        if (!result.sent) {
+          const reason =
+            result.reason === 'not_configured'
+              ? 'Email is not configured on the server'
+              : 'Failed to send the reset email';
+          return response.status(502).json({ message: reason });
+        }
       }
       
       // Always return success to prevent email enumeration
@@ -731,14 +1021,31 @@ async function handleRecoveryEndpoint(request, response, searchParams) {
   }
 
   if (action === 'reset') {
-    const { token, newPassword } = body;
+    const { token, newPassword, email } = body;
     if (!token || !newPassword) {
       return response.status(400).json({ message: "Token and new password are required" });
+    }
+
+    // Matches the minimum the sign-in page enforces, so the two forms agree.
+    if (typeof newPassword !== 'string' || newPassword.length < PASSWORD_MIN_LENGTH) {
+      return response.status(400).json({ message: `Password must be at least ${PASSWORD_MIN_LENGTH} characters long` });
+    }
+
+    const resetPasswordError = passwordProblem(newPassword);
+    if (resetPasswordError) {
+      return response.status(400).json({ message: resetPasswordError });
     }
 
     try {
       const user = await storage.getUserByResetToken(token);
       if (!user || !user.resetTokenExpiry || new Date() > user.resetTokenExpiry) {
+        return response.status(400).json({ message: "Invalid or expired reset token" });
+      }
+
+      // The reset page collects the account email alongside the code, so bind
+      // it when present: a token should not be usable for a different account.
+      // It stays optional because the emailed link carries the token alone.
+      if (email && user.email && String(email).toLowerCase() !== user.email.toLowerCase()) {
         return response.status(400).json({ message: "Invalid or expired reset token" });
       }
 

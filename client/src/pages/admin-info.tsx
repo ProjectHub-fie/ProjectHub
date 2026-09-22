@@ -42,14 +42,14 @@ export default function AdminInfo() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/list"] });
-      toast({ title: "Role updated successfully" });
+      toast({ title: "Role updated successfully", variant: "success" });
       setSelectedRoleAdmin(null);
     },
     onError: (error: Error) => {
       toast({
         title: "Failed to update role",
         description: error.message,
-        variant: "destructive",
+        variant: "error",
       });
     },
   });
@@ -61,13 +61,13 @@ export default function AdminInfo() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/list"] });
-      toast({ title: "Admin deleted successfully" }); // 管理员删除成功 / Admin deleted successfully
+      toast({ title: "Admin deleted successfully", variant: "success" }); // 管理员删除成功 / Admin deleted successfully
     },
     onError: (error: Error) => {
       toast({
         title: "Failed to delete admin", // 删除管理员失败 / Failed to delete admin
         description: error.message,
-        variant: "destructive",
+        variant: "error",
       });
     },
   });
@@ -84,7 +84,7 @@ export default function AdminInfo() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["/api/admin/list"] });
-      toast({ title: "Password changed successfully" }); // 密码更改成功 / Password changed successfully
+      toast({ title: "Password changed successfully", variant: "success" }); // 密码更改成功 / Password changed successfully
       // 重置表单状态 / Reset form state
       setSelectedAdmin(null);
       setNewPassword("");
@@ -95,7 +95,7 @@ export default function AdminInfo() {
       toast({
         title: "Failed to change password", // 更改密码失败 / Failed to change password
         description: error.message,
-        variant: "destructive",
+        variant: "error",
       });
     },
   });
@@ -108,7 +108,7 @@ export default function AdminInfo() {
     if (newPassword !== confirmNewPassword) {
       toast({
         title: "Passwords do not match", // 密码不匹配 / Passwords do not match
-        variant: "destructive",
+        variant: "error",
       });
       return;
     }
@@ -118,7 +118,7 @@ export default function AdminInfo() {
       toast({
         title: "Password too short", // 密码太短 / Password too short
         description: "Password must be at least 6 characters long", // 密码长度至少为6个字符 / Password must be at least 6 characters long
-        variant: "destructive",
+        variant: "error",
       });
       return;
     }

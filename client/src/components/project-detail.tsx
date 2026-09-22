@@ -1,13 +1,8 @@
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Card, CardContent } from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
-import { ExternalLink, Github, Download, Bot, ArrowLeft, Calendar, Users, Star, CheckCircle2, Heart } from "lucide-react";
+import { ExternalLink, Github, Download, Bot, ArrowLeft } from "lucide-react";
 import { useLocation } from "wouter";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
-import { useAuth } from "@/hooks/useAuth";
-import { useToast } from "@/hooks/use-toast";
+import { ProjectInteractions } from "@/components/project-interactions";
 
 interface ProjectDetailProps {
   project: {
@@ -36,58 +31,6 @@ interface ProjectDetailProps {
 
 export default function ProjectDetail({ project }: ProjectDetailProps) {
   const [, setLocation] = useLocation();
-  const { user } = useAuth();
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
-
-  const { data: interactions } = useQuery<any>({
-    queryKey: ["/api/projects", project.id, "interactions", user?.id],
-  });
-
-  const interactionMutation = useMutation({
-    mutationFn: async (data: { isLiked?: boolean; rating?: number }) => {
-      return apiRequest(`/api/projects/${project.id}/interactions`, "POST", data);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/projects", project.id, "interactions"], exact: false });
-      toast({
-        title: "Success!",
-        description: "Your interaction has been recorded.",
-        variant: "success",
-      });
-    },
-    onError: (error: any) => {
-      toast({
-        title: "Action failed",
-        description: error.message || "You must be logged in to like or rate projects.",
-        variant: "error",
-      });
-    }
-  });
-
-  const handleLike = () => {
-    if (!user) {
-      toast({
-        title: "Authentication required",
-        description: "You must be logged in to like projects.",
-        variant: "error",
-      });
-      return;
-    }
-    interactionMutation.mutate({ isLiked: interactions?.userInteraction?.isLiked !== "true" });
-  };
-
-  const handleRating = (star: number) => {
-    if (!user) {
-      toast({
-        title: "Authentication required",
-        description: "You must be logged in to rate projects.",
-        variant: "error",
-      });
-      return;
-    }
-    interactionMutation.mutate({ rating: star });
-  };
 
   const getActionIcon = (category: string) => {
     switch (category) {
@@ -220,42 +163,7 @@ export default function ProjectDetail({ project }: ProjectDetailProps) {
 
         {/* Interactions */}
         <div className="mt-8 pt-8 border-t border-border/50">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-6">
-              <button 
-                onClick={handleLike}
-                className={`flex items-center gap-2 transition-colors ${
-                  interactions?.userInteraction?.isLiked === "true" 
-                    ? "text-red-500" 
-                    : "text-muted-foreground hover:text-red-400"
-                }`}
-              >
-                <Heart className={`w-5 h-5 ${interactions?.userInteraction?.isLiked === "true" ? "fill-current" : ""}`} />
-                <span className="font-medium">{interactions?.likes || 0} likes</span>
-              </button>
-              
-              <div className="flex items-center gap-1">
-                {[1, 2, 3, 4, 5].map((star) => (
-                  <button
-                    key={star}
-                    onClick={() => handleRating(star)}
-                    className={`transition-colors ${
-                      Number(interactions?.userInteraction?.rating) >= star 
-                        ? "text-yellow-500" 
-                        : "text-muted-foreground hover:text-yellow-400"
-                    }`}
-                  >
-                    <Star className={`w-5 h-5 ${Number(interactions?.userInteraction?.rating) >= star ? "fill-current" : ""}`} />
-                  </button>
-                ))}
-                {interactions?.averageRating > 0 && (
-                  <span className="text-sm text-muted-foreground ml-2">
-                    ({interactions.averageRating.toFixed(1)} avg)
-                  </span>
-                )}
-              </div>
-            </div>
-          </div>
+          <ProjectInteractions projectId={project.id} size="lg" />
         </div>
       </div>
     </div>

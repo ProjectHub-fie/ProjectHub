@@ -157,7 +157,10 @@ const FormMessage = React.forwardRef<
     <p
       ref={ref}
       id={formMessageId}
-      className={cn("text-sm font-medium text-destructive", className)}
+      className={cn(
+        "text-sm font-medium text-destructive animate-in fade-in-0 slide-in-from-top-2 duration-200 ease-out",
+        className
+      )}
       {...props}
     >
       {body}
