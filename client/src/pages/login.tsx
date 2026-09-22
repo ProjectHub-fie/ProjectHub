@@ -52,8 +52,13 @@ export default function LoginPage() {
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const turnstileRef = useRef<any>(null);
 
-  const siteKey = import.meta.env.VITE_TURNSTILE_SITE_KEY || "1x00000000000000000000AA";
-  console.log('Turnstile site key status:', !!import.meta.env.VITE_TURNSTILE_SITE_KEY, 'using key:', siteKey);
+  const siteKey = import.meta.env.VITE_TURNSTILE_SITE_KEY as string | undefined;
+  // The server only enforces Turnstile when TURNSTILE_SECRET_KEY is set
+  // (verifyTurnstile returns true when it is absent). The client gated submit
+  // on `!captchaToken` regardless, so when no site key is configured there is
+  // no widget to complete but the buttons stayed disabled and login and
+  // registration were both impossible.
+  const captchaRequired = Boolean(siteKey);
 
   const loginForm = useForm<z.infer<typeof loginSchema>>({
     resolver: zodResolver(loginSchema),
@@ -152,7 +157,7 @@ export default function LoginPage() {
   }, [setLocation]);
 
   const onLogin = async (values: z.infer<typeof loginSchema>) => {
-    if (!captchaToken) {
+    if (captchaRequired && !captchaToken) {
       toast({ 
         title: "Captcha Required", 
         description: "Please complete the Turnstile verification.", 
@@ -185,7 +190,7 @@ export default function LoginPage() {
   };
 
   const onRegister = async (values: z.infer<typeof registerSchema>) => {
-    if (!captchaToken) {
+    if (captchaRequired && !captchaToken) {
       toast({ 
         title: "Captcha Required", 
         description: "Please complete the Turnstile verification.", 
@@ -214,7 +219,7 @@ export default function LoginPage() {
   };
 
   const onForgotPassword = async (values: z.infer<typeof forgotPasswordSchema>) => {
-    if (!captchaToken) {
+    if (captchaRequired && !captchaToken) {
       toast({ 
         title: "Captcha Required", 
         description: "Please complete the Turnstile verification.", 
@@ -257,7 +262,7 @@ export default function LoginPage() {
   };
 
   const onResetPassword = async (values: z.infer<typeof resetPasswordSchema>) => {
-    if (!captchaToken) {
+    if (captchaRequired && !captchaToken) {
       toast({ 
         title: "Captcha Required", 
         description: "Please complete the Turnstile verification.", 
@@ -361,7 +366,7 @@ export default function LoginPage() {
                     )}
                   />
                   <div className="flex justify-center py-2 min-h-[78px]">
-                    <Turnstile
+                    {siteKey && <Turnstile
                       ref={turnstileRef}
                       siteKey={siteKey}
                       onSuccess={(token) => setCaptchaToken(token)}
@@ -371,12 +376,12 @@ export default function LoginPage() {
                         theme: "auto",
                         appearance: "always"
                       }}
-                    />
+                    />}
                   </div>
                   <Button
                     type="submit"
                     className="w-full bg- bg-green-500 text-primary-foreground"
-                    disabled={isLoggingIn || !captchaToken}
+                    disabled={isLoggingIn || (captchaRequired && !captchaToken)}
                     data-testid="button-login-submit"
                   >
                     {isLoggingIn ? "Signing In..." : "Sign In"}
@@ -602,7 +607,7 @@ export default function LoginPage() {
                     )}
                   />
                   <div className="flex justify-center py-2 min-h-[78px]">
-                    <Turnstile                      ref={turnstileRef}                      siteKey={siteKey}
+                    {siteKey && <Turnstile                      ref={turnstileRef}                      siteKey={siteKey}
                       onSuccess={(token) => setCaptchaToken(token)}
                       onExpire={() => setCaptchaToken(null)}
                       onError={() => setCaptchaToken(null)}
@@ -610,12 +615,12 @@ export default function LoginPage() {
                         theme: "auto",
                         appearance: "always"
                       }}
-                    />
+                    />}
                   </div>
                   <Button
                     type="submit"
                     className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
-                    disabled={isRegistering || !captchaToken}
+                    disabled={isRegistering || (captchaRequired && !captchaToken)}
                     data-testid="button-register-submit"
                   >
                     {isRegistering ? "Creating Account..." : "Create Account"}

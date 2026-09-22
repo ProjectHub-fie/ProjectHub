@@ -38,23 +38,40 @@ function hmac(value) {
 }
 
 /**
+ * How long a signed session token stays valid.
+ *
+ * Without this the tokens were valid forever: a token copied out of a browser
+ * could be replayed indefinitely, and there was no way to expire a session
+ * short of rotating SESSION_SECRET (which invalidates every user at once).
+ */
+const SESSION_TTL_MS = Number(process.env.SESSION_TTL_DAYS || 30) * 24 * 60 * 60 * 1000;
+
+/**
  * Session tokens are an HMAC-signed payload, not a raw base64 blob.
  *
  * The old format was `base64(JSON)` that anyone could mint for an arbitrary
  * user id; signing it makes the token unforgeable without the server secret.
+ * The expiry is inside the signed payload so it cannot be extended by editing
+ * the token.
  */
 function signSessionToken(user) {
+  const issuedAt = Date.now();
   const payload = Buffer.from(JSON.stringify({
     id: user.id,
     email: user.email,
     firstName: user.firstName,
     lastName: user.lastName,
+    iat: issuedAt,
+    exp: issuedAt + SESSION_TTL_MS,
   })).toString('base64url');
 
   return `${payload}.${hmac(payload)}`;
 }
 
-/** Returns the token payload, or null when the token is missing or tampered with. */
+/**
+ * Returns the token payload, or null when the token is missing, tampered with
+ * or expired.
+ */
 function readSessionToken(token) {
   if (!token || typeof token !== 'string') return null;
 
@@ -67,7 +84,10 @@ function readSessionToken(token) {
   if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
 
   try {
-    return JSON.parse(Buffer.from(payload, 'base64url').toString());
+    const parsed = JSON.parse(Buffer.from(payload, 'base64url').toString());
+    // A signature proves we issued the payload, not that it is still current.
+    if (typeof parsed?.exp !== 'number' || Date.now() > parsed.exp) return null;
+    return parsed;
   } catch {
     return null;
   }
@@ -441,7 +461,7 @@ async function handleAuthEndpoints(request, response, path) {
           return response.status(401).json({ message: 'Invalid credentials' });
         } catch (error) {
           console.error('Login error:', error);
-          return response.status(500).json({ message: 'Login failed' });
+          return response.status(500).json({ message: describeDbError(error) });
         }
       }
       break;
@@ -488,7 +508,7 @@ async function handleAuthEndpoints(request, response, path) {
           });
         } catch (error) {
           console.error('Registration error:', error);
-          return response.status(500).json({ message: 'Registration failed' });
+          return response.status(500).json({ message: describeDbError(error) });
         }
       }
       break;

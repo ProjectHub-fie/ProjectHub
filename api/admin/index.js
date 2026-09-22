@@ -17,6 +17,7 @@ import connectPgSimple from 'connect-pg-simple';
 import bcrypt from 'bcryptjs';
 import multer from 'multer';
 import postgres from 'postgres';
+import { describeDbError } from '../lib/db.js';
 
 const sql = postgres(process.env.DATABASE_URL, { ssl: 'require', max: 5 });
 
@@ -154,7 +155,7 @@ function buildAdminRouter() {
       });
     } catch (error) {
       console.error('Admin login error:', error);
-      res.status(500).json({ message: 'Internal server error' });
+      res.status(500).json({ message: describeDbError(error) });
     }
   });
 
@@ -489,6 +490,15 @@ function buildAdminApp() {
   app.use(express.json({ limit: '2mb' }));
   app.use(express.urlencoded({ extended: true, limit: '2mb' }));
 
+  // Never fall back to a literal secret. The previous default
+  // ('fallback-secret-key-for-vercel') is in this public repository, so any
+  // deployment that started without SESSION_SECRET let anyone who had read the
+  // source forge an admin session cookie and sign in with no PIN.
+  const sessionSecret = process.env.SESSION_SECRET;
+  if (!sessionSecret) {
+    throw new Error('SESSION_SECRET must be set for the admin dashboard');
+  }
+
   const PgSession = connectPgSimple(session);
   app.use(session({
     store: new PgSession({
@@ -496,7 +506,7 @@ function buildAdminApp() {
       tableName: 'admin_sessions',
       createTableIfMissing: true,
     }),
-    secret: process.env.SESSION_SECRET || 'fallback-secret-key-for-vercel',
+    secret: sessionSecret,
     resave: false,
     saveUninitialized: false,
     proxy: true,
