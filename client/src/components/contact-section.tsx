@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { Send, Mail, Phone, MapPin } from "lucide-react";
 import { Turnstile } from "@marsidev/react-turnstile";
+import { validateEmail } from "@/lib/email-validation";
 
 export default function ContactSection() {
   const [formData, setFormData] = useState({
@@ -16,15 +17,37 @@ export default function ContactSection() {
   });
   const [captchaToken, setCaptchaToken] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // Only shown once the visitor has left the field, so the message does not
+  // complain about a half-typed address.
+  const [emailError, setEmailError] = useState<string | null>(null);
   const { toast } = useToast();
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
+    if (name === "email" && emailError) setEmailError(null);
+  };
+
+  const checkEmail = () => {
+    const result = validateEmail(formData.email);
+    setEmailError(result.valid ? null : result.reason);
+    return result;
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+
+    const emailCheck = validateEmail(formData.email);
+    if (!emailCheck.valid) {
+      setEmailError(emailCheck.reason);
+      toast({
+        title: "Invalid Email",
+        description: emailCheck.reason,
+        variant: "error",
+      });
+      return;
+    }
+
     if (!captchaToken) {
       toast({
         title: "Captcha Required",
@@ -72,7 +95,7 @@ export default function ContactSection() {
     {
       icon: <Mail className="text-blue-400" />,
       label: "Email",
-      value: "dev.projecthub.fie@gmail.com",
+      value: "dev.projecthub.me@gmail.com",
       color: "bg-blue-500/20"
     },
     {
@@ -139,11 +162,26 @@ export default function ContactSection() {
                     type="email"
                     value={formData.email}
                     onChange={handleInputChange}
-                    className="bg-secondary border-border text-foreground placeholder-muted-foreground focus:border-primary"
+                    onBlur={checkEmail}
+                    aria-invalid={Boolean(emailError)}
+                    aria-describedby={emailError ? "email-error" : undefined}
+                    className={`bg-secondary border-border text-foreground placeholder-muted-foreground focus:border-primary ${
+                      emailError ? "border-destructive focus:border-destructive" : ""
+                    }`}
                     placeholder="your@email.com"
                     required
                     data-testid="input-email"
                   />
+                  {emailError && (
+                    <p
+                      id="email-error"
+                      role="alert"
+                      className="mt-2 text-xs text-destructive animate-in fade-in-0 slide-in-from-top-2 duration-200 ease-out"
+                      data-testid="email-error"
+                    >
+                      {emailError}
+                    </p>
+                  )}
                 </div>
               </div>
               

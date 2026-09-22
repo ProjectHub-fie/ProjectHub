@@ -10,6 +10,76 @@ import { sql } from 'drizzle-orm';
 import * as z from 'zod';
 import { Resend } from 'resend';
 
+// Server-side email validation. The contact form validates too, but the browser
+// can be bypassed, so this is the check that actually holds.
+const EMAIL_PATTERN = /^[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?\.)+[A-Za-z]{2,}$/;
+const BLOCKED_EMAIL_DOMAINS = new Set([
+  'example.com',
+  'example.org',
+  'example.net',
+  'test.com',
+  'invalid.com',
+  'localhost',
+]);
+
+/** Returns an error message, or null when the address is acceptable. */
+function emailProblem(value: unknown): string | null {
+  if (typeof value !== 'string' || !value.trim()) return 'Email is required';
+  const email = value.trim();
+  if (email.length > 254) return 'Email address is too long';
+  if (!EMAIL_PATTERN.test(email)) return 'Enter a valid email address';
+
+  const [local, domain] = email.split('@');
+  if (local.length > 64) return 'Email address is too long';
+  if (local.includes('..') || domain.includes('..')) return 'Enter a valid email address';
+  if (BLOCKED_EMAIL_DOMAINS.has(domain.toLowerCase())) return 'Please use a real email address';
+  return null;
+}
+
+// Password rules enforced on register and reset. Kept in step with
+// client/src/lib/password-validation.ts; the form is not a security boundary.
+const PASSWORD_MIN_LENGTH = 8;
+const COMMON_PASSWORDS = new Set([
+  'password',
+  'password1',
+  'password123',
+  '12345678',
+  '123456789',
+  '1234567890',
+  'qwerty123',
+  'letmein',
+  'welcome',
+  'admin123',
+  'iloveyou',
+  'monkey123',
+  'dragon123',
+  'football1',
+  'abc12345',
+  'passw0rd',
+  'projecthub',
+]);
+
+/** Returns an error message, or null when the password is acceptable. */
+function passwordProblem(value: unknown): string | null {
+  if (typeof value !== 'string' || !value) return 'Password is required';
+  if (value.length < PASSWORD_MIN_LENGTH) {
+    return `Password must be at least ${PASSWORD_MIN_LENGTH} characters long`;
+  }
+  if (COMMON_PASSWORDS.has(value.toLowerCase())) {
+    return 'That password is too common; choose something less predictable';
+  }
+
+  const missing: string[] = [];
+  if (!/[a-z]/.test(value)) missing.push('a lowercase letter');
+  if (!/[A-Z]/.test(value)) missing.push('an uppercase letter');
+  if (!/[0-9]/.test(value)) missing.push('a number');
+  if (!/[^A-Za-z0-9]/.test(value)) missing.push('a special character');
+  if (/\s/.test(value)) missing.push('no spaces');
+
+  if (missing.length) return `Password must include ${missing.join(', ')}`;
+  return null;
+}
+
 // Extend Express Request type to include user
 declare global {
   namespace Express {
@@ -84,6 +154,11 @@ export async function registerRoutes(expressApp: any): Promise<Server> {
       const { email, password, firstName, lastName } = req.body;
       if (!email || !password || !firstName || !lastName) {
         return res.status(400).json({ message: "All fields are required" });
+      }
+
+      const passwordError = passwordProblem(password);
+      if (passwordError) {
+        return res.status(400).json({ message: passwordError });
       }
 
       const existingUser = await storage.getUserByEmail(email);
@@ -320,6 +395,11 @@ export async function registerRoutes(expressApp: any): Promise<Server> {
         return res.status(400).json({ message: "All fields are required" });
       }
 
+      const emailError = emailProblem(email);
+      if (emailError) {
+        return res.status(400).json({ message: emailError });
+      }
+
       // Verify Turnstile captcha if in production
       if (process.env.NODE_ENV === 'production' && captchaToken) {
         const turnstileSecret = process.env.TURNSTILE_SECRET_KEY;
@@ -350,11 +430,15 @@ export async function registerRoutes(expressApp: any): Promise<Server> {
 
       const resend = new Resend(resendApiKey);
 
-      // Send email to yourself (project owner)
-      const ownerEmail = 'dev.projecthub.fie@gmail.com';
+      // `onboarding@resend.dev` is Resend's shared test sender: it only delivers
+      // to the address that owns the API key and silently reports success for
+      // anything else. That makes it a poor default for real traffic, so the
+      // sender and recipient are configurable, with local-development fallbacks.
+      const ownerEmail = process.env.CONTACT_TO_EMAIL || process.env.OWNER_EMAIL || 'dev.projecthub.me@gmail.com';
+      const fromAddress = process.env.EMAIL_FROM || 'Contact Form <onboarding@resend.dev>';
       
       const emailResult = await resend.emails.send({
-        from: 'Contact Form <onboarding@resend.dev>',
+        from: fromAddress,
         to: ownerEmail,
         replyTo: email,
         subject: `New Contact Form Submission: ${subject}`,

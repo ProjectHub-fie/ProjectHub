@@ -4,8 +4,85 @@
  */
 import { DatabaseStorage } from './lib/storage.js';
 import { describeDbError } from './lib/db.js';
+import {
+  isEmailConfigured,
+  sendEmail,
+  appOrigin,
+  passwordResetEmail,
+  contactNotificationEmail,
+} from './lib/email.js';
 import bcrypt from 'bcryptjs';
 import crypto from 'node:crypto';
+
+// Server-side email validation. The form validates too, but the browser is
+// trivially bypassed, so this is the check that actually holds.
+const EMAIL_PATTERN = /^[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?\.)+[A-Za-z]{2,}$/;
+const BLOCKED_EMAIL_DOMAINS = new Set([
+  'example.com',
+  'example.org',
+  'example.net',
+  'test.com',
+  'invalid.com',
+  'localhost',
+]);
+
+/** Returns an error message, or null when the address is acceptable. */
+function emailProblem(value) {
+  if (typeof value !== 'string' || !value.trim()) return 'Email is required';
+  const email = value.trim();
+  if (email.length > 254) return 'Email address is too long';
+  if (!EMAIL_PATTERN.test(email)) return 'Enter a valid email address';
+
+  const [local, domain] = email.split('@');
+  if (local.length > 64) return 'Email address is too long';
+  if (local.includes('..') || domain.includes('..')) return 'Enter a valid email address';
+  if (BLOCKED_EMAIL_DOMAINS.has(domain.toLowerCase())) return 'Please use a real email address';
+  return null;
+}
+
+// Password rules enforced on register and reset. Kept in step with
+// client/src/lib/password-validation.ts; the form is not a security boundary.
+const PASSWORD_MIN_LENGTH = 8;
+const COMMON_PASSWORDS = new Set([
+  'password',
+  'password1',
+  'password123',
+  '12345678',
+  '123456789',
+  '1234567890',
+  'qwerty123',
+  'letmein',
+  'welcome',
+  'admin123',
+  'iloveyou',
+  'monkey123',
+  'dragon123',
+  'football1',
+  'abc12345',
+  'passw0rd',
+  'projecthub',
+]);
+
+/** Returns an error message, or null when the password is acceptable. */
+function passwordProblem(value) {
+  if (typeof value !== 'string' || !value) return 'Password is required';
+  if (value.length < PASSWORD_MIN_LENGTH) {
+    return `Password must be at least ${PASSWORD_MIN_LENGTH} characters long`;
+  }
+  if (COMMON_PASSWORDS.has(value.toLowerCase())) {
+    return 'That password is too common; choose something less predictable';
+  }
+
+  const missing = [];
+  if (!/[a-z]/.test(value)) missing.push('a lowercase letter');
+  if (!/[A-Z]/.test(value)) missing.push('an uppercase letter');
+  if (!/[0-9]/.test(value)) missing.push('a number');
+  if (!/[^A-Za-z0-9]/.test(value)) missing.push('a special character');
+  if (/\s/.test(value)) missing.push('no spaces');
+
+  if (missing.length) return `Password must include ${missing.join(', ')}`;
+  return null;
+}
 
 // Initialize database storage
 const storage = new DatabaseStorage();
@@ -558,6 +635,11 @@ async function handleAuthEndpoints(request, response, path) {
           return response.status(400).json({ message: 'All fields are required' });
         }
 
+        const passwordError = passwordProblem(password);
+        if (passwordError) {
+          return response.status(400).json({ message: passwordError });
+        }
+
         if (!(await verifyTurnstile(captchaToken, request.headers['x-forwarded-for']))) {
           return response.status(400).json({ message: 'Captcha verification failed' });
         }
@@ -718,13 +800,47 @@ async function handleContactEndpoint(request, response) {
     return response.status(400).json({ message: 'All fields are required' });
   }
 
-  // Mock contact message processing
-  console.log('Contact message received:', { name, email, subject, message });
-  
-  return response.status(200).json({ 
-    message: 'Message sent successfully',
-    messageId: 'msg_' + Date.now()
+  const emailError = emailProblem(email);
+  if (emailError) {
+    return response.status(400).json({ message: emailError });
+  }
+
+  if (!(await verifyTurnstile(captchaToken, request.headers['x-forwarded-for']))) {
+    return response.status(400).json({ message: 'Captcha verification failed' });
+  }
+
+  // This endpoint used to log the message and return a fabricated messageId, so
+  // the form reported success while nothing was ever delivered. Send it for
+  // real and surface a failure instead of inventing one.
+  const ownerEmail = process.env.CONTACT_TO_EMAIL || process.env.OWNER_EMAIL;
+  if (!ownerEmail) {
+    console.error('Contact form not sent: CONTACT_TO_EMAIL is not configured');
+    return response.status(502).json({ message: 'Contact form is not configured on the server' });
+  }
+
+  const { subject: mailSubject, html } = contactNotificationEmail({
+    name,
+    email,
+    subject,
+    message,
   });
+
+  const result = await sendEmail({
+    to: ownerEmail,
+    subject: mailSubject,
+    html,
+    replyTo: email,
+  });
+
+  if (!result.sent) {
+    const reason =
+      result.reason === 'not_configured'
+        ? 'Email is not configured on the server'
+        : 'Failed to send your message';
+    return response.status(502).json({ message: reason });
+  }
+
+  return response.status(200).json({ message: 'Message sent successfully' });
 }
 
 // Handle GET /api/projects - return all active verified projects
@@ -874,8 +990,26 @@ async function handleRecoveryEndpoint(request, response, searchParams) {
         const expiry = new Date(Date.now() + 3600000); // 1 hour
 
         await storage.updateUserResetToken(user.id, resetToken, expiry);
-        // The token itself is never logged: it grants account takeover.
-        console.log('Password reset token issued for user', user.id);
+
+        const resetUrl = `${appOrigin()}/reset-password?email=${encodeURIComponent(
+          email,
+        )}&token=${encodeURIComponent(resetToken)}`;
+        const { subject, html, text } = passwordResetEmail(resetToken, resetUrl);
+
+        const result = await sendEmail({ to: email, subject, html, text });
+
+        // This endpoint used to rotate the token and return a success message
+        // without sending anything, so the sign-in page reported "instructions
+        // sent" while no mail existed. Report a real failure when the send does
+        // not happen. The response stays deliberately vague only when the
+        // account lookup found nothing.
+        if (!result.sent) {
+          const reason =
+            result.reason === 'not_configured'
+              ? 'Email is not configured on the server'
+              : 'Failed to send the reset email';
+          return response.status(502).json({ message: reason });
+        }
       }
       
       // Always return success to prevent email enumeration
@@ -887,19 +1021,31 @@ async function handleRecoveryEndpoint(request, response, searchParams) {
   }
 
   if (action === 'reset') {
-    const { token, newPassword } = body;
+    const { token, newPassword, email } = body;
     if (!token || !newPassword) {
       return response.status(400).json({ message: "Token and new password are required" });
     }
 
     // Matches the minimum the sign-in page enforces, so the two forms agree.
-    if (typeof newPassword !== 'string' || newPassword.length < 8) {
-      return response.status(400).json({ message: "Password must be at least 8 characters long" });
+    if (typeof newPassword !== 'string' || newPassword.length < PASSWORD_MIN_LENGTH) {
+      return response.status(400).json({ message: `Password must be at least ${PASSWORD_MIN_LENGTH} characters long` });
+    }
+
+    const resetPasswordError = passwordProblem(newPassword);
+    if (resetPasswordError) {
+      return response.status(400).json({ message: resetPasswordError });
     }
 
     try {
       const user = await storage.getUserByResetToken(token);
       if (!user || !user.resetTokenExpiry || new Date() > user.resetTokenExpiry) {
+        return response.status(400).json({ message: "Invalid or expired reset token" });
+      }
+
+      // The reset page collects the account email alongside the code, so bind
+      // it when present: a token should not be usable for a different account.
+      // It stays optional because the emailed link carries the token alone.
+      if (email && user.email && String(email).toLowerCase() !== user.email.toLowerCase()) {
         return response.status(400).json({ message: "Invalid or expired reset token" });
       }
 

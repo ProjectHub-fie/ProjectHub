@@ -8,9 +8,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { UserMenu } from "@/components/user-menu";
-import { Button } from "@/components/ui/button";
-import { Sun, Moon } from "lucide-react";
-import { useTheme } from "@/components/theme-provider";
+import { GoToTop } from "@/components/go-to-top";
 import { useAuth } from "@/hooks/useAuth";
 import { GithubWidget } from "@/components/github-widget";
 
@@ -88,6 +86,7 @@ function App() {
                 </header>
                 <main className="flex-1 overflow-y-auto">
                   <Router />
+                  <GoToTop />
                 </main>
               </div>
             </div>
