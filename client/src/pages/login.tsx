@@ -128,12 +128,19 @@ export default function LoginPage() {
       });
     } else {
       const reason = params.get("reason") || "unknown";
+      const discordErrors: Record<string, string> = {
+        not_configured: "Discord login is not configured on this deployment.",
+        redirect_not_configured:
+          "Discord login is not configured correctly: set APP_ORIGIN or DISCORD_CALLBACK_URL to the public https URL.",
+        missing_verifier:
+          "The Discord sign-in was started in another browser or tab. Please try again from this window.",
+        token_exchange:
+          "Discord rejected the sign-in. Check that DISCORD_CLIENT_SECRET matches the application and that the callback URL is allow-listed.",
+      };
       toast({
         title: "Discord Login Failed",
         description:
-          reason === "not_configured"
-            ? "Discord login is not configured on this deployment."
-            : `Discord did not complete the sign-in (${reason}).`,
+          discordErrors[reason] || `Discord did not complete the sign-in (${reason}).`,
         variant: "error",
       });
     }

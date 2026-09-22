@@ -58,6 +58,7 @@ export default function AdminLoginPage() {
       toast({
         title: "Admin access granted",
         description: `Logged in as ${data.role}`,
+        variant: "success",
       });
       // Absolute path: wouter's base router already prefixes /pbad for us.
       setLocation("/", { replace: true });
@@ -66,7 +67,7 @@ export default function AdminLoginPage() {
       toast({
         title: "Login failed",
         description: error.message,
-        variant: "destructive",
+        variant: "error",
       });
     },
   });

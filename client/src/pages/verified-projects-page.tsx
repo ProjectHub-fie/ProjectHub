@@ -164,7 +164,7 @@ export default function VerifiedProjectsPage() {
       setForm(f => ({ ...f, imageUrl: data.url }));
       toast({ title: "Image uploaded successfully" });
     } catch (err: any) {
-      toast({ title: "Image upload failed", description: err.message, variant: "destructive" });
+      toast({ title: "Image upload failed", description: err.message, variant: "error" });
     } finally {
       setImageUploading(false);
     }
@@ -187,7 +187,7 @@ export default function VerifiedProjectsPage() {
       setForm(emptyForm);
     },
     onError: (error: Error) => {
-      toast({ title: "Error adding project", description: error.message, variant: "destructive" });
+      toast({ title: "Error adding project", description: error.message, variant: "error" });
     },
   });
 
@@ -204,7 +204,7 @@ export default function VerifiedProjectsPage() {
       setForm(emptyForm);
     },
     onError: (error: Error) => {
-      toast({ title: "Error updating project", description: error.message, variant: "destructive" });
+      toast({ title: "Error updating project", description: error.message, variant: "error" });
     },
   });
 
@@ -217,7 +217,7 @@ export default function VerifiedProjectsPage() {
       toast({ title: "Project deleted successfully" });
     },
     onError: (error: Error) => {
-      toast({ title: "Error deleting project", description: error.message, variant: "destructive" });
+      toast({ title: "Error deleting project", description: error.message, variant: "error" });
     },
   });
 
@@ -248,7 +248,7 @@ export default function VerifiedProjectsPage() {
   const handleSubmit = () => {
     const payload = formToPayload(form);
     if (!payload.slug || !payload.title || !payload.description || !payload.category || !payload.status) {
-      toast({ title: "Missing required fields", description: "Slug, title, description, category and status are required.", variant: "destructive" });
+      toast({ title: "Missing required fields", description: "Slug, title, description, category and status are required.", variant: "error" });
       return;
     }
     if (editingProject) {

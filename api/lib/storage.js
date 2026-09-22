@@ -305,6 +305,30 @@ export class DatabaseStorage {
     }
   }
 
+  /**
+   * Resolves a project from either its UUID or its slug.
+   *
+   * Interactions are stored against project_id, but the client only ever knows
+   * the slug from the route, so the reference has to be normalised before a row
+   * is written.
+   */
+  async resolveVerifiedProject(ref) {
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(ref);
+    if (isUuid) {
+      try {
+        await schemaReady;
+        const result = await db.select()
+          .from(verifiedProjects)
+          .where(and(eq(verifiedProjects.id, ref), eq(verifiedProjects.isActive, true)))
+          .limit(1);
+        if (result[0]) return result[0];
+      } catch (error) {
+        console.error('resolveVerifiedProject by id failed:', error.message);
+      }
+    }
+    return this.getVerifiedProjectBySlug(ref);
+  }
+
   // Project request operations
   async createProjectRequest(requestData) {
     const result = await db.insert(projectRequests).values({

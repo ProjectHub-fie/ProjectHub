@@ -1,77 +1,10 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ExternalLink, Github, Download, Bot, Network, User, Heart, Star } from "lucide-react";
+import { ExternalLink, Github, Download, Bot, Network, User } from "lucide-react";
 import { useLocation } from "wouter";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { apiRequest } from "@/lib/queryClient";
-import { useAuth } from "@/hooks/useAuth";
-import { useToast } from "@/hooks/use-toast";
-
-function ProjectInteractions({ projectId }: { projectId: string }) {
-  const { user } = useAuth();
-  const { toast } = useToast();
-  const queryClient = useQueryClient();
-
-  const { data: interactions } = useQuery<any>({
-    queryKey: ["/api/projects", projectId, "interactions", user?.id],
-  });
-
-  const interactionMutation = useMutation({
-    mutationFn: async (data: { isLiked?: boolean; rating?: number }) => {
-      return apiRequest(`/api/projects/${projectId}/interactions`, "POST", data);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["/api/projects", projectId, "interactions"] });
-      toast({ title: "Success", description: "Your interaction has been recorded.", variant: "success" });
-    },
-    onError: (error: any) => {
-      toast({ title: "Action failed", description: error.message || "You must be logged in to like or rate projects.", variant: "error" });
-    }
-  });
-
-  const handleLike = () => {
-    if (!user) {
-      toast({ title: "Authentication required", description: "You must be logged in to like projects.", variant: "error" });
-      return;
-    }
-    interactionMutation.mutate({ isLiked: interactions?.userInteraction?.isLiked !== true });
-  };
-
-  const handleRating = (star: number) => {
-    if (!user) {
-      toast({ title: "Authentication required", description: "You must be logged in to rate projects.", variant: "error" });
-      return;
-    }
-    interactionMutation.mutate({ rating: star });
-  };
-
-  return (
-    <div className="flex items-center gap-4 mt-4 py-2 border-t border-border/50">
-      <button
-        onClick={(e) => { e.stopPropagation(); handleLike(); }}
-        className={`flex items-center gap-1 transition-colors ${interactions?.userInteraction?.isLiked ? "text-red-500" : "text-muted-foreground hover:text-red-400"}`}
-      >
-        <Heart className={`w-4 h-4 ${interactions?.userInteraction?.isLiked ? "fill-current" : ""}`} />
-        <span className="text-xs font-medium">{interactions?.likes || 0}</span>
-      </button>
-      <div className="flex items-center gap-1">
-        {[1, 2, 3, 4, 5].map((star) => (
-          <button
-            key={star}
-            onClick={(e) => { e.stopPropagation(); handleRating(star); }}
-            className={`transition-colors ${Number(interactions?.userInteraction?.rating) >= star ? "text-yellow-500" : "text-muted-foreground hover:text-yellow-400"}`}
-          >
-            <Star className={`w-3 h-3 ${Number(interactions?.userInteraction?.rating) >= star ? "fill-current" : ""}`} />
-          </button>
-        ))}
-        {interactions?.averageRating > 0 && (
-          <span className="text-[10px] text-muted-foreground ml-1">({interactions.averageRating.toFixed(1)})</span>
-        )}
-      </div>
-    </div>
-  );
-}
+import { useQuery } from "@tanstack/react-query";
+import { ProjectInteractions } from "@/components/project-interactions";
 
 interface Project {
   id: string;

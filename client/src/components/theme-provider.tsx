@@ -66,6 +66,10 @@ export function ThemeProvider({
     setTheme: (theme: Theme) => {
       localStorage.setItem(storageKey, theme);
       setTheme(theme);
+      // Other theme controls (the profile menu in the header) read the same
+      // provider; broadcast so their icons flip immediately rather than after
+      // a remount.
+      window.dispatchEvent(new CustomEvent("projecthub:theme-change", { detail: theme }));
     },
   };
 

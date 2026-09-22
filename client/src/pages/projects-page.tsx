@@ -47,7 +47,7 @@ export default function ProjectsPage() {
       toast({
         title: "Error updating project status",
         description: error.message,
-        variant: "destructive",
+        variant: "error",
       });
     },
   });
@@ -64,7 +64,7 @@ export default function ProjectsPage() {
       toast({
         title: "Error deleting project",
         description: error.message,
-        variant: "destructive",
+        variant: "error",
       });
     },
   });

@@ -169,6 +169,17 @@ export default async function handler(request, response) {
       return handleRecoveryEndpoint(request, response, searchParams);
     }
 
+    // The sign-in page posts to /api/auth/forgot-password and
+    // /api/auth/reset-password, but only /api/auth/recovery?action=... was ever
+    // implemented, so both forms 404'd with "Auth endpoint not found". Map the
+    // flat routes onto the same handler instead of leaving them dead.
+    if (path === '/api/auth/forgot-password') {
+      return handleRecoveryEndpoint(request, response, new URLSearchParams({ action: 'forgot' }));
+    }
+    if (path === '/api/auth/reset-password') {
+      return handleRecoveryEndpoint(request, response, new URLSearchParams({ action: 'reset' }));
+    }
+
     // Discord OAuth: begin and complete the handshake.
     if (path === '/api/auth/discord') {
       return handleDiscordStart(request, response);
@@ -199,7 +210,7 @@ export default async function handler(request, response) {
 
     // Projects detail + interactions endpoints
     if (path.startsWith('/api/projects/')) {
-      return handleProjectsEndpoints(request, response, path);
+      return handleProjectsEndpoints(request, response, path, searchParams);
     }
 
     // Auth callback handler
@@ -267,11 +278,58 @@ export default async function handler(request, response) {
 
 const DISCORD_API = 'https://discord.com/api/v10';
 
+/** Name of the short-lived cookie that carries the PKCE verifier between the
+ *  authorize redirect and the callback. */
+const DISCORD_VERIFIER_COOKIE = 'discord_code_verifier';
+
 function discordRedirectUri() {
   return (
     process.env.DISCORD_CALLBACK_URL ||
-    `${process.env.APP_ORIGIN || ''}/api/auth/discord/callback`
+    (process.env.APP_ORIGIN ? `${process.env.APP_ORIGIN}/api/auth/discord/callback` : '')
   );
+}
+
+/** True for a callback URL Discord can actually match against its allow-list. */
+function isAbsoluteDiscordRedirect(uri) {
+  return /^https?:\/\/[^/]+/i.test(uri || '');
+}
+
+function parseCookies(request) {
+  const header = request.headers?.cookie || '';
+  const cookies = {};
+  for (const part of header.split(';')) {
+    const separator = part.indexOf('=');
+    if (separator === -1) continue;
+    const name = part.slice(0, separator).trim();
+    if (!name) continue;
+    cookies[name] = decodeURIComponent(part.slice(separator + 1).trim());
+  }
+  return cookies;
+}
+
+function setCookie(response, name, value, maxAgeSeconds) {
+  const attributes = [
+    `${name}=${encodeURIComponent(value)}`,
+    'Path=/',
+    'HttpOnly',
+    'SameSite=Lax',
+    `Max-Age=${maxAgeSeconds}`,
+  ];
+  if (process.env.APP_ORIGIN?.startsWith('https') || process.env.NODE_ENV === 'production') {
+    attributes.push('Secure');
+  }
+  response.setHeader('Set-Cookie', attributes.join('; '));
+}
+
+/**
+ * Discord requires PKCE (the S256 challenge) on the authorization code
+ * exchange. Without it the token endpoint rejects the request, and Discord
+ * reports that rejection as a bare 401, which is what the callback used to log.
+ */
+function createPkcePair() {
+  const verifier = crypto.randomBytes(32).toString('base64url');
+  const challenge = crypto.createHash('sha256').update(verifier).digest('base64url');
+  return { verifier, challenge };
 }
 
 function discordAvatarUrl(profile) {
@@ -285,6 +343,15 @@ function handleDiscordStart(request, response) {
     return response.status(503).json({ message: 'Discord login is not configured' });
   }
 
+  const redirectUri = discordRedirectUri();
+  if (!isAbsoluteDiscordRedirect(redirectUri)) {
+    // A relative or empty redirect_uri can never match Discord's allow-list.
+    return response.redirect('/login?discord=error&reason=redirect_not_configured');
+  }
+
+  const { verifier, challenge } = createPkcePair();
+  setCookie(response, DISCORD_VERIFIER_COOKIE, verifier, 600);
+
   // `state` is a signed nonce so the callback can reject a handshake this
   // deployment did not initiate (CSRF protection for the OAuth flow).
   const state = signSessionToken({
@@ -296,10 +363,12 @@ function handleDiscordStart(request, response) {
 
   const authorizeUrl = new URL('https://discord.com/oauth2/authorize');
   authorizeUrl.searchParams.set('client_id', clientId);
-  authorizeUrl.searchParams.set('redirect_uri', discordRedirectUri());
+  authorizeUrl.searchParams.set('redirect_uri', redirectUri);
   authorizeUrl.searchParams.set('response_type', 'code');
   authorizeUrl.searchParams.set('scope', 'identify email');
   authorizeUrl.searchParams.set('state', state);
+  authorizeUrl.searchParams.set('code_challenge', challenge);
+  authorizeUrl.searchParams.set('code_challenge_method', 'S256');
 
   return response.redirect(authorizeUrl.toString());
 }
@@ -325,6 +394,16 @@ async function handleDiscordCallback(request, response) {
     return response.redirect('/login?discord=error&reason=not_configured');
   }
 
+  const redirectUri = discordRedirectUri();
+  if (!isAbsoluteDiscordRedirect(redirectUri)) {
+    return response.redirect('/login?discord=error&reason=redirect_not_configured');
+  }
+
+  const codeVerifier = parseCookies(request)[DISCORD_VERIFIER_COOKIE];
+  if (!codeVerifier) {
+    return response.redirect('/login?discord=error&reason=missing_verifier');
+  }
+
   try {
     const tokenRes = await fetch(`${DISCORD_API}/oauth2/token`, {
       method: 'POST',
@@ -334,12 +413,17 @@ async function handleDiscordCallback(request, response) {
         client_secret: clientSecret,
         grant_type: 'authorization_code',
         code,
-        redirect_uri: discordRedirectUri(),
+        redirect_uri: redirectUri,
+        code_verifier: codeVerifier,
       }),
     });
 
     if (!tokenRes.ok) {
-      console.error('Discord token exchange failed:', tokenRes.status);
+      // Discord's error body (error/error_description) says whether the cause
+      // is the secret, the redirect URI or the verifier. The request body is
+      // never logged: it carries client_secret.
+      const detail = await tokenRes.json().catch(() => ({}));
+      console.error('Discord token exchange failed:', tokenRes.status, detail.error, detail.error_description);
       return response.redirect('/login?discord=error&reason=token_exchange');
     }
 
@@ -658,21 +742,86 @@ async function handleProjectsListEndpoint(request, response) {
 }
 
 // Handle /api/projects/:slug and /api/projects/:id/interactions
-async function handleProjectsEndpoints(request, response, path) {
-  // POST /api/projects/:id/interactions
+async function handleProjectsEndpoints(request, response, path, searchParams) {
+  // GET/POST /api/projects/:slug/interactions
+  //
+  // Likes and ratings are per-user rows in project_interactions; the id in the
+  // path may be the project's UUID or its slug, so it is resolved first.
   const interactionsMatch = path.match(/^\/api\/projects\/([^\/]+)\/interactions$/);
   if (interactionsMatch) {
-    const projectId = interactionsMatch[1];
-    if (request.method === 'POST') {
-      const body = await readJsonBody(request);
-      console.log(`Project interaction recorded for project ${projectId}:`, body);
-      return response.status(200).json({
-        success: true,
-        interactionId: 'int_' + Date.now(),
-        projectId: projectId
-      });
+    const projectRef = interactionsMatch[1];
+    const sessionUser = readSessionToken(request.headers['x-user-session']);
+
+    try {
+      const project = await storage.resolveVerifiedProject(projectRef);
+      if (!project) {
+        return response.status(404).json({ message: 'Project not found' });
+      }
+
+      if (request.method === 'GET') {
+        const stats = await storage.getProjectInteractions(project.id);
+        const userInteraction = sessionUser?.id
+          ? await storage.getUserInteraction(project.id, sessionUser.id)
+          : null;
+
+        return response.status(200).json({
+          ...stats,
+          userInteraction: userInteraction
+            ? { isLiked: userInteraction.isLiked, rating: userInteraction.rating }
+            : null,
+        });
+      }
+
+      if (request.method === 'POST') {
+        if (!sessionUser?.id) {
+          return response.status(401).json({ message: 'You must be logged in to like or rate projects' });
+        }
+
+        const body = await readJsonBody(request);
+        const update = {};
+
+        if (body.isLiked !== undefined) {
+          if (typeof body.isLiked !== 'boolean') {
+            return response.status(400).json({ message: 'isLiked must be a boolean' });
+          }
+          update.isLiked = body.isLiked;
+        }
+
+        if (body.rating !== undefined && body.rating !== null) {
+          const rating = Number(body.rating);
+          // 1-5 is the "premium" range the client renders as stars.
+          if (!Number.isInteger(rating) || rating < 1 || rating > 5) {
+            return response.status(400).json({ message: 'rating must be an integer between 1 and 5' });
+          }
+          update.rating = rating;
+        }
+
+        if (Object.keys(update).length === 0) {
+          return response.status(400).json({ message: 'isLiked or rating is required' });
+        }
+
+        await storage.upsertProjectInteraction({
+          projectId: project.id,
+          userId: sessionUser.id,
+          ...update,
+        });
+
+        const stats = await storage.getProjectInteractions(project.id);
+        const userInteraction = await storage.getUserInteraction(project.id, sessionUser.id);
+
+        return response.status(200).json({
+          ...stats,
+          userInteraction: userInteraction
+            ? { isLiked: userInteraction.isLiked, rating: userInteraction.rating }
+            : null,
+        });
+      }
+
+      return response.status(405).json({ message: 'Method not allowed' });
+    } catch (error) {
+      console.error('Project interaction error:', error);
+      return response.status(500).json({ message: 'Failed to record project interaction' });
     }
-    return response.status(405).json({ message: 'Method not allowed' });
   }
 
   // GET /api/projects/:slug
@@ -707,8 +856,15 @@ async function handleRecoveryEndpoint(request, response, searchParams) {
   const action = searchParams.get('action');
 
   if (action === 'forgot') {
-    const { email } = body;
+    const { email, captchaToken } = body;
     if (!email) return response.status(400).json({ message: "Email is required" });
+
+    // The sign-in page sends a Turnstile token with this form; verifying it
+    // keeps the recovery flow consistent with login/register instead of
+    // silently trusting an unverified caller.
+    if (!(await verifyTurnstile(captchaToken, request.headers['x-forwarded-for']))) {
+      return response.status(400).json({ message: 'Captcha verification failed' });
+    }
 
     try {
       const user = await storage.getUserByEmail(email);
@@ -734,6 +890,11 @@ async function handleRecoveryEndpoint(request, response, searchParams) {
     const { token, newPassword } = body;
     if (!token || !newPassword) {
       return response.status(400).json({ message: "Token and new password are required" });
+    }
+
+    // Matches the minimum the sign-in page enforces, so the two forms agree.
+    if (typeof newPassword !== 'string' || newPassword.length < 8) {
+      return response.status(400).json({ message: "Password must be at least 8 characters long" });
     }
 
     try {

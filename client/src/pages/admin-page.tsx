@@ -37,7 +37,7 @@ export default function AdminPage() {
       window.location.href = `${ADMIN_BASE_PATH}/login`;
     },
     onError: (error: Error) => {
-      toast({ title: "Error", description: error.message, variant: "destructive" });
+      toast({ title: "Error", description: error.message, variant: "error" });
     }
   });
 
