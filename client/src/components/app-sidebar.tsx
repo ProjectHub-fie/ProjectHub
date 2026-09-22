@@ -47,14 +47,12 @@ function PortalThemeToggle() {
   );
 }
 
-export function AppSidebar({ className }: { className?: string }) {
+export function AppSidebar() {
   const [location] = useLocation();
   const { user, isAuthenticated, logout } = useAuth();
 
   return (
-    <Sidebar
-      className={`border-r data-[state=collapsed]:w-20 data-[state=expanded]:w-64 bg-background ${className ?? ""}`}
-    >
+    <Sidebar className="border-r data-[state=collapsed]:w-20 data-[state=expanded]:w-64 bg-background">
       <SidebarHeader className="p-4 border-b">
         <div className="flex items-center gap-2 font-bold text-xl text-primary">
           <span className="font-mono">&lt;</span>

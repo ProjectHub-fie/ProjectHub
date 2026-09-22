@@ -95,7 +95,7 @@ function App() {
         <TooltipProvider>
           <SidebarProvider style={style as React.CSSProperties}>
             <div className="client-portal flex h-screen w-full overflow-hidden bg-background">
-              <AppSidebar className="md:opacity-100 opacity-0 transition-opacity duration-300" />
+              <AppSidebar />
               <div className="flex flex-col flex-1 overflow-hidden">
                 <header className="flex items-center justify-between p-4 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
                   <SidebarTrigger data-testid="button-sidebar-toggle" className="hover-elevate" />

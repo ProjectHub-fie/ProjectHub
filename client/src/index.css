@@ -147,6 +147,21 @@
   --ring: 221.2 83.2% 53.3%;
 }
 
+/* The dashboard's blue --primary is what makes its sidebar branding differ from
+   the client one, since the sidebar header renders in text-primary. Mirror it on
+   the client sidebar so both look the same, but scope it to the sidebar so the
+   public pages keep their inherited near-black primary. */
+.client-portal [data-sidebar="sidebar"] {
+  --primary: 221.2 83.2% 53.3%;
+  --primary-foreground: 210 40% 98%;
+  --ring: 221.2 83.2% 53.3%;
+}
+
+.dark .client-portal [data-sidebar="sidebar"] {
+  --primary: 217.2 91.2% 59.8%;
+  --ring: 224.3 76.3% 48%;
+}
+
 .dark .admin-portal,
 .dark .client-portal {
   --sidebar-background: 222.2 84% 4.9%;
