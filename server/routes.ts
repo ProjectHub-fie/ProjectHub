@@ -9,6 +9,7 @@ import connectPgSimple from "connect-pg-simple";
 import { sql } from 'drizzle-orm';
 import * as z from 'zod';
 import { Resend } from 'resend';
+import { contactRecipient } from '../api/lib/email.js';
 
 // Server-side email validation. The contact form validates too, but the browser
 // can be bypassed, so this is the check that actually holds.
@@ -434,7 +435,7 @@ export async function registerRoutes(expressApp: any): Promise<Server> {
       // to the address that owns the API key and silently reports success for
       // anything else. That makes it a poor default for real traffic, so the
       // sender and recipient are configurable, with local-development fallbacks.
-      const ownerEmail = process.env.CONTACT_TO_EMAIL || process.env.OWNER_EMAIL || 'dev.projecthub.me@gmail.com';
+      const ownerEmail = contactRecipient();
       const fromAddress = process.env.EMAIL_FROM || 'Contact Form <onboarding@resend.dev>';
       
       const emailResult = await resend.emails.send({

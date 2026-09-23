@@ -14,7 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { useLocation } from "wouter";
 import { apiRequest } from "@/lib/queryClient";
-import { LogOut, Plus, Clock, User, Settings, Camera } from "lucide-react";
+import { Plus, Clock, User, Settings, Camera } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { formatStatusWithEmoji, getStatusDisplay } from "@/lib/utils";
 import { EmojiTest } from "@/components/EmojiTest";
@@ -36,7 +36,7 @@ const profileSchema = z.object({
 export default function ProjectRequestPage() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
-  const { user, updateProfile, isUpdatingProfile, isAuthenticated, isLoading, logout } = useAuth();
+  const { user, updateProfile, isUpdatingProfile, isAuthenticated, isLoading } = useAuth();
   const fileInputRef = useRef<HTMLInputElement>(null);
   const queryClient = useQueryClient();
   const [showSettings, setShowSettings] = useState(false);
@@ -179,15 +179,6 @@ export default function ProjectRequestPage() {
               >
                 <Settings className="h-4 w-4" />
               </Button>
-              <Button
-                variant="outline"
-                onClick={() => logout()}
-                className="bg-slate-800 border-slate-600 hover:bg-slate-700"
-                data-testid="button-logout"
-              >
-                <LogOut className="h-4 w-4 md:mr-2" />
-                <span className="hidden md:inline">Logout</span>
-              </Button>
             </div>
           </div>
         </div>
@@ -220,41 +211,50 @@ export default function ProjectRequestPage() {
                             className="hidden"
                             onChange={async (e) => {
                               const file = e.target.files?.[0];
+                              const input = e.currentTarget;
                               if (file) {
-                                if (file.size > 5 * 1024 * 1024) {
+                                // Capped at 2MB, not the 5MB the space suggests:
+                                // the bytes ride inside the JSON body as base64,
+                                // which inflates them by about a third and must
+                                // still clear the deployment's request body cap.
+                                if (file.size > 2 * 1024 * 1024) {
                                   toast({
                                     title: "Error",
                                     variant: "destructive",
-                                    description: "File size must be less than 5MB",
+                                    description: "File size must be less than 2MB",
                                   });
                                   return;
                                 }
 
-                                const formData = new FormData();
-                                formData.append('file', file);
-                                if (user?.id) {
-                                  formData.append('userId', user.id.toString());
-                                }
+                                // The image is inlined as a data URL and saved
+                                // through the profile endpoint, which persists
+                                // `profileImageUrl`. This used to POST to
+                                // /api/auth/upload-profile-pic, a route neither
+                                // backend implements, so the file was stored
+                                // nowhere and the avatar never changed.
                                 try {
-                                  const response = await fetch('/api/auth/upload-profile-pic', {
-                                    method: 'POST',
-                                    body: formData,
+                                  const dataUrl = await new Promise<string>((resolve, reject) => {
+                                    const reader = new FileReader();
+                                    reader.onload = () => resolve(String(reader.result));
+                                    reader.onerror = () => reject(new Error("Could not read that file"));
+                                    reader.readAsDataURL(file);
                                   });
-                                  const data = await response.json();
-                                  if (response.ok) {
-                                    toast({ 
-                                      title: "Image uploaded!",
-                                      variant: "success",
-                                    });
-                                  } else {
-                                    throw new Error(data.message || "Upload failed");
-                                  }
+
+                                  await updateProfile({ profileImageUrl: dataUrl });
+                                  toast({
+                                    title: "Profile picture updated",
+                                    variant: "success",
+                                  });
                                 } catch (err: any) {
-                                  toast({ 
-                                    title: "Upload failed", 
-                                    description: err.message,
-                                    variant: "destructive" 
+                                  toast({
+                                    title: "Upload failed",
+                                    description: err.message || "Please try again.",
+                                    variant: "destructive"
                                   });
+                                } finally {
+                                  // Reset so picking the same file again still
+                                  // fires a change event.
+                                  input.value = "";
                                 }
                               }
                             }}

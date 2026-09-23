@@ -292,7 +292,12 @@ export function useAuth() {
   });
 
   // Manual refresh function
-  const refreshAuth = async () => {
+  //
+  // Resolves to the signed-in user, or null when the token did not resolve.
+  // The Discord handshake pairs this with a redirect to /dashboard, and
+  // without a return value a rejected token sent the visitor to a protected
+  // page that bounced them back with no explanation.
+  const refreshAuth = async (): Promise<User | null> => {
     console.log('Manually refreshing auth status...');
     setIsCheckingAuth(true);
     try {
@@ -317,6 +322,7 @@ export function useAuth() {
         if (data.user) {
           setUser(data.user);
           localStorage.setItem(USER_STORAGE_KEY, JSON.stringify(data.user));
+          return data.user;
         }
       } else {
         console.log('Manual auth refresh failed, clearing user data');
@@ -324,8 +330,10 @@ export function useAuth() {
         localStorage.removeItem(USER_STORAGE_KEY);
         localStorage.removeItem(SESSION_TOKEN_KEY);
       }
+      return null;
     } catch (error) {
       console.error("Error refreshing auth:", error);
+      return null;
     } finally {
       setIsCheckingAuth(false);
     }
