@@ -51,6 +51,26 @@ function useSidebar() {
   return context
 }
 
+/**
+ * Returns a handler that closes the mobile sidebar.
+ *
+ * On mobile the sidebar renders inside a Sheet, and nothing closed it on
+ * navigation — the Sheet only ever closed via an overlay tap or Escape. Tapping
+ * a nav item therefore moved the page underneath while the panel stayed open,
+ * covering the content it had just navigated to.
+ *
+ * This is attached to the nav links rather than driven off a pathname effect,
+ * because tapping the link for the route you are already on does not change the
+ * path: an effect would not fire and the panel would stay open.
+ */
+function useMobileSidebarClose() {
+  const { isMobile, setOpenMobile } = useSidebar()
+
+  return React.useCallback(() => {
+    if (isMobile) setOpenMobile(false)
+  }, [isMobile, setOpenMobile])
+}
+
 const SidebarProvider = React.forwardRef<
   HTMLDivElement,
   React.ComponentProps<"div"> & {
@@ -767,5 +787,6 @@ export {
   SidebarRail,
   SidebarSeparator,
   SidebarTrigger,
+  useMobileSidebarClose,
   useSidebar,
 }

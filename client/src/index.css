@@ -125,6 +125,24 @@
   .animate-pulse-slow {
     animation: pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   }
+  
+  /* Caret for the hero typing effect. A dedicated blink reads better than
+     `animate-pulse` here because the caret should stay fully opaque for most of
+     the cycle rather than fading continuously. */
+  .animate-caret {
+    animation: caret 1s steps(1, end) infinite;
+  }
+}
+
+@keyframes caret {
+  0%,
+  50% {
+    opacity: 1;
+  }
+  50.01%,
+  100% {
+    opacity: 0;
+  }
 }
 
 @keyframes float {

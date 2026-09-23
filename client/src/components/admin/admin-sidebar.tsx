@@ -11,6 +11,7 @@ import {
   SidebarMenuItem,
   SidebarHeader,
   SidebarFooter,
+  useMobileSidebarClose,
 } from "@/components/ui/sidebar";
 import { AdminThemeToggle } from "@/components/admin/admin-theme-toggle";
 
@@ -30,6 +31,9 @@ const items = [
 
 export function AdminSidebar() {
   const [location] = useLocation();
+
+  // Nav links live in the mobile Sheet, so a tap has to close it.
+  const closeMobileSidebar = useMobileSidebarClose();
 
   return (
     <Sidebar className="border-r data-[state=collapsed]:w-20 data-[state=expanded]:w-64 bg-background">
@@ -53,7 +57,7 @@ export function AdminSidebar() {
                     isActive={location === item.url}
                     className={`rounded-lg px-3 py-2 cursor-pointer ${location === item.url ? "sidebar-nav-active" : ""}`}
                   >
-                    <Link href={item.url}>
+                    <Link href={item.url} onClick={closeMobileSidebar}>
                       <span className="group-data-[collapsible=icon]:!hidden md:group-data-[collapsible=icon]:hidden truncate flex items-center gap-2">
                         <item.icon className="h-4 w-4" />
                         {item.title}

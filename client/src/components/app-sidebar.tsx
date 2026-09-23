@@ -11,6 +11,7 @@ import {
   SidebarMenuItem,
   SidebarHeader,
   SidebarFooter,
+  useMobileSidebarClose,
 } from "@/components/ui/sidebar";
 import { useAuth } from "@/hooks/useAuth";
 import { useTheme } from "@/components/theme-provider";
@@ -51,6 +52,9 @@ export function AppSidebar() {
   const [location] = useLocation();
   const { user, isAuthenticated, logout } = useAuth();
 
+  // Nav links live in the mobile Sheet, so a tap has to close it.
+  const closeMobileSidebar = useMobileSidebarClose();
+
   return (
     <Sidebar className="border-r data-[state=collapsed]:w-20 data-[state=expanded]:w-64 bg-background">
       <SidebarHeader className="p-4 border-b">
@@ -79,7 +83,7 @@ export function AppSidebar() {
                     isActive={location === item.url}
                     className={`rounded-lg px-3 py-2 cursor-pointer ${location === item.url ? "sidebar-nav-active" : ""}`}
                   >
-                    <Link href={item.url}>
+                    <Link href={item.url} onClick={closeMobileSidebar}>
                       <span className="group-data-[collapsible=icon]:!hidden md:group-data-[collapsible=icon]:hidden truncate flex items-center gap-2">
                         <item.icon className="h-4 w-4" />
                         {item.title}
@@ -96,7 +100,7 @@ export function AppSidebar() {
                     isActive={location === "/login"}
                     className={`rounded-lg px-3 py-2 cursor-pointer ${location === "/login" ? "sidebar-nav-active" : ""}`}
                   >
-                    <Link href="/login">
+                    <Link href="/login" onClick={closeMobileSidebar}>
                       <span className="group-data-[collapsible=icon]:!hidden md:group-data-[collapsible=icon]:hidden truncate flex items-center gap-2">
                         <LogIn className="h-4 w-4" />
                         Login
