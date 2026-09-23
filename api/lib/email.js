@@ -355,26 +355,36 @@ export async function sendPasswordResetEmail({ to, subject, html, text }) {
     const payload = await res.json().catch(() => ({}));
     const entry = Array.isArray(payload?.Messages) ? payload.Messages[0] : null;
 
-    if (!res.ok || entry?.Status === 'error') {
+    // A 200 is not proof that anything was queued: Mailjet accepts the request
+    // and returns an empty `Messages` array (Total/Count 0) when the sender is
+    // not one it will send as. Only a per-message entry means a send was
+    // actually accepted, so a missing entry is a failure — otherwise the caller
+    // reports success and the user waits for mail that was never sent.
+    if (!res.ok || !entry || entry.Status === 'error') {
       // Mailjet reports failures in either `Messages[].Errors` or, for auth
       // problems, a top-level `ErrorMessage`.
       const detail = entry?.Errors?.[0] || payload?.ErrorMessage;
+      const queued = !entry && res.ok ? 'no message entry returned (nothing queued)' : '';
       console.error(
         'Mailjet send failed:',
         `status=${res.status}`,
+        `total=${payload?.Total ?? 'n/a'} count=${payload?.Count ?? 'n/a'}`,
+        queued,
         detail
           ? `code=${detail.ErrorCode ?? 'n/a'} message=${detail.ErrorMessage ?? detail}`
           : '',
       );
       return {
         sent: false,
-        reason: 'send_failed',
+        reason: !entry && res.ok ? 'no_message_queued' : 'send_failed',
         status: res.status,
         errorCode: detail?.ErrorCode,
         errorMessage: detail?.ErrorMessage || payload?.ErrorMessage,
       };
     }
 
+    // `MessageID` is what makes delivery traceable in Mailjet's UI, so it is
+    // returned even on success.
     return { sent: true, id: entry?.To?.[0]?.MessageID };
   } catch (error) {
     console.error('Mailjet send threw:', error.message);

@@ -208,6 +208,62 @@ test('sendPasswordResetEmail posts to the Mailjet v3.1 endpoint with Basic auth 
   }
 });
 
+test('sendPasswordResetEmail treats a 200 with no queued message as a failure', async () => {
+  // Mailjet answers 200 with `Messages: []` (Total/Count 0) when it accepts the
+  // request but queues nothing — observed in production with a sender address it
+  // would not send as. Reporting success there leaves the user waiting for mail
+  // that was never sent, which is exactly the bug this guards.
+  const originalFetch = globalThis.fetch;
+  try {
+    await withOnlyMailjet(async () => {
+      globalThis.fetch = async () =>
+        new Response(JSON.stringify({ Messages: [], Total: 0, Count: 0 }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+
+      const result = await sendPasswordResetEmail({
+        to: 'someone@example.com',
+        subject: 'Hello',
+        html: '<p>hi</p>',
+      });
+
+      assert.equal(result.sent, false, 'an empty Messages array must not read as success');
+      assert.equal(result.reason, 'no_message_queued');
+      assert.equal(result.status, 200);
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('sendPasswordResetEmail reports the MessageID when Mailjet accepts a message', async () => {
+  const originalFetch = globalThis.fetch;
+  try {
+    await withOnlyMailjet(async () => {
+      globalThis.fetch = async () =>
+        new Response(
+          JSON.stringify({
+            Messages: [{ Status: 'success', To: [{ MessageID: 1234567890 }] }],
+            Total: 1,
+            Count: 1,
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+
+      const result = await sendPasswordResetEmail({
+        to: 'someone@example.com',
+        subject: 'Hello',
+        html: '<p>hi</p>',
+      });
+
+      assert.equal(result.sent, true);
+      assert.equal(result.id, 1234567890, 'the MessageID makes a send traceable in Mailjet');
+    });
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
 test('sendPublicEmail reports not_configured without a Resend key', async () => {
   await withEnv(RESEND_VARS, {}, async () => {
     const result = await sendPublicEmail({
