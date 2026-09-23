@@ -2,9 +2,33 @@ import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Github, Twitter, Facebook, ChevronDown } from "lucide-react";
 import { FaDiscord } from "react-icons/fa";
-import { useIsMobile } from "@/hooks/use-mobile";
 import { useLocation } from "wouter";
 import { DiscordWidget } from "./discord-widget";
+
+/**
+ * One list for every viewport: the desktop and mobile lists used to differ, so
+ * the hero said different things depending on screen width, and the shorter
+ * mobile strings were the only ones a phone ever showed.
+ *
+ * Declared at module scope on purpose. It used to be an array literal built
+ * during render and listed in the effect's dependencies, so every render handed
+ * the effect a new array identity. React then cleared and re-ran the effect
+ * before the typing timer could finish a cycle, so `isDeleting` never flipped
+ * and the text froze on the completed first phrase. A stable reference keeps the
+ * timer chain alive.
+ */
+const TYPING_TEXTS = [
+  "Building the future, one line of code at a time.",
+  "Creating efficient solutions for complex problems.",
+  "React & automation specialist.",
+  "Specializing in web apps, bots and developer utilities.",
+  "Passionate about clean code and great user experience.",
+];
+
+/** Type speed, delete speed, and the pause at each end of a phrase. */
+const TYPE_MS = 55;
+const DELETE_MS = 30;
+const HOLD_MS = 1500;
 
 export default function HeroSection() {
   const [, setLocation] = useLocation();
@@ -12,46 +36,29 @@ export default function HeroSection() {
   const [currentCharIndex, setCurrentCharIndex] = useState(0);
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDiscordWidget, setShowDiscordWidget] = useState(false);
-  const isMobile = useIsMobile();
-
-  const typingTexts = isMobile ? [
-    "Building the future one line of code at a time.",
-    "React & automation specialist...",
-    "Efficient solutions...",
-    "Clean code advocate..."
-  ] : [
-    "Creating efficient solutions for complex problems...",
-    "Building the future one line of code at a time...",
-    "Specializing in React applications and automation...",
-    "Passionate about clean code and user experience..."
-  ];
 
   useEffect(() => {
-    const typeText = () => {
-      const currentText = typingTexts[currentTextIndex];
+    const currentText = TYPING_TEXTS[currentTextIndex];
+    const atEnd = !isDeleting && currentCharIndex === currentText.length;
+    const atStart = isDeleting && currentCharIndex === 0;
 
-      if (isDeleting) {
-        setCurrentCharIndex(prev => prev - 1);
-      } else {
-        setCurrentCharIndex(prev => prev + 1);
-      }
+    // One phrase is typed, held, deleted, then the next begins. Every branch
+    // schedules exactly one follow-up so the chain never stalls.
+    const delay = atEnd ? HOLD_MS : atStart ? TYPE_MS : isDeleting ? DELETE_MS : TYPE_MS;
 
-      let typeSpeed = isDeleting ? 50 : 100;
-
-      if (!isDeleting && currentCharIndex === currentText.length) {
-        typeSpeed = 2000;
+    const timer = setTimeout(() => {
+      if (atEnd) {
         setIsDeleting(true);
-      } else if (isDeleting && currentCharIndex === 0) {
+      } else if (atStart) {
         setIsDeleting(false);
-        setCurrentTextIndex((prev) => (prev + 1) % typingTexts.length);
+        setCurrentTextIndex((prev) => (prev + 1) % TYPING_TEXTS.length);
+      } else {
+        setCurrentCharIndex((prev) => prev + (isDeleting ? -1 : 1));
       }
+    }, delay);
 
-      setTimeout(typeText, typeSpeed);
-    };
-
-    const timer = setTimeout(typeText, 100);
     return () => clearTimeout(timer);
-  }, [currentTextIndex, currentCharIndex, isDeleting, typingTexts]);
+  }, [currentTextIndex, currentCharIndex, isDeleting]);
 
   const handleScroll = (sectionId: string) => {
     const element = document.getElementById(sectionId);
@@ -97,10 +104,15 @@ export default function HeroSection() {
         <div className="mb-8 md:mb-12 h-6 md:h-8 px-2">
           <span className="text-sm md:text-lg font-mono text-muted-foreground break-words">
             <span className="text-emerald-500">$</span>{" "}
-            <span data-testid="typing-text" className="inline-block">
-              {typingTexts[currentTextIndex].substring(0, currentCharIndex)}
+            <span
+              data-testid="typing-text"
+              className="inline-block"
+            >
+              {TYPING_TEXTS[currentTextIndex].substring(0, currentCharIndex)}
             </span>
-            <span className="animate-pulse">|</span>
+            <span className="animate-caret" aria-hidden="true">
+              |
+            </span>
           </span>
         </div>
 
