@@ -8,6 +8,7 @@ import {
   isEmailConfigured,
   sendEmail,
   appOrigin,
+  contactRecipient,
   passwordResetEmail,
   contactNotificationEmail,
 } from './lib/email.js';
@@ -453,32 +454,40 @@ function handleDiscordStart(request, response) {
 async function handleDiscordCallback(request, response) {
   const searchParams = new URL(request.url, `https://${request.headers.host}`).searchParams;
 
+  // Every exit below logs. These branches used to redirect in silence, so a
+  // rotated secret or a misconfigured callback produced no server output at
+  // all and the only clue was the browser URL.
+  const fail = (reason, detail) => {
+    console.error('Discord login failed:', reason, detail ?? '');
+    return response.redirect(`/login?discord=error&reason=${encodeURIComponent(reason)}`);
+  };
+
   const oauthError = searchParams.get('error');
   if (oauthError) {
-    return response.redirect(`/login?discord=error&reason=${encodeURIComponent(oauthError)}`);
+    return fail(oauthError, searchParams.get('error_description') || '');
   }
 
   const code = searchParams.get('code');
   const state = searchParams.get('state');
-  if (!code) return response.redirect('/login?discord=error&reason=missing_code');
+  if (!code) return fail('missing_code');
   if (!state || !readSessionToken(state)) {
-    return response.redirect('/login?discord=error&reason=invalid_state');
+    return fail('invalid_state', 'state missing, unsigned, or expired');
   }
 
   const clientId = process.env.DISCORD_CLIENT_ID;
   const clientSecret = process.env.DISCORD_CLIENT_SECRET;
   if (!clientId || !clientSecret) {
-    return response.redirect('/login?discord=error&reason=not_configured');
+    return fail('not_configured', `clientId=${!!clientId} clientSecret=${!!clientSecret}`);
   }
 
   const redirectUri = discordRedirectUri();
   if (!isAbsoluteDiscordRedirect(redirectUri)) {
-    return response.redirect('/login?discord=error&reason=redirect_not_configured');
+    return fail('redirect_not_configured', `resolved redirect_uri=${redirectUri || '(empty)'}`);
   }
 
   const codeVerifier = parseCookies(request)[DISCORD_VERIFIER_COOKIE];
   if (!codeVerifier) {
-    return response.redirect('/login?discord=error&reason=missing_verifier');
+    return fail('missing_verifier', 'PKCE cookie absent: sign-in began in another browser or tab');
   }
 
   try {
@@ -500,8 +509,7 @@ async function handleDiscordCallback(request, response) {
       // is the secret, the redirect URI or the verifier. The request body is
       // never logged: it carries client_secret.
       const detail = await tokenRes.json().catch(() => ({}));
-      console.error('Discord token exchange failed:', tokenRes.status, detail.error, detail.error_description);
-      return response.redirect('/login?discord=error&reason=token_exchange');
+      return fail('token_exchange', `${tokenRes.status} ${detail.error || ''} ${detail.error_description || ''}`);
     }
 
     const { access_token: accessToken } = await tokenRes.json();
@@ -510,7 +518,7 @@ async function handleDiscordCallback(request, response) {
       headers: { Authorization: `Bearer ${accessToken}` },
     });
     if (!profileRes.ok) {
-      return response.redirect('/login?discord=error&reason=profile');
+      return fail('profile', `users/@me returned ${profileRes.status}`);
     }
 
     const profile = await profileRes.json();
@@ -812,11 +820,7 @@ async function handleContactEndpoint(request, response) {
   // This endpoint used to log the message and return a fabricated messageId, so
   // the form reported success while nothing was ever delivered. Send it for
   // real and surface a failure instead of inventing one.
-  const ownerEmail = process.env.CONTACT_TO_EMAIL || process.env.OWNER_EMAIL;
-  if (!ownerEmail) {
-    console.error('Contact form not sent: CONTACT_TO_EMAIL is not configured');
-    return response.status(502).json({ message: 'Contact form is not configured on the server' });
-  }
+  const ownerEmail = contactRecipient();
 
   const { subject: mailSubject, html } = contactNotificationEmail({
     name,

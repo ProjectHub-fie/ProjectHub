@@ -20,6 +20,23 @@ export function appOrigin() {
 }
 
 /**
+ * Where contact-form notifications are delivered.
+ *
+ * `CONTACT_TO_EMAIL` wins, then `OWNER_EMAIL`, then the project inbox. The
+ * serverless handler used to demand one of the first two and answer 502 when
+ * neither was set - the "CONTACT_TO_EMAIL is not configured" report - while the
+ * Express route already defaulted. Keeping the order here means both backends
+ * agree on the destination instead of drifting apart.
+ */
+export function contactRecipient() {
+  return (
+    process.env.CONTACT_TO_EMAIL ||
+    process.env.OWNER_EMAIL ||
+    'dev.projecthub.me@gmail.com'
+  );
+}
+
+/**
  * Sends one email and reports whether it actually went out.
  *
  * `resend.emails.send` resolves with `{ data, error }` rather than rejecting, so

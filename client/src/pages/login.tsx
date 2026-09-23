@@ -127,7 +127,22 @@ export default function LoginPage() {
       if (token) {
         localStorage.setItem(SESSION_TOKEN_KEY, token);
         window.history.replaceState(null, "", "/login");
-        refreshAuth().finally(() => setLocation("/dashboard"));
+        // Only navigate once the token has actually resolved. Redirecting
+        // unconditionally meant an unrecognised token was dropped on
+        // /dashboard, which bounced the visitor back to /login with nothing
+        // shown - the "no logs, not signed in" symptom.
+        refreshAuth().then((resolved) => {
+          if (resolved) {
+            setLocation("/dashboard");
+          } else {
+            toast({
+              title: "Discord Login Failed",
+              description:
+                "Discord signed you in, but the session could not be confirmed. Please try again.",
+              variant: "error",
+            });
+          }
+        });
         return;
       }
       toast({
@@ -145,6 +160,10 @@ export default function LoginPage() {
           "The Discord sign-in was started in another browser or tab. Please try again from this window.",
         token_exchange:
           "Discord rejected the sign-in. Check that DISCORD_CLIENT_SECRET matches the application and that the callback URL is allow-listed.",
+        profile: "Discord did not return your profile. Please try again.",
+        missing_code: "Discord did not return an authorization code. Please start again.",
+        invalid_state:
+          "This sign-in attempt expired or was started elsewhere. Please start again from this window.",
       };
       toast({
         title: "Discord Login Failed",
@@ -334,6 +353,32 @@ export default function LoginPage() {
           <p className="text-muted-foreground">Sign in to request your project</p>
         </CardHeader>
         <CardContent>
+          {/* Discord sits above the form so it reads as the primary way in;
+              it used to be buried below the tabs under an "Or continue with"
+              divider, which made it look like an afterthought. It shares the
+              same signed `state` handshake either way. */}
+          <Button
+            variant="outline"
+            className="w-full border-input hover:bg-accent hover:text-accent-foreground flex items-center justify-center gap-2"
+            onClick={() => {
+              // Discord sign-in runs through Discord's own OAuth screen, so it
+              // does not share the form captcha: the signed `state` nonce
+              // protects the handshake instead.
+              window.location.href = "/api/auth/discord";
+            }}
+            data-testid="button-discord-login"
+          >
+            <FaDiscord className="h-4 w-4 text-[#5865F2]" />
+            Continue with Discord
+          </Button>
+
+          <div className="relative my-4">
+            <Separator className="bg-border" />
+            <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 bg-card px-3 text-xs uppercase tracking-wide text-muted-foreground">
+              or
+            </span>
+          </div>
+
           <Tabs value={activeTab} onValueChange={setActiveTab}>
             <TabsList className="grid w-full grid-cols-2 bg-muted">
               <TabsTrigger value="login" className="data-[state=active]:bg-green-600 data-[state=active]:text-primary-foreground data-[state=inactive]:bg-blue-600">Login</TabsTrigger>
@@ -647,26 +692,6 @@ export default function LoginPage() {
               </Form>
             </TabsContent>
           </Tabs>
-
-          <div className="mt-6">
-            <Separator className="bg-border" />
-            <p className="text-center text-sm text-muted-foreground my-4">Or continue with</p>
-
-            <Button
-              variant="outline"
-              className="w-full border-input hover:bg-accent hover:text-accent-foreground flex items-center justify-center gap-2"
-              onClick={() => {
-                // Discord sign-in runs through Discord's own OAuth screen, so it
-                // does not share the form captcha: the signed `state` nonce
-                // protects the handshake instead.
-                window.location.href = "/api/auth/discord";
-              }}
-              data-testid="button-discord-login"
-            >
-              <FaDiscord className="h-4 w-4 text-[#5865F2]" />
-              Continue with Discord
-            </Button>
-          </div>
         </CardContent>
       </Card>
     </div>
