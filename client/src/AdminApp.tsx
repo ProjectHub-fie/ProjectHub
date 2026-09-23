@@ -20,8 +20,24 @@ const AdminVerifiedProjects = lazy(() => import("@/pages/verified-projects-page"
 const AdminManagement = lazy(() => import("@/pages/admin-info"));
 const AdminCreate = lazy(() => import("@/pages/create-admin"));
 const AdminLogin = lazy(() => import("@/pages/admin-login-page"));
+const AdminMail = lazy(() => import("@/pages/mail-page"));
 
-type AdminPermission = "viewUsers" | "manageProjects" | "manageAdmins";
+/**
+ * Registers the mail service worker.
+ *
+ * Called from the mail page rather than at application start, so the public site
+ * never installs a worker it does not use. The worker holds no credentials; it
+ * only renders push payloads the server has already built.
+ */
+function registerMailServiceWorker() {
+  if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
+  navigator.serviceWorker.register("/mail-sw.js", { scope: "/" }).catch(() => {
+    // Registration can fail in private mode or on an insecure origin; the
+    // in-dashboard badge works either way.
+  });
+}
+
+type AdminPermission = "viewUsers" | "manageProjects" | "manageAdmins" | "mail";
 
 function AdminLoading() {
   return (
@@ -72,7 +88,7 @@ function AdminNotFound() {
  * the URL staying secret or on this component running.
  */
 function AdminGuard({ permission, children }: { permission?: AdminPermission; children: React.ReactNode }) {
-  const { isLoading, isAuthenticated, canViewUsers, canManageProjects, canManageAdmins } = useAdminAuth();
+  const { isLoading, isAuthenticated, canViewUsers, canManageProjects, canManageAdmins, canUseMail } = useAdminAuth();
   const [, setLocation] = useLocation();
 
   React.useEffect(() => {
@@ -86,6 +102,9 @@ function AdminGuard({ permission, children }: { permission?: AdminPermission; ch
   if (permission === "viewUsers" && !canViewUsers) return <AdminAccessDenied />;
   if (permission === "manageProjects" && !canManageProjects) return <AdminAccessDenied />;
   if (permission === "manageAdmins" && !canManageAdmins) return <AdminAccessDenied />;
+  // Mail is owner/admin only. This is the experience layer: every
+  // /api/admin/mail route independently enforces the same rule server-side.
+  if (permission === "mail" && !canUseMail) return <AdminAccessDenied />;
 
   return <>{children}</>;
 }
@@ -132,6 +151,10 @@ function AdminLayout({ children }: { children: React.ReactNode }) {
 
 /** Wraps a dashboard page in auth/permission checks and the dashboard shell. */
 function AdminPage({ permission, children }: { permission?: AdminPermission; children: React.ReactNode }) {
+  React.useEffect(() => {
+    if (permission === "mail") registerMailServiceWorker();
+  }, [permission]);
+
   return (
     <AdminLayout>
       <AdminGuard permission={permission}>
@@ -174,6 +197,9 @@ export default function AdminApp() {
                   </Route>
                   <Route path="/admins">
                     <AdminPage permission="manageAdmins"><AdminManagement /></AdminPage>
+                  </Route>
+                  <Route path="/mail">
+                    <AdminPage permission="mail"><AdminMail /></AdminPage>
                   </Route>
                   <Route>
                     <AdminPage><AdminNotFound /></AdminPage>

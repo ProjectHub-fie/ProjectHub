@@ -1,8 +1,11 @@
 import { type Express, type Request, type Response, type NextFunction } from "express";
 import { createServer, type Server } from "http";
+import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
 import multer from "multer";
 import { adminStorage } from "./admin-storage.js";
+import { buildMailRouter, handleInboundMessage } from "../api/lib/mail-routes.js";
+import { createMailNotifications } from "../api/lib/mail-store.js";
 
 declare module "express-session" {
   interface SessionData {
@@ -371,6 +374,62 @@ export async function registerAdminRoutes(app: Express): Promise<Server> {
     if (!req.file) return res.status(400).json({ message: "No image file provided" });
     res.json({ url: `data:${req.file.mimetype};base64,${req.file.buffer.toString("base64")}` });
   });
+
+  /**
+   * Inbound mail webhook, mirroring api/admin/index.js.
+   *
+   * Registered before the mail router because the provider — not an
+   * administrator — calls it, so it authenticates with its own shared secret.
+   */
+  app.post('/api/admin/mail/inbound', async (req: Request, res: any) => {
+    const expected = process.env.MAIL_INBOUND_WEBHOOK_SECRET;
+    if (!expected) {
+      return res.status(503).json({ message: 'Inbound mail webhook is not configured' });
+    }
+
+    const provided = String(
+      req.headers['x-mail-webhook-secret'] || req.headers['x-webhook-secret'] || req.query?.secret || '',
+    );
+    const a = Buffer.from(provided);
+    const b = Buffer.from(expected);
+    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+      console.warn('Inbound mail webhook rejected: bad secret');
+      return res.status(401).json({ message: 'Invalid webhook signature' });
+    }
+
+    try {
+      const payload = req.body || {};
+      const event = payload.data && payload.type ? payload.data : payload;
+      const type = payload.type || 'email.received';
+      if (type !== 'email.received' && type !== 'inbound' && !event.subject) {
+        return res.json({ success: true, ignored: type });
+      }
+
+      const result = await handleInboundMessage(event);
+      if (result.duplicate) return res.json({ success: true, duplicate: true, id: result.id });
+
+      await createMailNotifications({
+        type: 'new_email',
+        title: event.subject || 'New email',
+        preview: event.text || event.html || '',
+        messageId: result.id,
+        threadId: result.threadId,
+      });
+
+      res.json({ success: true, id: result.id, threadId: result.threadId });
+    } catch (error: any) {
+      console.error('Inbound mail webhook error:', error);
+      res.status(500).json({ message: 'Failed to process inbound message' });
+    }
+  });
+
+  // The ProjectHub Mail workspace (owner/admin only), shared with the serverless
+  // function so both backends expose exactly the same routes.
+  app.use(buildMailRouter({
+    requireAuth,
+    requireRole,
+    adminIdFrom: (req: Request) => req.session?.adminId,
+  }));
 
   return createServer(app);
 }
