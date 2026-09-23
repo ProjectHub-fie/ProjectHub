@@ -9,7 +9,7 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { UserMenu } from "@/components/user-menu";
 import { GoToTop } from "@/components/go-to-top";
-import { useAuth } from "@/hooks/useAuth";
+import { useAuth, AuthProvider } from "@/hooks/useAuth";
 import { GithubWidget } from "@/components/github-widget";
 
 const Home = React.lazy(() => import("@/pages/home"));
@@ -75,30 +75,32 @@ function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <ThemeProvider defaultTheme="light" storageKey="portfolio-theme">
-        <TooltipProvider>
-          <SidebarProvider style={style as React.CSSProperties}>
-            <div className="client-portal flex h-screen w-full overflow-hidden bg-background">
-              <AppSidebar />
-              <div className="flex flex-col flex-1 overflow-hidden">
-                {/* `relative z-40` makes the header a stacking context that
-                    outranks the page. Without it the hero's `absolute inset-0`
-                    blur overlay, being a positioned descendant of the scrolling
-                    main that follows this header in tree order, painted over the
-                    profile dropdown and swallowed clicks on it. */}
-                <header className="relative z-40 flex items-center justify-between p-4 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-                  <SidebarTrigger data-testid="button-sidebar-toggle" className="hover-elevate" />
-                  <UserMenu />
-                </header>
-                <main className="flex-1 overflow-y-auto">
-                  <Router />
-                  <GoToTop />
-                </main>
+        <AuthProvider>
+          <TooltipProvider>
+            <SidebarProvider style={style as React.CSSProperties}>
+              <div className="client-portal flex h-screen w-full overflow-hidden bg-background">
+                <AppSidebar />
+                <div className="flex flex-col flex-1 overflow-hidden">
+                  {/* `relative z-40` makes the header a stacking context that
+                      outranks the page. Without it the hero's `absolute inset-0`
+                      blur overlay, being a positioned descendant of the scrolling
+                      main that follows this header in tree order, painted over the
+                      profile dropdown and swallowed clicks on it. */}
+                  <header className="relative z-40 flex items-center justify-between p-4 border-b border-border bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
+                    <SidebarTrigger data-testid="button-sidebar-toggle" className="hover-elevate" />
+                    <UserMenu />
+                  </header>
+                  <main className="flex-1 overflow-y-auto">
+                    <Router />
+                    <GoToTop />
+                  </main>
+                </div>
               </div>
-            </div>
-            {showGithub && <GithubWidget onClose={() => setShowGithub(false)} />}
-            <Toaster />
-          </SidebarProvider>
-        </TooltipProvider>
+              {showGithub && <GithubWidget onClose={() => setShowGithub(false)} />}
+              <Toaster />
+            </SidebarProvider>
+          </TooltipProvider>
+        </AuthProvider>
       </ThemeProvider>
     </QueryClientProvider>
   );

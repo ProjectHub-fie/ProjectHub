@@ -14,10 +14,19 @@ DATABASE_URL=postgresql://username:password@host:port/database?sslmode=require
 SESSION_SECRET=your-very-long-random-secret-string-at-least-32-characters
 ```
 
-### Email Service (Optional but recommended)
+### Email Service — Mailjet (required for password reset and the contact form)
 ```
-RESEND_API_KEY=re_your_resend_api_key_here
+# Server-side only. Never prefix these with VITE_.
+MJ_APIKEY_PUBLIC=your-mailjet-public-key
+MJ_APIKEY_PRIVATE=your-mailjet-private-key
+MJ_SENDER_EMAIL=no-reply@your-validated-domain.com
+MJ_SENDER_NAME=ProjectHub
 ```
+
+`MJ_SENDER_EMAIL` must be an address (or domain) Mailjet has validated under
+Senders & Domains, or every send is rejected with `send-0003`. Set
+`APP_ORIGIN` so reset links point at the production domain rather than a preview
+host.
 
 ### Captcha (Optional but recommended for production)
 ```
@@ -34,8 +43,7 @@ DISCORD_CALLBACK_URL=https://your-domain.vercel.app/api/auth/discord/callback
 
 ### Application URLs
 ```
-NEXT_PUBLIC_APP_URL=https://your-domain.vercel.app
-VERCEL_URL=https://your-domain.vercel.app
+APP_ORIGIN=https://your-domain.vercel.app
 ```
 
 ## Common Issues and Solutions
@@ -48,14 +56,14 @@ VERCEL_URL=https://your-domain.vercel.app
 - Ensure `SESSION_SECRET` is set and is sufficiently random
 - Check that `DATABASE_URL` is correct and accessible
 - Verify cookie settings in browser developer tools
-- Make sure `NEXT_PUBLIC_APP_URL` matches your actual Vercel domain
+- Make sure `APP_ORIGIN` matches your actual Vercel domain, or the signed cookie and reset links point at the wrong host
 
 ### 2. CORS Errors
 
 **Symptoms**: Browser console shows CORS errors during authentication
 
 **Solutions**:
-- Ensure `NEXT_PUBLIC_APP_URL` is set correctly
+- Ensure `APP_ORIGIN` is set correctly
 - Check that the API routes are properly configured for CORS
 - Verify that `Access-Control-Allow-Credentials` is set to `true`
 
