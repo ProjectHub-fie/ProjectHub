@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -403,9 +404,8 @@ export default function LoginPage() {
                       <FormItem>
                         <FormLabel className="text-foreground">Password</FormLabel>
                         <FormControl>
-                          <Input
+                          <PasswordInput
                             {...field}
-                            type="password"
                             className="bg-background border-input text-foreground"
                             placeholder="Enter your password"
                             data-testid="input-login-password"
@@ -529,9 +529,8 @@ export default function LoginPage() {
                                 <FormItem>
                                   <FormLabel className="text-foreground">New Password</FormLabel>
                                   <FormControl>
-                                    <Input
+                                    <PasswordInput
                                       {...field}
-                                      type="password"
                                       className="bg-background border-input text-foreground"
                                       placeholder="Enter your new password"
                                       data-testid="input-new-password"
@@ -549,9 +548,8 @@ export default function LoginPage() {
                                 <FormItem>
                                   <FormLabel className="text-foreground">Confirm Password</FormLabel>
                                   <FormControl>
-                                    <Input
+                                    <PasswordInput
                                       {...field}
-                                      type="password"
                                       className="bg-background border-input text-foreground"
                                       placeholder="Confirm your new password"
                                       data-testid="input-confirm-password"
@@ -645,9 +643,8 @@ export default function LoginPage() {
                       <FormItem>
                         <FormLabel className="text-foreground">Password</FormLabel>
                         <FormControl>
-                          <Input
+                          <PasswordInput
                             {...field}
-                            type="password"
                             className="bg-background border-input text-foreground"
                             placeholder="Create a password"
                             data-testid="input-register-password"

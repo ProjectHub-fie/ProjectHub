@@ -3,6 +3,7 @@ import { queryClient, apiRequest } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -326,12 +327,11 @@ export default function AdminInfo() {
                           <Label htmlFor="new-password" className="text-right">
                             New Password {/* 新密码 / New Password */}
                           </Label>
-                          <Input
+                          <PasswordInput
                             id="new-password"
                             value={newPassword}
                             onChange={(e) => setNewPassword(e.target.value)}
                             className="col-span-3"
-                            type="password"
                             placeholder="Enter new password"
                           />
                         </div>
@@ -339,12 +339,11 @@ export default function AdminInfo() {
                           <Label htmlFor="confirm-password" className="text-right">
                             Confirm Password {/* 确认密码 / Confirm Password */}
                           </Label>
-                          <Input
+                          <PasswordInput
                             id="confirm-password"
                             value={confirmNewPassword}
                             onChange={(e) => setConfirmNewPassword(e.target.value)}
                             className="col-span-3"
-                            type="password"
                             placeholder="Confirm new password"
                           />
                         </div>

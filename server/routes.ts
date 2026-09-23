@@ -9,7 +9,8 @@ import connectPgSimple from "connect-pg-simple";
 import { sql } from 'drizzle-orm';
 import * as z from 'zod';
 import {
-  sendEmail,
+  sendPasswordResetEmail,
+  sendPublicEmail,
   contactRecipient,
   resolveOrigin,
   passwordResetEmail,
@@ -272,7 +273,7 @@ export async function registerRoutes(expressApp: any): Promise<Server> {
           ? `${origin}/reset-password?email=${encodeURIComponent(email)}&token=${encodeURIComponent(resetToken)}`
           : null;
         const { subject, html, text } = passwordResetEmail(resetToken, resetUrl);
-        const result = await sendEmail({ to: email, subject, html, text });
+        const result = await sendPasswordResetEmail({ to: email, subject, html, text });
 
         if (!result.sent) {
           const reason =
@@ -549,8 +550,8 @@ export async function registerRoutes(expressApp: any): Promise<Server> {
         }
       }
 
-      // Send the notification through the shared Mailjet utility. The Mailjet
-      // credentials live only on the server, and `sendEmail` reports a real
+      // Send the notification through the shared Resend utility. The Resend
+      // key lives only on the server, and `sendPublicEmail` reports a real
       // success/failure instead of assuming a send happened.
       const ownerEmail = contactRecipient();
       const { subject: mailSubject, html, text } = contactNotificationEmail({
@@ -560,7 +561,7 @@ export async function registerRoutes(expressApp: any): Promise<Server> {
         message,
       });
 
-      const emailResult = await sendEmail({
+      const emailResult = await sendPublicEmail({
         to: ownerEmail,
         subject: mailSubject,
         html,
@@ -569,7 +570,7 @@ export async function registerRoutes(expressApp: any): Promise<Server> {
       });
 
       if (!emailResult.sent) {
-        console.error('Contact form email failed:', emailResult.status, emailResult.errorMessage);
+        console.error('Contact form email failed:', emailResult.reason, emailResult.errorMessage);
         return res.status(502).json({ message: "Failed to send email" });
       }
 

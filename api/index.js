@@ -6,7 +6,10 @@ import { DatabaseStorage } from './lib/storage.js';
 import { describeDbError } from './lib/db.js';
 import {
   isEmailConfigured,
-  sendEmail,
+  isPasswordResetEmailConfigured,
+  isPublicEmailConfigured,
+  sendPasswordResetEmail,
+  sendPublicEmail,
   resolveOrigin,
   contactRecipient,
   passwordResetEmail,
@@ -238,7 +241,13 @@ export default async function handler(request, response) {
         return response.status(200).json({
           status: 'ok',
           database: 'connected',
+          // Reported per transport: password reset runs on Mailjet, public
+          // mail on Resend, so one being missing must not read as the other.
           email: isEmailConfigured() ? 'configured' : 'not_configured',
+          emailProviders: {
+            passwordReset: isPasswordResetEmailConfigured() ? 'mailjet' : 'not_configured',
+            public: isPublicEmailConfigured() ? 'resend' : 'not_configured',
+          },
           timestamp: new Date().toISOString(),
           message: 'API is functioning properly'
         });
@@ -892,7 +901,9 @@ async function handleContactEndpoint(request, response) {
     message,
   });
 
-  const result = await sendEmail({
+  // Public/contact mail still goes through Resend; only password reset moved
+  // to Mailjet.
+  const result = await sendPublicEmail({
     to: ownerEmail,
     subject: mailSubject,
     html,
@@ -1071,10 +1082,11 @@ async function handleRecoveryEndpoint(request, response, searchParams) {
           : null;
         const { subject, html, text } = passwordResetEmail(resetToken, resetUrl);
 
-        const result = await sendEmail({ to: email, subject, html, text });
+        const result = await sendPasswordResetEmail({ to: email, subject, html, text });
 
         logAuth('recovery.forgot', {
           outcome: result.sent ? 'sent' : 'send_failed',
+          provider: 'mailjet',
           mailjetStatus: result.status,
           mailjetError: result.errorCode,
         });

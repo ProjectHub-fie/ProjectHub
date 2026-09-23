@@ -1,16 +1,23 @@
 import crypto from 'node:crypto';
+import { Resend } from 'resend';
 
 /**
- * Shared Mailjet mailer for the serverless API and the Express server.
+ * Shared mail utilities for the serverless API and the Express server.
  *
- * Mail is sent through Mailjet's Email Send API v3.1 over Basic auth. The HTTP
- * call is made server-side only: the private key is read from the environment
- * and never leaves this module, so no credential can reach Vite/browser code.
+ * Two transports, deliberately, because the two flows have different needs:
  *
- * `isEmailConfigured()` is the gate callers must treat as authoritative. A
- * silent no-op here is indistinguishable from success to the caller, which is
- * exactly the bug that let the recovery form report "instructions sent" while
- * nothing was ever delivered.
+ *   - **Password reset** goes through Mailjet's Email Send API v3.1 over Basic
+ *     auth. It is the flow that was broken and the one Mailjet now owns.
+ *   - **Public/contact email** keeps using Resend, unchanged.
+ *
+ * Both run server-side only: credentials are read from the environment and
+ * never leave this module, so no key can reach Vite/browser code.
+ *
+ * Each transport has its own "is it configured" gate and its own sender. They
+ * are deliberately not collapsed into one function — a single shared gate would
+ * let a missing Resend key silently disable password reset (and vice versa),
+ * which is the class of bug that let the recovery form report "instructions
+ * sent" while nothing was ever delivered.
  */
 
 const MAILJET_SEND_URL = 'https://api.mailjet.com/v3.1/send';
@@ -35,12 +42,17 @@ export function resolveOrigin(request) {
   return `${proto}://${host}`;
 }
 
-function senderEmail() {
+function mailjetSenderEmail() {
   return process.env.MJ_SENDER_EMAIL || '';
 }
 
-function senderName() {
+function mailjetSenderName() {
   return process.env.MJ_SENDER_NAME || 'ProjectHub';
+}
+
+/** Resend's verified sender, prefixed with a display name. */
+function resendFromAddress() {
+  return process.env.EMAIL_FROM || 'ProjectHub <onboarding@resend.dev>';
 }
 
 /**
@@ -60,13 +72,30 @@ export function contactRecipient() {
  * True only when every value Mailjet needs to accept an authenticated send is
  * present. The sender address must be one Mailjet has validated, so a missing
  * `MJ_SENDER_EMAIL` is treated as "not configured" rather than a guess.
+ *
+ * This gates password reset and nothing else — see `isPublicEmailConfigured`.
  */
-export function isEmailConfigured() {
+export function isPasswordResetEmailConfigured() {
   return Boolean(
     process.env.MJ_APIKEY_PUBLIC &&
       process.env.MJ_APIKEY_PRIVATE &&
-      senderEmail(),
+      mailjetSenderEmail(),
   );
+}
+
+/** True when Resend is configured, which is what public/contact email needs. */
+export function isPublicEmailConfigured() {
+  return Boolean(process.env.RESEND_API_KEY);
+}
+
+/**
+ * Health-check helper: whether *both* transports are ready.
+ *
+ * `/api/health` reports a single status, so it needs the conjunction; the send
+ * paths use the per-transport gates above.
+ */
+export function isEmailConfigured() {
+  return isPasswordResetEmailConfigured() && isPublicEmailConfigured();
 }
 
 function escapeHtml(value) {
@@ -285,29 +314,29 @@ export function contactNotificationEmail({ name, email, subject, message }) {
 }
 
 /**
- * Sends one message through Mailjet and reports whether it actually went out.
+ * Sends the password-reset message through Mailjet and reports whether it
+ * actually went out.
  *
  * Mailjet answers 200 for a partially failed batch (per-message `Status`), so a
  * successful HTTP status alone is not proof of delivery — the first message's
  * status is checked too. The private key is only ever placed in the
  * Authorization header and is never logged.
  */
-export async function sendEmail({ to, subject, html, text, replyTo }) {
-  if (!isEmailConfigured()) {
+export async function sendPasswordResetEmail({ to, subject, html, text }) {
+  if (!isPasswordResetEmailConfigured()) {
     console.error(
-      'Email not sent: Mailjet is not configured (MJ_APIKEY_PUBLIC / MJ_APIKEY_PRIVATE / MJ_SENDER_EMAIL)',
+      'Password reset not sent: Mailjet is not configured (MJ_APIKEY_PUBLIC / MJ_APIKEY_PRIVATE / MJ_SENDER_EMAIL)',
     );
     return { sent: false, reason: 'not_configured' };
   }
 
   const message = {
-    From: { Email: senderEmail(), Name: senderName() },
+    From: { Email: mailjetSenderEmail(), Name: mailjetSenderName() },
     To: [{ Email: to }],
     Subject: subject,
     HTMLPart: html,
   };
   if (text) message.TextPart = text;
-  if (replyTo) message.ReplyTo = { Email: replyTo };
 
   const auth = Buffer.from(
     `${process.env.MJ_APIKEY_PUBLIC}:${process.env.MJ_APIKEY_PRIVATE}`,
@@ -349,6 +378,48 @@ export async function sendEmail({ to, subject, html, text, replyTo }) {
     return { sent: true, id: entry?.To?.[0]?.MessageID };
   } catch (error) {
     console.error('Mailjet send threw:', error.message);
+    return { sent: false, reason: 'send_failed', errorMessage: error.message };
+  }
+}
+
+/**
+ * Sends public/contact email through Resend.
+ *
+ * `resend.emails.send` resolves with `{ data, error }` rather than rejecting, so
+ * a failed send has to be detected from `error`; awaiting the promise alone
+ * looks like success.
+ */
+export async function sendPublicEmail({ to, subject, html, text, replyTo }) {
+  const apiKey = process.env.RESEND_API_KEY;
+  if (!apiKey) {
+    console.error('Public email not sent: RESEND_API_KEY is not configured');
+    return { sent: false, reason: 'not_configured' };
+  }
+
+  const resend = new Resend(apiKey);
+
+  try {
+    const { data, error } = await resend.emails.send({
+      from: resendFromAddress(),
+      to,
+      subject,
+      html,
+      ...(text ? { text } : {}),
+      ...(replyTo ? { replyTo } : {}),
+    });
+
+    if (error) {
+      console.error('Resend send failed:', error.message || error);
+      return {
+        sent: false,
+        reason: 'send_failed',
+        errorMessage: error.message || String(error),
+      };
+    }
+
+    return { sent: true, id: data?.id };
+  } catch (error) {
+    console.error('Resend send threw:', error.message);
     return { sent: false, reason: 'send_failed', errorMessage: error.message };
   }
 }

@@ -14,7 +14,7 @@ DATABASE_URL=postgresql://username:password@host:port/database?sslmode=require
 SESSION_SECRET=your-very-long-random-secret-string-at-least-32-characters
 ```
 
-### Email Service — Mailjet (required for password reset and the contact form)
+### Email Service — Mailjet (password reset only)
 ```
 # Server-side only. Never prefix these with VITE_.
 MJ_APIKEY_PUBLIC=your-mailjet-public-key
@@ -27,6 +27,21 @@ MJ_SENDER_NAME=ProjectHub
 Senders & Domains, or every send is rejected with `send-0003`. Set
 `APP_ORIGIN` so reset links point at the production domain rather than a preview
 host.
+
+### Email Service — Resend (public/contact form)
+```
+# Server-side only. Never prefix with VITE_.
+RESEND_API_KEY=re_xxxxxxxxxxxxxxxx
+EMAIL_FROM=ProjectHub <no-reply@your-verified-domain.com>
+```
+
+Password reset runs on Mailjet; the public contact form runs on Resend. The two
+are independent — each has its own "configured" gate, so a missing key in one
+does not silently disable the other. `/api/health` reports them separately under
+`emailProviders`.
+
+`EMAIL_FROM` must use a domain verified in Resend, otherwise Resend rejects the
+send with a `validation_error`.
 
 ### Captcha (Optional but recommended for production)
 ```
