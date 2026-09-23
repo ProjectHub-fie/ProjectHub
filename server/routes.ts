@@ -8,8 +8,16 @@ import pg from "pg";
 import connectPgSimple from "connect-pg-simple";
 import { sql } from 'drizzle-orm';
 import * as z from 'zod';
-import { Resend } from 'resend';
-import { contactRecipient } from '../api/lib/email.js';
+import {
+  sendPasswordResetEmail,
+  sendPublicEmail,
+  contactRecipient,
+  resolveOrigin,
+  passwordResetEmail,
+  contactNotificationEmail,
+  createResetToken,
+  hashResetToken,
+} from '../api/lib/email.js';
 
 // Server-side email validation. The contact form validates too, but the browser
 // can be bypassed, so this is the check that actually holds.
@@ -79,6 +87,34 @@ function passwordProblem(value: unknown): string | null {
 
   if (missing.length) return `Password must include ${missing.join(', ')}`;
   return null;
+}
+
+/**
+ * Verifies a Cloudflare Turnstile token.
+ *
+ * Disabled when no secret is configured, matching the serverless API and the
+ * client's `captchaRequired`. Kept in step with api/index.js so the two
+ * backends accept the same submissions.
+ */
+async function verifyTurnstile(captchaToken: unknown, remoteIp: unknown): Promise<boolean> {
+  const secret = process.env.TURNSTILE_SECRET_KEY;
+  if (!secret) return true;
+
+  const body = new URLSearchParams({ secret, response: String(captchaToken || '') });
+  if (remoteIp) body.set('remoteip', String(remoteIp));
+
+  try {
+    const res = await fetch('https://challenges.cloudflare.com/turnstile/v0/siteverify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body,
+    });
+    const data = await res.json();
+    return Boolean(data.success);
+  } catch (error: any) {
+    console.error('Turnstile verification error:', error.message);
+    return false;
+  }
 }
 
 // Extend Express Request type to include user
@@ -204,6 +240,98 @@ export async function registerRoutes(expressApp: any): Promise<Server> {
   });
 
   expressApp.get('/api/auth/me', requireAuth, (req: any, res: any) => res.json({ user: req.user }));
+
+  /* -----------------------------------------------------------------------
+     Password recovery.
+
+     Mirrors api/index.js so the dev server behaves like production: the token
+     is stored as a hash, mail goes out through Mailjet, and the response never
+     reveals whether the address exists.
+  ----------------------------------------------------------------------- */
+  const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
+
+  async function handleForgotPassword(req: any, res: any) {
+    const { email, captchaToken } = req.body || {};
+    if (!email) return res.status(400).json({ message: 'Email is required' });
+
+    const problem = emailProblem(email);
+    if (problem) return res.status(400).json({ message: problem });
+
+    if (!(await verifyTurnstile(captchaToken, req.headers['x-forwarded-for']))) {
+      return res.status(400).json({ message: 'Captcha verification failed' });
+    }
+
+    try {
+      const user = await storage.getUserByEmail(email);
+      if (user) {
+        const resetToken = createResetToken();
+        const expiry = new Date(Date.now() + RESET_TOKEN_TTL_MS);
+        await storage.updateUserResetToken(user.id, hashResetToken(resetToken), expiry);
+
+        const origin = resolveOrigin(req);
+        const resetUrl = origin
+          ? `${origin}/reset-password?email=${encodeURIComponent(email)}&token=${encodeURIComponent(resetToken)}`
+          : null;
+        const { subject, html, text } = passwordResetEmail(resetToken, resetUrl);
+        const result = await sendPasswordResetEmail({ to: email, subject, html, text });
+
+        if (!result.sent) {
+          const reason =
+            result.reason === 'not_configured'
+              ? 'Email is not configured on the server'
+              : 'Failed to send the reset email';
+          return res.status(502).json({ message: reason });
+        }
+      }
+
+      // Same answer whether or not the account exists: the form must not be
+      // usable to enumerate registered addresses.
+      return res.json({ message: 'Password reset instructions sent to your email' });
+    } catch (error: any) {
+      console.error('Forgot password error:', error.message);
+      return res.status(500).json({ message: 'Failed to process password reset request' });
+    }
+  }
+
+  async function handleResetPassword(req: any, res: any) {
+    const { token, newPassword, email } = req.body || {};
+    if (!token || !newPassword) {
+      return res.status(400).json({ message: 'Token and new password are required' });
+    }
+
+    if (typeof newPassword !== 'string' || newPassword.length < PASSWORD_MIN_LENGTH) {
+      return res
+        .status(400)
+        .json({ message: `Password must be at least ${PASSWORD_MIN_LENGTH} characters long` });
+    }
+
+    const problem = passwordProblem(newPassword);
+    if (problem) return res.status(400).json({ message: problem });
+
+    try {
+      const user = await storage.getUserByResetToken(hashResetToken(token));
+      if (!user || !user.resetTokenExpiry || new Date() > user.resetTokenExpiry) {
+        return res.status(400).json({ message: 'Invalid or expired reset token' });
+      }
+      if (email && user.email && String(email).toLowerCase() !== user.email.toLowerCase()) {
+        return res.status(400).json({ message: 'Invalid or expired reset token' });
+      }
+
+      const hashedPassword = await bcrypt.hash(newPassword, 12);
+      await storage.resetUserPassword(user.id, hashedPassword);
+      return res.json({ message: 'Password reset successfully' });
+    } catch (error: any) {
+      console.error('Reset password error:', error.message);
+      return res.status(500).json({ message: 'Failed to reset password' });
+    }
+  }
+
+  expressApp.post('/api/auth/forgot-password', handleForgotPassword);
+  expressApp.post('/api/auth/reset-password', handleResetPassword);
+  expressApp.post('/api/auth/recovery', async (req: any, res: any) => {
+    if (req.query?.action === 'reset') return handleResetPassword(req, res);
+    return handleForgotPassword(req, res);
+  });
 
   /* -----------------------------------------------------------------------
      Discord OAuth2 (mirrors the serverless implementation in api/index.js so
@@ -422,42 +550,31 @@ export async function registerRoutes(expressApp: any): Promise<Server> {
         }
       }
 
-      // Send email using Resend
-      const resendApiKey = process.env.RESEND_API_KEY;
-      if (!resendApiKey) {
-        console.error('RESEND_API_KEY is not configured');
-        return res.status(500).json({ message: "Email service is not configured" });
-      }
-
-      const resend = new Resend(resendApiKey);
-
-      // `onboarding@resend.dev` is Resend's shared test sender: it only delivers
-      // to the address that owns the API key and silently reports success for
-      // anything else. That makes it a poor default for real traffic, so the
-      // sender and recipient are configurable, with local-development fallbacks.
+      // Send the notification through the shared Resend utility. The Resend
+      // key lives only on the server, and `sendPublicEmail` reports a real
+      // success/failure instead of assuming a send happened.
       const ownerEmail = contactRecipient();
-      const fromAddress = process.env.EMAIL_FROM || 'Contact Form <onboarding@resend.dev>';
-      
-      const emailResult = await resend.emails.send({
-        from: fromAddress,
-        to: ownerEmail,
-        replyTo: email,
-        subject: `New Contact Form Submission: ${subject}`,
-        html: `
-          <h2>New Contact Form Submission</h2>
-          <p><strong>From:</strong> ${name} (${email})</p>
-          <p><strong>Subject:</strong> ${subject}</p>
-          <h3>Message:</h3>
-          <p>${message.replace(/\n/g, '<br>')}</p>
-        `
+      const { subject: mailSubject, html, text } = contactNotificationEmail({
+        name,
+        email,
+        subject,
+        message,
       });
 
-      if (emailResult.error) {
-        console.error('Email sending error:', emailResult.error);
-        return res.status(500).json({ message: "Failed to send email" });
+      const emailResult = await sendPublicEmail({
+        to: ownerEmail,
+        subject: mailSubject,
+        html,
+        text,
+        replyTo: email,
+      });
+
+      if (!emailResult.sent) {
+        console.error('Contact form email failed:', emailResult.reason, emailResult.errorMessage);
+        return res.status(502).json({ message: "Failed to send email" });
       }
 
-      console.log('Contact form email sent successfully:', emailResult.data);
+      console.log('Contact form email sent successfully');
       res.json({ message: "Message sent successfully" });
     } catch (error: any) {
       console.error('Contact endpoint error:', error);

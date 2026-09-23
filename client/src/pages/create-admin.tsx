@@ -17,6 +17,7 @@ import {
   FormMessage,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Select,
@@ -136,7 +137,7 @@ export default function CreateAdmin() {
                   <FormItem>
                     <FormLabel>Password (Confirmation)</FormLabel>
                     <FormControl>
-                      <Input type="password" {...field} data-testid="input-new-admin-password" />
+                      <PasswordInput {...field} data-testid="input-new-admin-password" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>

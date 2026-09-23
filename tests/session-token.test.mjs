@@ -59,6 +59,21 @@ test('a missing session header is unauthenticated', async () => {
   assert.equal(state.status, 401);
 });
 
+test('session endpoints are never cacheable', async () => {
+  // Vercel answers a function with `public, max-age=0, must-revalidate` by
+  // default. A shared cache may still store that and serve one visitor's
+  // signed-in body to the next caller, so every identity route opts out.
+  const state = await callHandler(handler, 'GET', '/api/auth/me');
+
+  const cacheControl = state.headers['cache-control'] || '';
+  assert.match(cacheControl, /no-store/, 'a per-visitor response must not be stored');
+  assert.match(cacheControl, /private/, 'and must not be shared');
+  assert.match(state.headers['vary'] || '', /Cookie/i, 'the response varies by session cookie');
+
+  // The header is set before the handler runs, so it is present even on 401.
+  assert.equal(state.status, 401);
+});
+
 test('login without credentials is rejected before any database work', async () => {
   const state = await callHandler(handler, 'POST', '/api/auth/login', { body: {} });
   assert.equal(state.status, 400);

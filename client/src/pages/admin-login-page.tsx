@@ -3,6 +3,7 @@ import { useMutation } from "@tanstack/react-query";
 import { apiRequest, queryClient } from "@/lib/queryClient";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { ADMIN_UNAUTHORIZED_PARAM } from "@/lib/admin-routes";
@@ -108,8 +109,7 @@ export default function AdminLoginPage() {
                 autoComplete="off"
                 required
               />
-              <Input
-                type="password"
+              <PasswordInput
                 placeholder="Enter admin password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}

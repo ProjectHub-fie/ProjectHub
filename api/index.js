@@ -6,14 +6,28 @@ import { DatabaseStorage } from './lib/storage.js';
 import { describeDbError } from './lib/db.js';
 import {
   isEmailConfigured,
-  sendEmail,
-  appOrigin,
+  isPasswordResetEmailConfigured,
+  isPublicEmailConfigured,
+  sendPasswordResetEmail,
+  sendPublicEmail,
+  resolveOrigin,
   contactRecipient,
   passwordResetEmail,
   contactNotificationEmail,
+  createResetToken,
+  hashResetToken,
 } from './lib/email.js';
 import bcrypt from 'bcryptjs';
 import crypto from 'node:crypto';
+import {
+  signSessionToken,
+  readSessionToken,
+  publicUser,
+  parseCookies,
+  sessionCookie,
+  clearedSessionCookie,
+  sessionTokenFrom,
+} from './lib/session-token.js';
 
 // Server-side email validation. The form validates too, but the browser is
 // trivially bypassed, so this is the check that actually holds.
@@ -109,67 +123,57 @@ function applyCors(request, response) {
   response.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-User-Session');
 }
 
-function hmac(value) {
-  const secret = process.env.SESSION_SECRET;
-  if (!secret) throw new Error('SESSION_SECRET must be set');
-  return crypto.createHmac('sha256', secret).update(value).digest('base64url');
+/**
+ * Marks a response as private.
+ *
+ * Vercel's default for a function response is `public, max-age=0,
+ * must-revalidate`, which lets a shared CDN cache it. Auth responses are
+ * per-visitor, so caching one publicly can serve a signed-in body to the next
+ * anonymous caller (or vice versa) — the root of the "logged in but the app
+ * does not recognise me" report after a Discord redirect. Every endpoint that
+ * reads or writes identity is therefore explicitly `no-store`.
+ */
+function markPrivate(response) {
+  response.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, private');
+  response.setHeader('Pragma', 'no-cache');
+  response.setHeader('Vary', 'Cookie, Authorization, X-User-Session');
 }
 
 /**
- * How long a signed session token stays valid.
- *
- * Without this the tokens were valid forever: a token copied out of a browser
- * could be replayed indefinitely, and there was no way to expire a session
- * short of rotating SESSION_SECRET (which invalidates every user at once).
+ * Public-page responses may be cached briefly at the edge; private ones may not.
+ * A no-op for anything that already called `markPrivate`.
  */
-const SESSION_TTL_MS = Number(process.env.SESSION_TTL_DAYS || 30) * 24 * 60 * 60 * 1000;
-
-/**
- * Session tokens are an HMAC-signed payload, not a raw base64 blob.
- *
- * The old format was `base64(JSON)` that anyone could mint for an arbitrary
- * user id; signing it makes the token unforgeable without the server secret.
- * The expiry is inside the signed payload so it cannot be extended by editing
- * the token.
- */
-function signSessionToken(user) {
-  const issuedAt = Date.now();
-  const payload = Buffer.from(JSON.stringify({
-    id: user.id,
-    email: user.email,
-    firstName: user.firstName,
-    lastName: user.lastName,
-    iat: issuedAt,
-    exp: issuedAt + SESSION_TTL_MS,
-  })).toString('base64url');
-
-  return `${payload}.${hmac(payload)}`;
-}
-
-/**
- * Returns the token payload, or null when the token is missing, tampered with
- * or expired.
- */
-function readSessionToken(token) {
-  if (!token || typeof token !== 'string') return null;
-
-  const [payload, signature] = token.split('.');
-  if (!payload || !signature) return null;
-
-  const expected = hmac(payload);
-  const a = Buffer.from(signature);
-  const b = Buffer.from(expected);
-  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
-
-  try {
-    const parsed = JSON.parse(Buffer.from(payload, 'base64url').toString());
-    // A signature proves we issued the payload, not that it is still current.
-    if (typeof parsed?.exp !== 'number' || Date.now() > parsed.exp) return null;
-    return parsed;
-  } catch {
-    return null;
+function markPublic(response, seconds = 60) {
+  if (!response.getHeader?.('Cache-Control')) {
+    response.setHeader('Cache-Control', `public, max-age=0, s-maxage=${seconds}, must-revalidate`);
   }
 }
+
+/**
+ * Records a safe diagnostic line for an authentication attempt.
+ *
+ * Only identifiers that are already non-secret are emitted; tokens, secrets,
+ * authorization codes and cookies are never passed here.
+ */
+function logAuth(event, fields = {}) {
+  const parts = Object.entries(fields)
+    .filter(([, value]) => value !== undefined)
+    .map(([key, value]) => `${key}=${typeof value === 'string' ? value : JSON.stringify(value)}`);
+  console.log(`[auth] ${event}${parts.length ? ` ${parts.join(' ')}` : ''}`);
+}
+
+/**
+ * The user shape sent to the client is defined alongside the session token in
+ * ./lib/session-token.js so every backend returns the same fields.
+ */
+
+/**
+ * How long a password-reset token stays valid.
+ *
+ * Only the SHA-256 hash is stored, so a token read out of the database cannot be
+ * replayed. One hour is short enough that a leaked email is of limited use.
+ */
+const RESET_TOKEN_TTL_MS = 60 * 60 * 1000;
 
 async function readJsonBody(request) {
   if (!request.headers['content-type']?.includes('application/json')) return {};
@@ -215,6 +219,15 @@ export default async function handler(request, response) {
     return response.status(200).end();
   }
 
+  // Identity-bearing endpoints must never be cached by a shared cache. The
+  // default Vercel policy is `public, max-age=0, must-revalidate`, which a CDN
+  // may still store and replay across visitors.
+  const isAuthPath =
+    path.startsWith('/api/auth/') ||
+    path.startsWith('/api/admin/') ||
+    path === '/api/project-requests';
+  if (isAuthPath) markPrivate(response);
+
   try {
     // Health check endpoint.
     //
@@ -228,6 +241,13 @@ export default async function handler(request, response) {
         return response.status(200).json({
           status: 'ok',
           database: 'connected',
+          // Reported per transport: password reset runs on Mailjet, public
+          // mail on Resend, so one being missing must not read as the other.
+          email: isEmailConfigured() ? 'configured' : 'not_configured',
+          emailProviders: {
+            passwordReset: isPasswordResetEmailConfigured() ? 'mailjet' : 'not_configured',
+            public: isPublicEmailConfigured() ? 'resend' : 'not_configured',
+          },
           timestamp: new Date().toISOString(),
           message: 'API is functioning properly'
         });
@@ -258,12 +278,31 @@ export default async function handler(request, response) {
       return handleRecoveryEndpoint(request, response, new URLSearchParams({ action: 'reset' }));
     }
 
-    // Discord OAuth: begin and complete the handshake.
+    // OAuth callback paths must resolve before the generic `/api/auth/`
+    // catch-all below, which would otherwise answer them with
+    // "Auth endpoint not found". This ordering is what silently broke the
+    // Discord handshake: Discord redirected to /api/auth/discord/callback with
+    // a valid `code`, but no handler ran, so no session was ever established.
+    if (path === '/api/auth/discord/callback') {
+      return handleDiscordCallback(request, response);
+    }
     if (path === '/api/auth/discord') {
       return handleDiscordStart(request, response);
     }
-    if (path === '/api/auth/discord/callback') {
-      return handleDiscordCallback(request, response);
+    if (path === '/api/auth/callback') {
+      const code = searchParams.get('code');
+      const state = searchParams.get('state');
+      const error = searchParams.get('error');
+
+      if (error) {
+        return response.redirect(`/login?error=${encodeURIComponent(error)}`);
+      }
+      if (!code) {
+        return response.redirect('/login?error=missing_code');
+      }
+
+      const redirectUrl = `/login?code=${encodeURIComponent(code)}${state ? `&state=${encodeURIComponent(state)}` : ''}`;
+      return response.redirect(redirectUrl);
     }
 
     // Auth endpoints
@@ -283,30 +322,13 @@ export default async function handler(request, response) {
 
     // Projects list endpoint
     if (path === '/api/projects') {
+      markPublic(response);
       return handleProjectsListEndpoint(request, response);
     }
 
     // Projects detail + interactions endpoints
     if (path.startsWith('/api/projects/')) {
       return handleProjectsEndpoints(request, response, path, searchParams);
-    }
-
-    // Auth callback handler
-    if (path === '/api/auth/callback') {
-      const code = searchParams.get('code');
-      const state = searchParams.get('state');
-      const error = searchParams.get('error');
-
-      if (error) {
-        return response.redirect(`/login?error=${encodeURIComponent(error)}`);
-      }
-
-      if (!code) {
-        return response.redirect('/login?error=missing_code');
-      }
-
-      const redirectUrl = `/login?code=${encodeURIComponent(code)}${state ? `&state=${encodeURIComponent(state)}` : ''}`;
-      return response.redirect(redirectUrl);
     }
 
     // Reset password handler
@@ -360,6 +382,9 @@ const DISCORD_API = 'https://discord.com/api/v10';
  *  authorize redirect and the callback. */
 const DISCORD_VERIFIER_COOKIE = 'discord_code_verifier';
 
+/** Signed OAuth `state`, mirrored in a cookie as a fallback to the query param. */
+const DISCORD_STATE_COOKIE = 'discord_oauth_state';
+
 function discordRedirectUri() {
   return (
     process.env.DISCORD_CALLBACK_URL ||
@@ -372,31 +397,44 @@ function isAbsoluteDiscordRedirect(uri) {
   return /^https?:\/\/[^/]+/i.test(uri || '');
 }
 
-function parseCookies(request) {
-  const header = request.headers?.cookie || '';
-  const cookies = {};
-  for (const part of header.split(';')) {
-    const separator = part.indexOf('=');
-    if (separator === -1) continue;
-    const name = part.slice(0, separator).trim();
-    if (!name) continue;
-    cookies[name] = decodeURIComponent(part.slice(separator + 1).trim());
-  }
-  return cookies;
+function parseRequestCookies(request) {
+  return parseCookies(request.headers?.cookie || '');
 }
 
-function setCookie(response, name, value, maxAgeSeconds) {
-  const attributes = [
-    `${name}=${encodeURIComponent(value)}`,
-    'Path=/',
-    'HttpOnly',
-    'SameSite=Lax',
-    `Max-Age=${maxAgeSeconds}`,
-  ];
+/** Appends a `Set-Cookie` value without clobbering one already queued. */
+function appendCookie(response, value) {
+  const existing = response.getHeader?.('Set-Cookie');
+  const list = existing
+    ? Array.isArray(existing)
+      ? [...existing, value]
+      : [existing, value]
+    : [value];
+  response.setHeader('Set-Cookie', list);
+}
+
+/**
+ * Sets one cookie on the response.
+ *
+ * A signed session token is written as the `projecthub_session` cookie so a
+ * top-level OAuth redirect — Discord sends the browser straight to the callback
+ * — carries the session into the next document, where a URL fragment would not.
+ */
+function setSessionCookie(response, token) {
+  appendCookie(response, sessionCookie(token));
+}
+
+/** Removes the session cookie so a logout cannot be replayed from it. */
+function clearVisitorCookie(response) {
+  appendCookie(response, clearedSessionCookie());
+}
+
+/** Sets a short-lived helper cookie for the OAuth handshake. */
+function setHelperCookie(response, name, value, maxAgeSeconds) {
+  const attributes = ['Path=/', 'HttpOnly', 'SameSite=Lax', `Max-Age=${maxAgeSeconds}`];
   if (process.env.APP_ORIGIN?.startsWith('https') || process.env.NODE_ENV === 'production') {
     attributes.push('Secure');
   }
-  response.setHeader('Set-Cookie', attributes.join('; '));
+  appendCookie(response, `${name}=${encodeURIComponent(value)}; ${attributes.join('; ')}`);
 }
 
 /**
@@ -410,6 +448,12 @@ function createPkcePair() {
   return { verifier, challenge };
 }
 
+/**
+ * Discord avatar URL derived from the id and avatar hash.
+ *
+ * `profile.avatar` is Discord's own hash, not a user-supplied string, so the
+ * URL is computed here rather than trusting anything from the client.
+ */
 function discordAvatarUrl(profile) {
   if (!profile.avatar) return null;
   return `https://cdn.discordapp.com/avatars/${profile.id}/${profile.avatar}.png`;
@@ -418,26 +462,31 @@ function discordAvatarUrl(profile) {
 function handleDiscordStart(request, response) {
   const clientId = process.env.DISCORD_CLIENT_ID;
   if (!clientId) {
+    logAuth('discord.start', { outcome: 'not_configured' });
     return response.status(503).json({ message: 'Discord login is not configured' });
   }
 
   const redirectUri = discordRedirectUri();
   if (!isAbsoluteDiscordRedirect(redirectUri)) {
     // A relative or empty redirect_uri can never match Discord's allow-list.
+    logAuth('discord.start', { outcome: 'redirect_not_configured', redirectUri: redirectUri || '(empty)' });
     return response.redirect('/login?discord=error&reason=redirect_not_configured');
   }
 
   const { verifier, challenge } = createPkcePair();
-  setCookie(response, DISCORD_VERIFIER_COOKIE, verifier, 600);
+  setHelperCookie(response, DISCORD_VERIFIER_COOKIE, verifier, 600);
 
   // `state` is a signed nonce so the callback can reject a handshake this
-  // deployment did not initiate (CSRF protection for the OAuth flow).
+  // deployment did not initiate (CSRF protection for the OAuth flow). It is
+  // mirrored in a cookie so the value is still available if Discord's redirect
+  // drops query parameters a proxy rewrote.
   const state = signSessionToken({
     id: `discord:${Date.now()}`,
     email: null,
     firstName: null,
     lastName: null,
   });
+  setHelperCookie(response, DISCORD_STATE_COOKIE, state, 600);
 
   const authorizeUrl = new URL('https://discord.com/oauth2/authorize');
   authorizeUrl.searchParams.set('client_id', clientId);
@@ -448,19 +497,23 @@ function handleDiscordStart(request, response) {
   authorizeUrl.searchParams.set('code_challenge', challenge);
   authorizeUrl.searchParams.set('code_challenge_method', 'S256');
 
+  logAuth('discord.start', { outcome: 'redirect', redirectUri, scope: 'identify email' });
   return response.redirect(authorizeUrl.toString());
 }
 
 async function handleDiscordCallback(request, response) {
   const searchParams = new URL(request.url, `https://${request.headers.host}`).searchParams;
+  const cookies = parseRequestCookies(request);
 
-  // Every exit below logs. These branches used to redirect in silence, so a
-  // rotated secret or a misconfigured callback produced no server output at
-  // all and the only clue was the browser URL.
+  // Every exit below logs a safe, non-secret diagnostic. These branches used to
+  // redirect in silence, so a rotated secret or a misconfigured callback
+  // produced no server output and the only clue was the browser URL.
   const fail = (reason, detail) => {
-    console.error('Discord login failed:', reason, detail ?? '');
+    logAuth('discord.callback', { outcome: 'failed', reason, detail });
     return response.redirect(`/login?discord=error&reason=${encodeURIComponent(reason)}`);
   };
+
+  logAuth('discord.callback', { outcome: 'reached', code: Boolean(searchParams.get('code')) });
 
   const oauthError = searchParams.get('error');
   if (oauthError) {
@@ -468,7 +521,10 @@ async function handleDiscordCallback(request, response) {
   }
 
   const code = searchParams.get('code');
-  const state = searchParams.get('state');
+  // The state may arrive in the query (normal) or only in the cookie (if a
+  // proxy stripped it); either proof that this deployment started the handshake
+  // is accepted, and both are signed.
+  const state = searchParams.get('state') || cookies[DISCORD_STATE_COOKIE];
   if (!code) return fail('missing_code');
   if (!state || !readSessionToken(state)) {
     return fail('invalid_state', 'state missing, unsigned, or expired');
@@ -477,7 +533,7 @@ async function handleDiscordCallback(request, response) {
   const clientId = process.env.DISCORD_CLIENT_ID;
   const clientSecret = process.env.DISCORD_CLIENT_SECRET;
   if (!clientId || !clientSecret) {
-    return fail('not_configured', `clientId=${!!clientId} clientSecret=${!!clientSecret}`);
+    return fail('not_configured', `clientId=${Boolean(clientId)} clientSecret=${Boolean(clientSecret)}`);
   }
 
   const redirectUri = discordRedirectUri();
@@ -485,7 +541,7 @@ async function handleDiscordCallback(request, response) {
     return fail('redirect_not_configured', `resolved redirect_uri=${redirectUri || '(empty)'}`);
   }
 
-  const codeVerifier = parseCookies(request)[DISCORD_VERIFIER_COOKIE];
+  const codeVerifier = cookies[DISCORD_VERIFIER_COOKIE];
   if (!codeVerifier) {
     return fail('missing_verifier', 'PKCE cookie absent: sign-in began in another browser or tab');
   }
@@ -509,7 +565,10 @@ async function handleDiscordCallback(request, response) {
       // is the secret, the redirect URI or the verifier. The request body is
       // never logged: it carries client_secret.
       const detail = await tokenRes.json().catch(() => ({}));
-      return fail('token_exchange', `${tokenRes.status} ${detail.error || ''} ${detail.error_description || ''}`);
+      return fail(
+        'token_exchange',
+        `status=${tokenRes.status} error=${detail.error || 'n/a'} description=${detail.error_description || 'n/a'}`,
+      );
     }
 
     const { access_token: accessToken } = await tokenRes.json();
@@ -525,19 +584,27 @@ async function handleDiscordCallback(request, response) {
     const displayName = profile.global_name || profile.username || 'Discord User';
 
     // Match on the immutable Discord id first, then fall back to email so an
-    // existing password account gets linked instead of duplicated.
+    // existing password account gets linked instead of duplicated. Without the
+    // id lookup first, every callback created a new row.
     let user = await storage.getUserBySocialId('discord', profile.id);
+    const matchedBy = user ? 'discord_id' : null;
     if (!user && profile.email) {
       user = await storage.getUserByEmail(profile.email);
     }
 
     if (user) {
+      logAuth('discord.user_lookup', {
+        outcome: 'existing',
+        matchedBy: matchedBy || 'email',
+        userId: user.id,
+      });
       user = await storage.upsertUser({
         id: user.id,
         discordId: profile.id,
         profileImageUrl: user.profileImageUrl || discordAvatarUrl(profile),
       });
     } else {
+      logAuth('discord.user_lookup', { outcome: 'create' });
       user = await storage.upsertUser({
         email: profile.email || null,
         firstName: displayName,
@@ -547,12 +614,28 @@ async function handleDiscordCallback(request, response) {
       });
     }
 
+    if (!user?.id) {
+      return fail('user_upsert', 'the local user could not be created or resolved');
+    }
+
+    // Establish the same session a password login does: a signed token. It is
+    // written to an HttpOnly cookie *and* handed to the client so whichever
+    // transport the next request uses resolves to this same user.
     const sessionToken = signSessionToken(user);
-    // The token travels in the URL fragment so it is never sent to the server
-    // or logged; the client stores it exactly like a password login.
-    return response.redirect(`/login?discord=success#token=${encodeURIComponent(sessionToken)}`);
+    setSessionCookie(response, sessionToken);
+    // The PKCE/state cookies have served their purpose; drop them.
+    setHelperCookie(response, DISCORD_VERIFIER_COOKIE, '', 0);
+    setHelperCookie(response, DISCORD_STATE_COOKIE, '', 0);
+
+    logAuth('discord.session', {
+      outcome: 'created',
+      userId: user.id,
+      redirectTo: '/dashboard',
+    });
+
+    return response.redirect('/dashboard');
   } catch (error) {
-    console.error('Discord callback error:', error);
+    logAuth('discord.callback', { outcome: 'unexpected', detail: error.message });
     return response.redirect('/login?discord=error&reason=unexpected');
   }
 }
@@ -564,32 +647,37 @@ async function handleAuthEndpoints(request, response, path) {
   switch (endpoint) {
     case 'me':
       if (request.method === 'GET') {
-        // Check for session token
-        const sessionToken = request.headers['x-user-session'];
-        if (sessionToken) {
-          const userData = readSessionToken(sessionToken);
-
-          if (userData?.id) {
-            try {
-              const user = await storage.getUser(userData.id);
-              if (user) {
-                return response.status(200).json({
-                  user: {
-                    id: user.id,
-                    email: user.email,
-                    firstName: user.firstName,
-                    lastName: user.lastName,
-                    profileImageUrl: user.profileImageUrl
-                  }
-                });
-              }
-            } catch (error) {
-              console.error('Auth me lookup failed:', error.message);
-              return response.status(503).json({ message: 'Service temporarily unavailable' });
-            }
-          }
+        // The token may arrive as the SPA header or as the cookie the OAuth
+        // callback set; both are the same signed session.
+        const sessionToken = sessionTokenFrom(request.headers);
+        if (!sessionToken) {
+          return response.status(401).json({ message: 'Not authenticated' });
         }
-        return response.status(401).json({ message: 'Not authenticated' });
+
+        const userData = readSessionToken(sessionToken);
+        if (!userData?.id) {
+          logAuth('me', { outcome: 'invalid_token' });
+          return response.status(401).json({ message: 'Not authenticated' });
+        }
+
+        try {
+          const user = await storage.getUser(userData.id);
+          if (!user) {
+            // The token is valid but the account is gone; drop the cookie so the
+            // browser is not left replaying a dead session.
+            clearVisitorCookie(response);
+            return response.status(401).json({ message: 'Not authenticated' });
+          }
+          if (user.isBlocked) {
+            clearVisitorCookie(response);
+            return response.status(401).json({ message: 'Your account has been blocked' });
+          }
+          logAuth('me', { outcome: 'authenticated', userId: user.id });
+          return response.status(200).json({ user: publicUser(user) });
+        } catch (error) {
+          console.error('Auth me lookup failed:', error.message);
+          return response.status(503).json({ message: 'Service temporarily unavailable' });
+        }
       }
       break;
 
@@ -608,25 +696,21 @@ async function handleAuthEndpoints(request, response, path) {
         try {
           const user = await storage.getUserByEmail(email);
           if (user?.isBlocked) {
+            logAuth('login', { outcome: 'blocked' });
             return response.status(403).json({ message: 'Your account has been blocked' });
           }
           if (user && user.password) {
             // Verify password
             const isValidPassword = await bcrypt.compare(password, user.password);
             if (isValidPassword) {
-              return response.status(200).json({
-                user: {
-                  id: user.id,
-                  email: user.email,
-                  firstName: user.firstName,
-                  lastName: user.lastName,
-                  profileImageUrl: user.profileImageUrl
-                },
-                sessionToken: signSessionToken(user)
-              });
+              const sessionToken = signSessionToken(user);
+              setSessionCookie(response, sessionToken);
+              logAuth('login', { outcome: 'success', userId: user.id });
+              return response.status(200).json({ user: publicUser(user), sessionToken });
             }
           }
 
+          logAuth('login', { outcome: 'invalid_credentials' });
           return response.status(401).json({ message: 'Invalid credentials' });
         } catch (error) {
           console.error('Login error:', error);
@@ -670,15 +754,12 @@ async function handleAuthEndpoints(request, response, path) {
             password: hashedPassword
           });
 
+          const sessionToken = signSessionToken(newUser);
+          setSessionCookie(response, sessionToken);
+          logAuth('register', { outcome: 'success', userId: newUser.id });
           return response.status(201).json({
-            user: {
-              id: newUser.id,
-              email: newUser.email,
-              firstName: newUser.firstName,
-              lastName: newUser.lastName,
-              profileImageUrl: newUser.profileImageUrl
-            },
-            sessionToken: signSessionToken(newUser)
+            user: publicUser(newUser),
+            sessionToken,
           });
         } catch (error) {
           console.error('Registration error:', error);
@@ -689,7 +770,12 @@ async function handleAuthEndpoints(request, response, path) {
 
     case 'logout':
       if (request.method === 'POST') {
-        // Tokens are stateless; the client discards its own copy.
+        // The signed token cannot be revoked server-side (there is no session
+        // table for visitor sessions), so logout must at minimum remove the
+        // cookie; the client discards its header token. Clearing the cookie is
+        // what stops an OAuth-established session from being replayed.
+        clearVisitorCookie(response);
+        logAuth('logout', { outcome: 'cleared' });
         return response.status(200).json({ message: 'Logged out successfully' });
       }
       break;
@@ -698,9 +784,8 @@ async function handleAuthEndpoints(request, response, path) {
       if (request.method === 'PATCH') {
         const body = await readJsonBody(request);
 
-        // Check for session token
-        const sessionToken = request.headers['x-user-session'];
-        const userData = readSessionToken(sessionToken);
+        // Check for session token (header or OAuth cookie)
+        const userData = readSessionToken(sessionTokenFrom(request.headers));
         if (!userData?.id) {
           return response.status(401).json({ message: 'Not authenticated' });
         }
@@ -714,15 +799,7 @@ async function handleAuthEndpoints(request, response, path) {
             profileImageUrl: body.profileImageUrl
           });
 
-          return response.status(200).json({
-            user: {
-              id: updatedUser.id,
-              email: updatedUser.email,
-              firstName: updatedUser.firstName,
-              lastName: updatedUser.lastName,
-              profileImageUrl: updatedUser.profileImageUrl
-            }
-          });
+          return response.status(200).json({ user: publicUser(updatedUser) });
         } catch (error) {
           console.error('Profile update error:', error);
           return response.status(500).json({ message: 'Failed to update profile' });
@@ -740,13 +817,8 @@ async function handleAuthEndpoints(request, response, path) {
 // Handle project requests endpoint with database integration
 async function handleProjectRequestsEndpoint(request, response) {
   if (request.method === 'GET') {
-    // Check for session token to get user's requests
-    const sessionToken = request.headers['x-user-session'];
-    if (!sessionToken) {
-      return response.status(401).json({ message: 'Not authenticated' });
-    }
-
-    const userData = readSessionToken(sessionToken);
+    // Identity comes from the header or the OAuth cookie.
+    const userData = readSessionToken(sessionTokenFrom(request.headers));
     if (!userData?.id) {
       return response.status(401).json({ message: 'Not authenticated' });
     }
@@ -769,7 +841,7 @@ async function handleProjectRequestsEndpoint(request, response) {
       return response.status(400).json({ message: 'Title and description are required' });
     }
 
-    const userData = readSessionToken(request.headers['x-user-session']);
+    const userData = readSessionToken(sessionTokenFrom(request.headers));
     if (!userData?.id) {
       return response.status(401).json({ message: 'Not authenticated' });
     }
@@ -829,7 +901,9 @@ async function handleContactEndpoint(request, response) {
     message,
   });
 
-  const result = await sendEmail({
+  // Public/contact mail still goes through Resend; only password reset moved
+  // to Mailjet.
+  const result = await sendPublicEmail({
     to: ownerEmail,
     subject: mailSubject,
     html,
@@ -870,7 +944,7 @@ async function handleProjectsEndpoints(request, response, path, searchParams) {
   const interactionsMatch = path.match(/^\/api\/projects\/([^\/]+)\/interactions$/);
   if (interactionsMatch) {
     const projectRef = interactionsMatch[1];
-    const sessionUser = readSessionToken(request.headers['x-user-session']);
+    const sessionUser = readSessionToken(sessionTokenFrom(request.headers));
 
     try {
       const project = await storage.resolveVerifiedProject(projectRef);
@@ -979,6 +1053,11 @@ async function handleRecoveryEndpoint(request, response, searchParams) {
     const { email, captchaToken } = body;
     if (!email) return response.status(400).json({ message: "Email is required" });
 
+    const emailError = emailProblem(email);
+    if (emailError) {
+      return response.status(400).json({ message: emailError });
+    }
+
     // The sign-in page sends a Turnstile token with this form; verifying it
     // keeps the recovery flow consistent with login/register instead of
     // silently trusting an unverified caller.
@@ -989,18 +1068,28 @@ async function handleRecoveryEndpoint(request, response, searchParams) {
     try {
       const user = await storage.getUserByEmail(email);
       if (user) {
-        // Generate reset token
-        const resetToken = crypto.randomBytes(32).toString('hex');
-        const expiry = new Date(Date.now() + 3600000); // 1 hour
+        // Only a hash of the token is persisted: a leaked row cannot be
+        // replayed against the reset endpoint. The raw token exists only in the
+        // email and the link below.
+        const resetToken = createResetToken();
+        const expiry = new Date(Date.now() + RESET_TOKEN_TTL_MS);
 
-        await storage.updateUserResetToken(user.id, resetToken, expiry);
+        await storage.updateUserResetToken(user.id, hashResetToken(resetToken), expiry);
 
-        const resetUrl = `${appOrigin()}/reset-password?email=${encodeURIComponent(
-          email,
-        )}&token=${encodeURIComponent(resetToken)}`;
+        const origin = resolveOrigin(request);
+        const resetUrl = origin
+          ? `${origin}/reset-password?email=${encodeURIComponent(email)}&token=${encodeURIComponent(resetToken)}`
+          : null;
         const { subject, html, text } = passwordResetEmail(resetToken, resetUrl);
 
-        const result = await sendEmail({ to: email, subject, html, text });
+        const result = await sendPasswordResetEmail({ to: email, subject, html, text });
+
+        logAuth('recovery.forgot', {
+          outcome: result.sent ? 'sent' : 'send_failed',
+          provider: 'mailjet',
+          mailjetStatus: result.status,
+          mailjetError: result.errorCode,
+        });
 
         // This endpoint used to rotate the token and return a success message
         // without sending anything, so the sign-in page reported "instructions
@@ -1014,6 +1103,8 @@ async function handleRecoveryEndpoint(request, response, searchParams) {
               : 'Failed to send the reset email';
           return response.status(502).json({ message: reason });
         }
+      } else {
+        logAuth('recovery.forgot', { outcome: 'no_account' });
       }
       
       // Always return success to prevent email enumeration
@@ -1041,8 +1132,9 @@ async function handleRecoveryEndpoint(request, response, searchParams) {
     }
 
     try {
-      const user = await storage.getUserByResetToken(token);
+      const user = await storage.getUserByResetToken(hashResetToken(token));
       if (!user || !user.resetTokenExpiry || new Date() > user.resetTokenExpiry) {
+        logAuth('recovery.reset', { outcome: 'invalid_or_expired' });
         return response.status(400).json({ message: "Invalid or expired reset token" });
       }
 
@@ -1055,8 +1147,11 @@ async function handleRecoveryEndpoint(request, response, searchParams) {
 
       // Hash new password
       const hashedPassword = await bcrypt.hash(newPassword, 12);
+      // resetUserPassword also nulls resetToken/resetTokenExpiry, so the token
+      // is single-use: a second submission fails the lookup above.
       await storage.resetUserPassword(user.id, hashedPassword);
-      
+
+      logAuth('recovery.reset', { outcome: 'success', userId: user.id });
       return response.json({ message: "Password reset successfully" });
     } catch (error) {
       console.error('Reset password error:', error);

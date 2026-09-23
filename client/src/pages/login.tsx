@@ -6,6 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
+import { PasswordInput } from "@/components/ui/password-input";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Separator } from "@/components/ui/separator";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -112,9 +113,10 @@ export default function LoginPage() {
 
   // Complete the Discord OAuth handshake.
   //
-  // The callback redirects back with `?discord=success#token=...`: the token
-  // lives in the fragment so it never reaches the server logs, and it is stored
-  // exactly like a password login before the fragment is cleared.
+  // The callback now establishes the session itself (an HttpOnly cookie plus,
+  // for the SPA, the same signed token a password login issues) and redirects
+  // straight to /dashboard. This branch only handles the error redirect and the
+  // legacy `?discord=success#token=...` shape, in case a link is cached.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const discordResult = params.get("discord");
@@ -145,14 +147,18 @@ export default function LoginPage() {
         });
         return;
       }
-      toast({
-        title: "Discord Login Failed",
-        description: "No session was returned. Please try again.",
-        variant: "error",
+
+      // No fragment: the session lives in the cookie the callback set, so ask
+      // the server who we are instead of declaring failure.
+      refreshAuth().then((resolved) => {
+        if (resolved) setLocation("/dashboard");
       });
-    } else {
-      const reason = params.get("reason") || "unknown";
-      const discordErrors: Record<string, string> = {
+      window.history.replaceState(null, "", "/login");
+      return;
+    }
+
+    const reason = params.get("reason") || "unknown";
+    const discordErrors: Record<string, string> = {
         not_configured: "Discord login is not configured on this deployment.",
         redirect_not_configured:
           "Discord login is not configured correctly: set APP_ORIGIN or DISCORD_CALLBACK_URL to the public https URL.",
@@ -171,25 +177,9 @@ export default function LoginPage() {
           discordErrors[reason] || `Discord did not complete the sign-in (${reason}).`,
         variant: "error",
       });
-    }
 
     window.history.replaceState(null, "", "/login");
   }, [refreshAuth, setLocation, toast]);
-
-  // Listen for auth updates from the auth hook
-  useEffect(() => {
-    const handleAuthUpdate = (event: CustomEvent) => {
-      console.log('Received auth update event:', event.detail);
-      if (event.detail) {
-        setLocation("/dashboard");
-      }
-    };
-
-    window.addEventListener('auth-update', handleAuthUpdate as EventListener);
-    return () => {
-      window.removeEventListener('auth-update', handleAuthUpdate as EventListener);
-    };
-  }, [setLocation]);
 
   const onLogin = async (values: z.infer<typeof loginSchema>) => {
     if (captchaRequired && !captchaToken) {
@@ -414,9 +404,8 @@ export default function LoginPage() {
                       <FormItem>
                         <FormLabel className="text-foreground">Password</FormLabel>
                         <FormControl>
-                          <Input
+                          <PasswordInput
                             {...field}
-                            type="password"
                             className="bg-background border-input text-foreground"
                             placeholder="Enter your password"
                             data-testid="input-login-password"
@@ -540,9 +529,8 @@ export default function LoginPage() {
                                 <FormItem>
                                   <FormLabel className="text-foreground">New Password</FormLabel>
                                   <FormControl>
-                                    <Input
+                                    <PasswordInput
                                       {...field}
-                                      type="password"
                                       className="bg-background border-input text-foreground"
                                       placeholder="Enter your new password"
                                       data-testid="input-new-password"
@@ -560,9 +548,8 @@ export default function LoginPage() {
                                 <FormItem>
                                   <FormLabel className="text-foreground">Confirm Password</FormLabel>
                                   <FormControl>
-                                    <Input
+                                    <PasswordInput
                                       {...field}
-                                      type="password"
                                       className="bg-background border-input text-foreground"
                                       placeholder="Confirm your new password"
                                       data-testid="input-confirm-password"
@@ -656,9 +643,8 @@ export default function LoginPage() {
                       <FormItem>
                         <FormLabel className="text-foreground">Password</FormLabel>
                         <FormControl>
-                          <Input
+                          <PasswordInput
                             {...field}
-                            type="password"
                             className="bg-background border-input text-foreground"
                             placeholder="Create a password"
                             data-testid="input-register-password"
