@@ -32,7 +32,7 @@ export function contactRecipient() {
   return (
     process.env.CONTACT_TO_EMAIL ||
     process.env.OWNER_EMAIL ||
-    'dev.projecthub.me@gmail.com'
+    'dev.projecthub.fie@gmail.com'
   );
 }
 
