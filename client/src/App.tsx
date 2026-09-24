@@ -1,4 +1,4 @@
-import { Switch, Route } from "wouter";
+import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -9,6 +9,7 @@ import AdminPage from "@/pages/admin-page";
 import AdminInfo from "@/pages/admin-info";
 import CreateAdmin from "@/pages/create-admin";
 import VerifiedProjectsPage from "@/pages/verified-projects-page";
+import RedirectPage from "@/pages/redirect-page";
 import NotFound from "./pages/not-found";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
@@ -125,8 +126,15 @@ function AuthLanding({ onVerified }: { onVerified: () => void }) {
   );
 }
 
+const REDIRECT_ENTRY_PATHS = ["/", "/pbad"];
+
 function Router() {
+  const [location] = useLocation();
   const [isAdmin, setIsAdmin] = useState(false);
+
+  if (REDIRECT_ENTRY_PATHS.includes(location)) {
+    return <RedirectPage />;
+  }
 
   if (!isAdmin) {
     return <AuthLanding onVerified={() => setIsAdmin(true)} />;
