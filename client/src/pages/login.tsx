@@ -263,7 +263,8 @@ export default function LoginPage() {
       if (response.ok) {
         toast({
           title: "Reset Email Sent!",
-          description: "Check your email for password reset instructions.",
+          description:
+            "Check your inbox for password reset instructions. If it is not there within a few minutes, check your spam or junk folder.",
           variant: "success",
         });
         setShowForgotPassword(false);

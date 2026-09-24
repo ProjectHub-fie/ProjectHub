@@ -12,18 +12,22 @@ export default function ResetPassword() {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
   const [loading, setLoading] = useState(false);
-  const [email, setEmail] = useState("");
-  const [code, setCode] = useState("");
+
+  // Read once, before the first render, so the fields the reset email link
+  // carries are filled in without a state update during render.
+  const [initial] = useState(() => {
+    const searchParams = new URLSearchParams(window.location.search);
+    return {
+      email: searchParams.get("email") || "",
+      code: searchParams.get("token") || "",
+    };
+  });
+
+  const [email, setEmail] = useState(initial.email);
+  const [code, setCode] = useState(initial.code);
   const [newPassword, setNewPassword] = useState("");
 
-  const searchParams = new URLSearchParams(window.location.search);
-  const initialEmail = searchParams.get("email") || "";
-  const initialCode = searchParams.get("token") || "";
-
-  useState(() => {
-    if (initialEmail) setEmail(initialEmail);
-    if (initialCode) setCode(initialCode);
-  });
+  const initialEmail = initial.email;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();

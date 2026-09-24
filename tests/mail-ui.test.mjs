@@ -214,6 +214,42 @@ test('the composer rejects an unsafe link scheme before inserting it', () => {
     'a javascript:/data: link must be refused at entry');
 });
 
+test('inserting a link restores the selection a dialog stole', () => {
+  const editor = source('client/src/components/mail/MailEditor.tsx');
+
+  // The prompt takes focus, so the caret must be captured while the editor still
+  // owns the selection and put back before `createLink` runs.
+  assert.match(editor, /document\.addEventListener\("selectionchange", remember\)/,
+    'the editor selection must be tracked');
+  assert.match(editor, /savedRange\.current = range\.cloneRange\(\)/,
+    'the tracked range must be a snapshot, not the live one');
+  assert.match(editor, /selection\.addRange\(range\)/,
+    'the saved range must be restored before the link is applied');
+
+  const linkHandler = editor.slice(editor.indexOf('const promptForLink'), editor.indexOf('const promptForImage'));
+  assert.ok(
+    linkHandler.indexOf('restoreSelection()') < linkHandler.indexOf('execCommand("createLink"'),
+    'the selection must be restored before createLink',
+  );
+});
+
+test('a link inserted with no selection is still a link', () => {
+  const editor = source('client/src/components/mail/MailEditor.tsx');
+  const linkHandler = editor.slice(editor.indexOf('const promptForLink'), editor.indexOf('const promptForImage'));
+
+  // `createLink` with an empty selection is a no-op, which is what made the
+  // toolbar button appear broken. A link is inserted as fallback instead.
+  assert.match(linkHandler, /hasSelectedText/, 'the empty-selection case must be handled');
+  assert.match(linkHandler, /insertHtml\(/, 'a link must be inserted when nothing is selected');
+  assert.match(linkHandler, /<a href="\$\{href\}"/, 'the fallback inserts a real anchor');
+});
+
+test('link and image URLs are escaped before they reach the message', () => {
+  const editor = source('client/src/components/mail/MailEditor.tsx');
+  assert.match(editor, /function escapeLinkPart/, 'an escaping helper must exist');
+  assert.match(editor, /escapeLinkPart\(url\)/, 'the entered URL must be escaped before insertion');
+});
+
 test('notification settings are per-admin and include every required toggle', () => {
   const panel = source('client/src/components/mail/MailSettingsPanel.tsx');
   for (const label of ['New incoming email', 'New project request', 'Email reply', 'Mention / important notification', 'Desktop notifications', 'Sound', 'Badge count']) {
