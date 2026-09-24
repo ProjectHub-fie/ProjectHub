@@ -314,30 +314,26 @@ export function contactNotificationEmail({ name, email, subject, message }) {
 }
 
 /**
- * Sends the password-reset message through Mailjet and reports whether it
- * actually went out.
+ * Collects every recipient slot Mailjet reports back for a message.
  *
- * Mailjet answers 200 for a partially failed batch (per-message `Status`), so a
- * successful HTTP status alone is not proof of delivery — the first message's
- * status is checked too. The private key is only ever placed in the
- * Authorization header and is never logged.
+ * The Send API v3.1 answers per address under `To`, `Cc` and `Bcc`, so the
+ * tracking metadata (and any per-address error) lives in those arrays rather
+ * than on the message itself.
  */
-export async function sendPasswordResetEmail({ to, subject, html, text }) {
-  if (!isPasswordResetEmailConfigured()) {
-    console.error(
-      'Password reset not sent: Mailjet is not configured (MJ_APIKEY_PUBLIC / MJ_APIKEY_PRIVATE / MJ_SENDER_EMAIL)',
-    );
-    return { sent: false, reason: 'not_configured' };
-  }
+function mailjetRecipientSlots(entry) {
+  return ['To', 'Cc', 'Bcc'].flatMap((field) =>
+    Array.isArray(entry?.[field]) ? entry[field] : [],
+  );
+}
 
-  const message = {
-    From: { Email: mailjetSenderEmail(), Name: mailjetSenderName() },
-    To: [{ Email: to }],
-    Subject: subject,
-    HTMLPart: html,
-  };
-  if (text) message.TextPart = text;
-
+/**
+ * Low-level Mailjet send used by every outbound message.
+ *
+ * Centralised so the "did it really go out" checks cannot drift between the
+ * password-reset path and admin mail. Returns the same result shape in both
+ * cases, plus the per-recipient tracking ids when Mailjet provides them.
+ */
+async function mailjetSend(message, { requireMessageId = true } = {}) {
   const auth = Buffer.from(
     `${process.env.MJ_APIKEY_PUBLIC}:${process.env.MJ_APIKEY_PRIVATE}`,
   ).toString('base64');
@@ -355,14 +351,7 @@ export async function sendPasswordResetEmail({ to, subject, html, text }) {
     const payload = await res.json().catch(() => ({}));
     const entry = Array.isArray(payload?.Messages) ? payload.Messages[0] : null;
 
-    // A 200 is not proof that anything was queued: Mailjet accepts the request
-    // and returns an empty `Messages` array (Total/Count 0) when the sender is
-    // not one it will send as. Only a per-message entry means a send was
-    // actually accepted, so a missing entry is a failure — otherwise the caller
-    // reports success and the user waits for mail that was never sent.
     if (!res.ok || !entry || entry.Status === 'error') {
-      // Mailjet reports failures in either `Messages[].Errors` or, for auth
-      // problems, a top-level `ErrorMessage`.
       const detail = entry?.Errors?.[0] || payload?.ErrorMessage;
       const queued = !entry && res.ok ? 'no message entry returned (nothing queued)' : '';
       console.error(
@@ -383,13 +372,144 @@ export async function sendPasswordResetEmail({ to, subject, html, text }) {
       };
     }
 
-    // `MessageID` is what makes delivery traceable in Mailjet's UI, so it is
-    // returned even on success.
-    return { sent: true, id: entry?.To?.[0]?.MessageID };
+    const slots = mailjetRecipientSlots(entry);
+    const delivered = slots.filter((slot) => Number(slot?.MessageID) > 0);
+
+    // A success status with no identifier means nothing was queued — sandbox
+    // mode, or a send the account is not permitted to make.
+    if (requireMessageId && delivered.length === 0) {
+      console.error(
+        'Mailjet send failed:',
+        'success status without a queued message',
+        `status=${res.status}`,
+        `recipients=${slots.length}`,
+      );
+      return {
+        sent: false,
+        reason: 'no_message_queued',
+        status: res.status,
+        errorMessage:
+          'Mailjet accepted the request but queued no message. Check that the sender address is validated and that SandboxMode is not enabled.',
+      };
+    }
+
+    return {
+      sent: true,
+      id: delivered[0] ? Number(delivered[0].MessageID) : undefined,
+      recipients: delivered.map((slot) => ({
+        email: slot.Email,
+        messageId: Number(slot.MessageID),
+        messageUuid: slot.MessageUUID || null,
+      })),
+    };
   } catch (error) {
     console.error('Mailjet send threw:', error.message);
     return { sent: false, reason: 'send_failed', errorMessage: error.message };
   }
+}
+
+/**
+ * Sends the password-reset message through Mailjet and reports whether it
+ * actually went out.
+ *
+ * Three separate ways a send can look successful without being one, all of
+ * which have to be rejected explicitly:
+ *
+ *   1. Mailjet answers 200 for a partially failed batch and reports the failure
+ *      per message in `Messages[].Status`.
+ *   2. It accepts the request but queues nothing, returning an empty `Messages`
+ *      array (Total/Count 0) when the sender is not one it will send as.
+ *   3. Sandbox mode — and any send Mailjet declines to queue — answers
+ *      `Status: "success"` while omitting the tracking identifiers, leaving
+ *      `MessageID` as `0` and `MessageUUID`/`MessageHref` empty. Reading only
+ *      the status there is exactly the bug that made the recovery form report
+ *      "instructions sent" for mail that never left the account.
+ *
+ * A message therefore counts as sent only when Mailjet returns a real,
+ * non-zero `MessageID`. The private key is only ever placed in the
+ * Authorization header and is never logged.
+ */
+export async function sendPasswordResetEmail({ to, subject, html, text }) {
+  if (!isPasswordResetEmailConfigured()) {
+    console.error(
+      'Password reset not sent: Mailjet is not configured (MJ_APIKEY_PUBLIC / MJ_APIKEY_PRIVATE / MJ_SENDER_EMAIL)',
+    );
+    return { sent: false, reason: 'not_configured' };
+  }
+
+  const message = {
+    From: { Email: mailjetSenderEmail(), Name: mailjetSenderName() },
+    To: [{ Email: to }],
+    Subject: subject,
+    HTMLPart: html,
+  };
+  if (text) message.TextPart = text;
+
+  return mailjetSend(message);
+}
+
+/** True when Mailjet is configured well enough to send admin mail. */
+export function isAdminMailConfigured() {
+  return isPasswordResetEmailConfigured();
+}
+
+/**
+ * Sends an admin-composed message (new mail, reply, reply-all or forward)
+ * through Mailjet.
+ *
+ * Same transport as password reset on purpose: Resend owns public/inbound mail
+ * and Mailjet owns everything an administrator sends out, so the two providers
+ * stay independently configured and neither can disable the other.
+ *
+ * `to`/`cc`/`bcc` accept either a bare address or `{ email, name }`.
+ */
+export async function sendAdminEmail({
+  to = [],
+  cc = [],
+  bcc = [],
+  subject,
+  html,
+  text,
+  replyTo,
+  attachments = [],
+  customId,
+}) {
+  if (!isAdminMailConfigured()) {
+    console.error(
+      'Admin mail not sent: Mailjet is not configured (MJ_APIKEY_PUBLIC / MJ_APIKEY_PRIVATE / MJ_SENDER_EMAIL)',
+    );
+    return { sent: false, reason: 'not_configured' };
+  }
+
+  const address = (value) =>
+    typeof value === 'string'
+      ? { Email: value }
+      : { Email: value?.email, ...(value?.name ? { Name: value.name } : {}) };
+
+  const message = {
+    From: { Email: mailjetSenderEmail(), Name: mailjetSenderName() },
+    To: (Array.isArray(to) ? to : [to]).filter(Boolean).map(address),
+    Subject: subject,
+    HTMLPart: html,
+  };
+  if (text) message.TextPart = text;
+  if (replyTo) message.ReplyTo = address(replyTo);
+  if (cc.length) message.Cc = cc.map(address);
+  if (bcc.length) message.Bcc = bcc.map(address);
+  if (customId) message.CustomID = String(customId).slice(0, 255);
+
+  // Mailjet takes base64 content plus an explicit filename and MIME type. The
+  // type is sent as-is because Mailjet (not the browser) is the one that
+  // decides whether the attachment is acceptable.
+  if (attachments.length) {
+    message.Attachments = attachments.map((file) => ({
+      ContentType: file.contentType,
+      Filename: file.filename,
+      Base64Content: file.base64Content,
+    }));
+  }
+
+  return mailjetSend(message);
 }
 
 /**

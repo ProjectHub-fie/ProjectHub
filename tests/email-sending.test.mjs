@@ -176,7 +176,7 @@ test('sendPasswordResetEmail posts to the Mailjet v3.1 endpoint with Basic auth 
     await withOnlyMailjet(async () => {
       globalThis.fetch = async (url, init) => {
         seen = { url, init };
-        return new Response(JSON.stringify({ Messages: [{ Status: 'success' }] }), {
+        return new Response(JSON.stringify({ Messages: [{ Status: 'success', To: [{ Email: 'someone@example.com', MessageID: 999 }] }] }), {
           status: 200,
           headers: { 'Content-Type': 'application/json' },
         });
@@ -203,6 +203,42 @@ test('sendPasswordResetEmail posts to the Mailjet v3.1 endpoint with Basic auth 
     assert.equal(body.Messages[0].From.Name, 'ProjectHub');
     assert.equal(body.Messages[0].To[0].Email, 'someone@example.com');
     assert.equal(body.Messages[0].TextPart, 'hi');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('a success status with no queued MessageID is not a delivery', async () => {
+  // This is the Sandbox-mode signature: Mailjet answers `Status: "success"` while
+  // omitting the tracking identifiers (`MessageID: 0`, empty `MessageUUID`).
+  // Reading only the status there is what made the recovery form report
+  // "instructions sent" for mail that never left the account.
+  const originalFetch = globalThis.fetch;
+  try {
+    await withOnlyMailjet(async () => {
+      globalThis.fetch = async () =>
+        new Response(
+          JSON.stringify({
+            Messages: [
+              {
+                Status: 'success',
+                To: [{ Email: 'someone@example.com', MessageUUID: '', MessageID: 0, MessageHref: '' }],
+              },
+            ],
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+
+      const result = await sendPasswordResetEmail({
+        to: 'someone@example.com',
+        subject: 'Hello',
+        html: '<p>hi</p>',
+      });
+
+      assert.equal(result.sent, false, 'a sandbox/queued-nothing response must read as a failure');
+      assert.equal(result.reason, 'no_message_queued');
+      assert.match(result.errorMessage, /SandboxMode|sender/i);
+    });
   } finally {
     globalThis.fetch = originalFetch;
   }

@@ -50,6 +50,10 @@ export function useAdminAuth() {
   const canManageAdmins = adminRole === 'owner';
   const canCreateAdmins = adminRole === 'owner' || adminRole === 'admin';
   const canDeleteAdmins = adminRole === 'owner';
+  // Mail is limited to owner and admin. A moderator is deliberately excluded:
+  // this mirrors the server's `requireRole('admin')` on every mail route, so
+  // hiding the sidebar is never the only protection.
+  const canUseMail = adminRole === 'owner' || adminRole === 'admin';
 
   return {
     adminRole,
@@ -62,6 +66,7 @@ export function useAdminAuth() {
     canDeleteProjects,
     canManageAdmins,
     canCreateAdmins,
-    canDeleteAdmins
+    canDeleteAdmins,
+    canUseMail,
   };
 }

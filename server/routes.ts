@@ -574,6 +574,41 @@ export async function registerRoutes(expressApp: any): Promise<Server> {
         return res.status(502).json({ message: "Failed to send email" });
       }
 
+      // Mirror the delivered message into the Admin Mail inbox, exactly as the
+      // serverless handler does, so local development shows the same behaviour.
+      try {
+        const { ingestMessage, createMailNotifications } = await import('../api/lib/mail-store.js');
+        const ingested = await ingestMessage({
+          providerMessageId: emailResult.id ? `resend-${emailResult.id}` : null,
+          direction: 'inbound',
+          status: 'received',
+          fromName: name,
+          fromEmail: email,
+          to: [ownerEmail],
+          replyTo: email,
+          subject: mailSubject,
+          bodyHtml: html,
+          bodyText: message,
+          provider: 'resend',
+          sourceType: 'contact',
+          sourceId: emailResult.id || null,
+          sentAt: new Date(),
+        });
+
+        if (!ingested.duplicate) {
+          await createMailNotifications({
+            type: 'new_email',
+            title: mailSubject,
+            preview: message,
+            messageId: ingested.id,
+            threadId: ingested.threadId,
+          });
+        }
+      } catch (mirrorError: any) {
+        // The email was delivered; a mailbox-copy failure must not fail the form.
+        console.error('Contact form inbox mirror failed:', mirrorError.message);
+      }
+
       console.log('Contact form email sent successfully');
       res.json({ message: "Message sent successfully" });
     } catch (error: any) {

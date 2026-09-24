@@ -93,6 +93,33 @@ server. The client mirrors that with `captchaRequired`, derived from
 `VITE_TURNSTILE_SITE_KEY`. If you set one, set both, or sign-in will appear broken
 in one direction or the other.
 
+### The mailbox can live on its own database
+
+`MAIL_DATABASE_URL` is optional. When it is set, every mail table
+(`mail_messages`, `mail_threads`, `mail_attachments`, `mail_drafts`,
+`mail_templates`, `mail_signatures`, `mail_notifications`,
+`mail_notification_settings`, `push_subscriptions`, `mail_audit_log`) is created
+and queried on that database instead of `DATABASE_URL`. Unset — the default —
+the mailbox shares the application database and nothing changes. This lets the
+mail write volume stay off the application database without a second code path.
+
+`api/lib/mail-store.js` is the only place that reads mail tables, so it owns the
+choice. Two consequences are worth knowing before splitting the databases:
+
+- **Foreign keys cannot cross databases.** On a shared database the mail tables
+  reference `admin_credentials(id)` with `ON DELETE CASCADE`. On a split one that
+  reference is omitted, so deleting an admin does not cascade; the admin delete
+  route calls `purgeAdminMailData` for the mail rows instead. It is a no-op on a
+  shared database, where the cascade already did the work.
+- **Three functions read application tables.** `createMailNotifications`
+  (recipient list), `listAudit` (admin pins) and `backfillFromProjectRequests`
+  (`project_requests`, `users`) reach across to `DATABASE_URL` through a second
+  pooled connection rather than joining. Each stays a bounded number of queries,
+  not one per row.
+
+`tests/mail-flow.test.mjs` exercises both shapes: it passes with `DATABASE_URL`
+alone and with `MAIL_DATABASE_URL` pointing at a second database.
+
 ### Admin credentials
 
 Ownership is recovered by running the script against the database rather than

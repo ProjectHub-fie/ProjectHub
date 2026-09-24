@@ -918,6 +918,47 @@ async function handleContactEndpoint(request, response) {
     return response.status(502).json({ message: reason });
   }
 
+  // Mirror the delivered message into the Admin Mail inbox.
+  //
+  // Resend sending an email does not by itself put anything in the dashboard, so
+  // the submission is also recorded locally. This runs after the send and never
+  // affects its outcome: if the mailbox write fails the contact form still
+  // reports success, because the email really was delivered.
+  try {
+    const { ingestMessage, createMailNotifications } = await import('./lib/mail-store.js');
+    const ingested = await ingestMessage({
+      // Resend's message id is the idempotency key, so a retried submission
+      // cannot appear twice.
+      providerMessageId: result.id ? `resend-${result.id}` : null,
+      direction: 'inbound',
+      status: 'received',
+      fromName: name,
+      fromEmail: email,
+      to: [ownerEmail],
+      replyTo: email,
+      subject: mailSubject,
+      bodyHtml: html,
+      bodyText: message,
+      provider: 'resend',
+      sourceType: 'contact',
+      sourceId: result.id || null,
+      sentAt: new Date(),
+    });
+
+    if (!ingested.duplicate) {
+      await createMailNotifications({
+        type: 'new_email',
+        title: mailSubject,
+        preview: message,
+        messageId: ingested.id,
+        threadId: ingested.threadId,
+      });
+    }
+  } catch (error) {
+    // Never fail the public form because the dashboard copy could not be stored.
+    console.error('Contact form inbox mirror failed:', error.message);
+  }
+
   return response.status(200).json({ message: 'Message sent successfully' });
 }
 

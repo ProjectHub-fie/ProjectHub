@@ -17,7 +17,10 @@ import connectPgSimple from 'connect-pg-simple';
 import bcrypt from 'bcryptjs';
 import multer from 'multer';
 import postgres from 'postgres';
+import crypto from 'node:crypto';
 import { describeDbError, normalizeDatabaseUrl } from '../lib/db.js';
+import { buildMailRouter, handleInboundMessage } from '../lib/mail-routes.js';
+import { ingestMessage, createMailNotifications, ensureMailSchema, purgeAdminMailData } from '../lib/mail-store.js';
 
 const sql = postgres(normalizeDatabaseUrl(process.env.DATABASE_URL), { ssl: 'require', max: 5 });
 
@@ -251,6 +254,14 @@ function buildAdminRouter() {
         return res.status(403).json({ message: 'Only owners can delete other owners' });
       }
       await sql`DELETE FROM admin_credentials WHERE id = ${id}::uuid`;
+      // When the mailbox is on its own database the ON DELETE CASCADE on the
+      // mail tables cannot fire, so the admin's mail rows are removed here
+      // instead. On a shared database this is a no-op.
+      try {
+        await purgeAdminMailData(id);
+      } catch (error) {
+        console.error('Admin mail cleanup failed:', error.message);
+      }
       res.json({ success: true, message: 'Admin deleted successfully' });
     } catch (error) {
       console.error('Admin deletion error:', error);
@@ -479,9 +490,90 @@ function buildAdminRouter() {
     res.json({ url: `data:${req.file.mimetype};base64,${req.file.buffer.toString('base64')}` });
   });
 
+  // The ProjectHub Mail workspace. Owner/admin only — a moderator is refused by
+  // `requireRole('admin')` inside the router, and every route requires a session.
+  router.use(buildMailRouter({
+    requireAuth,
+    requireRole,
+    adminIdFrom: (req) => req.session?.adminId,
+  }));
+
   router.use('/api/admin', (_req, res) => res.status(404).json({ message: 'Admin endpoint not found' }));
 
   return router;
+}
+
+/**
+ * Inbound mail webhook.
+ *
+ * Resend (and Mailjet's inbound parser) can POST a received message here so it
+ * lands in the Admin Mail inbox. This endpoint is public by necessity — the
+ * provider calls it — so it authenticates the caller instead of the user:
+ *
+ *   - `MAIL_INBOUND_WEBHOOK_SECRET` must be set, otherwise the endpoint is
+ *     disabled outright rather than silently accepting anything.
+ *   - The secret is compared in constant time to the value in the
+ *     `x-mail-webhook-secret` header, or to Resend's `svix-signature`-style
+ *     shared value when configured that way.
+ *   - Delivery is idempotent, so a provider retry cannot duplicate a message.
+ *
+ * The raw body is never trusted: it is parsed defensively and stored raw, and
+ * the dashboard sanitises it at render time.
+ */
+async function handleInboundWebhook(req, res) {
+  const expected = process.env.MAIL_INBOUND_WEBHOOK_SECRET;
+  if (!expected) {
+    // Refusing is the safe default: an unauthenticated inbox-write endpoint on a
+    // public deployment would let anyone inject mail into the dashboard.
+    return res.status(503).json({ message: 'Inbound mail webhook is not configured' });
+  }
+
+  const provided = String(
+    req.headers['x-mail-webhook-secret'] ||
+    req.headers['x-webhook-secret'] ||
+    req.query?.secret ||
+    '',
+  );
+
+  const a = Buffer.from(provided);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) {
+    console.warn('Inbound mail webhook rejected: bad secret');
+    return res.status(401).json({ message: 'Invalid webhook signature' });
+  }
+
+  try {
+    const payload = req.body || {};
+
+    // Resend wraps the event in `data`; accept both shapes so the same endpoint
+    // works for a raw message or an event envelope.
+    const event = payload.data && payload.type ? payload.data : payload;
+    const type = payload.type || 'email.received';
+
+    if (type !== 'email.received' && type !== 'inbound' && !event.subject) {
+      // A non-inbound event (delivery receipt, bounce) is acknowledged so the
+      // provider does not retry, but nothing is written to the inbox.
+      return res.json({ success: true, ignored: type });
+    }
+
+    const result = await handleInboundMessage(event);
+    if (result.duplicate) return res.json({ success: true, duplicate: true, id: result.id });
+
+    // Notify every admin except the actor (there is no actor for inbound mail).
+    await createMailNotifications({
+      type: 'new_email',
+      title: event.subject || 'New email',
+      preview: event.text || event.html || '',
+      messageId: result.id,
+      threadId: result.threadId,
+    });
+
+    res.json({ success: true, id: result.id, threadId: result.threadId });
+  } catch (error) {
+    console.error('Inbound mail webhook error:', error);
+    // A 500 lets the provider retry; the idempotency key makes that safe.
+    res.status(500).json({ message: 'Failed to process inbound message' });
+  }
 }
 
 function buildAdminApp() {
@@ -519,6 +611,11 @@ function buildAdminApp() {
       path: '/',
     },
   }));
+
+  // Inbound provider webhook. Registered before the admin router because it is
+  // called by Resend, not by an administrator, so it authenticates with its own
+  // shared secret instead of the dashboard session.
+  app.post('/api/admin/mail/inbound', handleInboundWebhook);
 
   const router = buildAdminRouter();
   // The rewrite may hand us either the full path or one with the /api/admin
