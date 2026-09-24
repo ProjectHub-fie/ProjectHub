@@ -22,20 +22,50 @@ export default function RedirectPage() {
   useEffect(() => {
     if (alreadyAtDestination) return;
 
+    let navigated = false;
+    const navigate = () => {
+      if (navigated) return;
+      navigated = true;
+      window.location.replace(DESTINATION);
+    };
+
     const startedAt = Date.now();
+
+    // Authoritative trigger: a timeout fires at >= WAIT_MS even when the
+    // browser throttles timers in a background tab, so the wait is exact
+    // rather than dependent on the visual loop keeping pace.
+    const deadline = window.setTimeout(() => {
+      const remainingMs = WAIT_MS - (Date.now() - startedAt);
+      if (remainingMs > 0) {
+        window.setTimeout(navigate, remainingMs);
+      } else {
+        navigate();
+      }
+    }, WAIT_MS);
+
+    // Visual only — drives the bar and countdown, and re-checks the deadline
+    // in case the timeout above was itself delayed.
     const tick = window.setInterval(() => {
       const elapsed = Date.now() - startedAt;
       const ratio = Math.min(elapsed / WAIT_MS, 1);
       setProgress(ratio * 100);
       setRemaining(Math.max(Math.ceil((WAIT_MS - elapsed) / 1000), 0));
-
-      if (ratio >= 1) {
-        window.clearInterval(tick);
-        window.location.replace(DESTINATION);
-      }
+      if (ratio >= 1) navigate();
     }, 50);
 
-    return () => window.clearInterval(tick);
+    // Recompute on tab focus so a backgrounded tab does not sit past deadline.
+    const onVisible = () => {
+      if (document.visibilityState === "visible" && Date.now() - startedAt >= WAIT_MS) {
+        navigate();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisible);
+
+    return () => {
+      window.clearTimeout(deadline);
+      window.clearInterval(tick);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [alreadyAtDestination]);
 
   return (
