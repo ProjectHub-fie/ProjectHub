@@ -12,7 +12,7 @@ import {
   sanitizeEmailHtml,
   toSnippet,
   textToSafeHtml,
-} from '../api/lib/mail-sanitize.js';
+} from '../api/_lib/mail-sanitize.js';
 
 test('script tags are removed with their contents', () => {
   const out = sanitizeEmailHtml('<p>Hello</p><script>alert(document.cookie)</script><p>Bye</p>');

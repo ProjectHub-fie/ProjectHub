@@ -54,6 +54,10 @@ export function useAdminAuth() {
   // this mirrors the server's `requireRole('admin')` on every mail route, so
   // hiding the sidebar is never the only protection.
   const canUseMail = adminRole === 'owner' || adminRole === 'admin';
+  // The bot console is owner/admin only too: it can point the bot at a channel
+  // and trigger a real alert. Mirrors `requireRole('admin')` on every
+  // /api/admin/bot route, so the sidebar is not the only protection.
+  const canManageBot = adminRole === 'owner' || adminRole === 'admin';
 
   return {
     adminRole,
@@ -68,5 +72,6 @@ export function useAdminAuth() {
     canCreateAdmins,
     canDeleteAdmins,
     canUseMail,
+    canManageBot,
   };
 }

@@ -1,7 +1,7 @@
 /**
  * Connection-string normalisation, kept free of side effects.
  *
- * `api/lib/db.js` opens a pooled connection at import time, so anything that
+ * `api/_lib/db.js` opens a pooled connection at import time, so anything that
  * only needs to rewrite a URL (the Express server, the admin session store,
  * mail storage) imports this module instead. Importing `db.js` there would
  * create a second pool just to read a pure function.

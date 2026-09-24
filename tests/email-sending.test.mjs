@@ -26,7 +26,7 @@ import {
   contactNotificationEmail,
   createResetToken,
   hashResetToken,
-} from '../api/lib/email.js';
+} from '../api/_lib/email.js';
 
 const MAILJET_VARS = ['MJ_APIKEY_PUBLIC', 'MJ_APIKEY_PRIVATE', 'MJ_SENDER_EMAIL', 'MJ_SENDER_NAME'];
 const RESEND_VARS = ['RESEND_API_KEY', 'EMAIL_FROM'];

@@ -19,6 +19,15 @@ export const adminStorage = {
     return result[0] || null;
   },
 
+  async getAdminByDiscordId(discordId: string) {
+    const result = await db.select().from(adminCredentials).where(eq(adminCredentials.discordId, discordId)).limit(1);
+    return result[0] || null;
+  },
+
+  async setAdminDiscordId(id: string, discordId: string | null) {
+    await db.update(adminCredentials).set({ discordId, updatedAt: new Date() }).where(eq(adminCredentials.id, id));
+  },
+
   async getAllAdmins() {
     return await db.select().from(adminCredentials);
   },

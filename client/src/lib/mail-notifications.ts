@@ -70,6 +70,58 @@ export async function requestPermission(): Promise<PermissionState> {
   }
 }
 
+/** Converts a base64 VAPID key into the Uint8Array `pushManager.subscribe` wants. */
+export function urlBase64ToUint8Array(base64String: string): Uint8Array {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = window.atob(base64);
+  const output = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i += 1) output[i] = raw.charCodeAt(i);
+  return output;
+}
+
+/**
+ * Registers the service worker and stores this browser's push subscription with
+ * the server.
+ *
+ * Shared by the settings panel and the in-app prompt so both paths that turn
+ * desktop alerts on end with a real subscription — the absence of which is what
+ * made notifications silently never arrive. Returns true when the server has a
+ * subscription it can push to.
+ */
+export async function ensurePushSubscription(): Promise<boolean> {
+  if (!notificationSupport() || typeof navigator === "undefined" || !("serviceWorker" in navigator)) {
+    return false;
+  }
+  try {
+    const response = await fetch("/api/admin/mail/push/public-key", { credentials: "include" });
+    if (!response.ok) return false;
+    const { publicKey } = (await response.json()) as { publicKey: string | null };
+    if (!publicKey) return false;
+
+    const registration = await navigator.serviceWorker.register("/mail-sw.js", { scope: "/" });
+    const existing = await registration.pushManager.getSubscription();
+    const subscription = existing || await registration.pushManager.subscribe({
+      userVisibleOnly: true,
+      applicationServerKey: urlBase64ToUint8Array(publicKey),
+    });
+    const json = subscription.toJSON() as { endpoint?: string; keys?: Record<string, string> };
+    if (!json.endpoint || !json.keys) return false;
+
+    const saved = await fetch("/api/admin/mail/push/subscribe", {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ endpoint: json.endpoint, keys: json.keys }),
+    });
+    return saved.ok;
+  } catch {
+    // Private mode, no VAPID key and unsupporting browsers all land here; the
+    // in-dashboard badge still works without push.
+    return false;
+  }
+}
+
 /**
  * Shows a desktop notification for a mail item.
  *

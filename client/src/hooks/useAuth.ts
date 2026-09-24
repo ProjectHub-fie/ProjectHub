@@ -17,6 +17,12 @@ export interface AuthUser {
   firstName: string | null;
   lastName: string | null;
   profileImageUrl?: string | null;
+  /** Whether the account has a password set. Drops to false for Discord-only accounts. */
+  hasPassword?: boolean;
+  /** The linked Discord id, or null when Discord is not linked. */
+  discordId?: string | null;
+  /** "password" for an email/password account, "discord" for a Discord-only one. */
+  accountType?: "password" | "discord";
 }
 
 /**
@@ -74,12 +80,24 @@ interface AuthContextValue {
     firstName?: string;
     lastName?: string;
     profileImageUrl?: string;
+    email?: string;
   }) => Promise<any>;
+  changePassword: (passwords: {
+    currentPassword?: string;
+    newPassword: string;
+  }) => Promise<any>;
+  setPassword: (newPassword: string) => Promise<any>;
+  deleteAccount: () => Promise<any>;
+  unlinkDiscord: () => Promise<any>;
+  /** Redirects the browser to Discord to attach a Discord account. */
+  linkDiscord: () => void;
   refreshAuth: () => Promise<AuthUser | null>;
   isLoggingIn: boolean;
   isRegistering: boolean;
   isLoggingOut: boolean;
   isUpdatingProfile: boolean;
+  isChangingPassword: boolean;
+  isDeletingAccount: boolean;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
@@ -265,6 +283,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       firstName?: string;
       lastName?: string;
       profileImageUrl?: string;
+      email?: string;
     }) => {
       const response = await fetch("/api/auth/user", {
         method: "PATCH",
@@ -280,12 +299,102 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return data;
     },
     onSuccess: (data) => {
+      // The endpoint re-issues the token when the email changes, because the
+      // address is embedded in the signed payload.
+      if (data?.sessionToken) {
+        localStorage.setItem(SESSION_TOKEN_KEY, data.sessionToken);
+      }
       if (data?.user) {
         applyUser(data.user);
         queryClient.invalidateQueries({ queryKey: ["auth"] });
       }
     },
   });
+
+  /**
+   * Sets or changes the account password.
+   *
+   * A Discord-only account has no current password, so `currentPassword` is
+   * omitted and the server accepts the new one outright. An account that
+   * already has a password must prove it.
+   */
+  const changePasswordMutation = useMutation({
+    mutationFn: async (passwords: { currentPassword?: string; newPassword: string }) => {
+      const response = await fetch("/api/auth/password", {
+        method: "POST",
+        headers: sessionHeaders(),
+        credentials: "include",
+        body: JSON.stringify(passwords),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to update password");
+      }
+      return data;
+    },
+    onSuccess: (data) => {
+      if (data?.user) {
+        applyUser(data.user);
+        queryClient.invalidateQueries({ queryKey: ["auth"] });
+      }
+    },
+  });
+
+  const deleteAccountMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/auth/user", {
+        method: "DELETE",
+        headers: sessionHeaders(),
+        credentials: "include",
+      });
+
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to delete account");
+      }
+      return data;
+    },
+    // The same teardown a logout performs: whatever happens, the local session
+    // must not survive an account deletion.
+    onSuccess: () => finishLogout(),
+    onError: () => finishLogout(),
+  });
+
+  const unlinkDiscordMutation = useMutation({
+    mutationFn: async () => {
+      const response = await fetch("/api/auth/discord", {
+        method: "DELETE",
+        headers: sessionHeaders(),
+        credentials: "include",
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(data.message || "Failed to unlink Discord");
+      }
+      return data;
+    },
+    onSuccess: (data) => {
+      if (data?.user) {
+        applyUser(data.user);
+        queryClient.invalidateQueries({ queryKey: ["auth"] });
+      }
+    },
+  });
+
+  /**
+   * Starts the Discord link handshake.
+   *
+   * A full-page navigation is required: Discord's authorize screen is
+   * cross-origin, and the `link` token proves which signed-in account to attach
+   * the Discord identity to when the callback returns.
+   */
+  const linkDiscord = useCallback(() => {
+    const token = localStorage.getItem(SESSION_TOKEN_KEY) || "";
+    const url = `/api/auth/discord?mode=link&link=${encodeURIComponent(token)}`;
+    window.location.href = url;
+  }, []);
 
   const value = useMemo<AuthContextValue>(
     () => ({
@@ -297,13 +406,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       register: registerMutation.mutateAsync,
       logout: logoutMutation.mutateAsync,
       updateProfile: updateProfileMutation.mutateAsync,
+      changePassword: changePasswordMutation.mutateAsync,
+      setPassword: (newPassword: string) =>
+        changePasswordMutation.mutateAsync({ newPassword }),
+      deleteAccount: deleteAccountMutation.mutateAsync,
+      unlinkDiscord: unlinkDiscordMutation.mutateAsync,
+      linkDiscord,
       refreshAuth,
       isLoggingIn: loginMutation.isPending,
       isRegistering: registerMutation.isPending,
       isLoggingOut: logoutMutation.isPending,
       isUpdatingProfile: updateProfileMutation.isPending,
+      isChangingPassword: changePasswordMutation.isPending,
+      isDeletingAccount: deleteAccountMutation.isPending,
     }),
-    [user, status, refreshAuth, loginMutation, registerMutation, logoutMutation, updateProfileMutation],
+    [
+      user,
+      status,
+      refreshAuth,
+      linkDiscord,
+      loginMutation,
+      registerMutation,
+      logoutMutation,
+      updateProfileMutation,
+      changePasswordMutation,
+      deleteAccountMutation,
+      unlinkDiscordMutation,
+    ],
   );
 
   return createElement(AuthContext.Provider, { value }, children);

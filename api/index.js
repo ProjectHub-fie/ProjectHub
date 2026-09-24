@@ -2,8 +2,8 @@
  * Comprehensive Vercel Edge Function handler
  * Implements all required API endpoints for ProjectHub frontend with database integration
  */
-import { DatabaseStorage } from './lib/storage.js';
-import { describeDbError } from './lib/db.js';
+import { DatabaseStorage } from './_lib/storage.js';
+import { describeDbError } from './_lib/db.js';
 import {
   isEmailConfigured,
   isPasswordResetEmailConfigured,
@@ -16,7 +16,7 @@ import {
   contactNotificationEmail,
   createResetToken,
   hashResetToken,
-} from './lib/email.js';
+} from './_lib/email.js';
 import bcrypt from 'bcryptjs';
 import crypto from 'node:crypto';
 import {
@@ -27,7 +27,7 @@ import {
   sessionCookie,
   clearedSessionCookie,
   sessionTokenFrom,
-} from './lib/session-token.js';
+} from './_lib/session-token.js';
 
 // Server-side email validation. The form validates too, but the browser is
 // trivially bypassed, so this is the check that actually holds.
@@ -164,7 +164,7 @@ function logAuth(event, fields = {}) {
 
 /**
  * The user shape sent to the client is defined alongside the session token in
- * ./lib/session-token.js so every backend returns the same fields.
+ * ./_lib/session-token.js so every backend returns the same fields.
  */
 
 /**
@@ -351,6 +351,9 @@ export default async function handler(request, response) {
         "POST /api/auth/logout",
         "GET /api/auth/me",
         "PATCH /api/auth/user",
+        "DELETE /api/auth/user",
+        "POST /api/auth/password",
+        "DELETE /api/auth/discord",
         "POST /api/project-requests",
         "GET /api/project-requests",
         "POST /api/contact",
@@ -460,6 +463,7 @@ function discordAvatarUrl(profile) {
 }
 
 function handleDiscordStart(request, response) {
+  const searchParams = new URL(request.url, `https://${request.headers.host}`).searchParams;
   const clientId = process.env.DISCORD_CLIENT_ID;
   if (!clientId) {
     logAuth('discord.start', { outcome: 'not_configured' });
@@ -473,6 +477,17 @@ function handleDiscordStart(request, response) {
     return response.redirect('/login?discord=error&reason=redirect_not_configured');
   }
 
+  // "Link Discord" is the same OAuth handshake with a flag. The mode (and, for
+  // link, the already-signed-in visitor's own token) rides inside the signed
+  // `state`, so the callback can act on it without trusting a query parameter.
+  const mode = searchParams.get('mode') === 'link' ? 'link' : 'login';
+  const linkToken = mode === 'link' ? searchParams.get('link') : null;
+  const linkUser = readSessionToken(linkToken);
+  if (mode === 'link' && !linkUser?.id) {
+    logAuth('discord.start', { outcome: 'link_not_authenticated' });
+    return response.redirect('/login?discord=error&reason=link_not_authenticated');
+  }
+
   const { verifier, challenge } = createPkcePair();
   setHelperCookie(response, DISCORD_VERIFIER_COOKIE, verifier, 600);
 
@@ -481,10 +496,11 @@ function handleDiscordStart(request, response) {
   // mirrored in a cookie so the value is still available if Discord's redirect
   // drops query parameters a proxy rewrote.
   const state = signSessionToken({
-    id: `discord:${Date.now()}`,
-    email: null,
+    id: linkUser?.id || `discord:${Date.now()}`,
+    email: linkUser?.email ?? null,
     firstName: null,
     lastName: null,
+    ...(mode === 'link' ? { mode: 'link' } : {}),
   });
   setHelperCookie(response, DISCORD_STATE_COOKIE, state, 600);
 
@@ -526,9 +542,11 @@ async function handleDiscordCallback(request, response) {
   // is accepted, and both are signed.
   const state = searchParams.get('state') || cookies[DISCORD_STATE_COOKIE];
   if (!code) return fail('missing_code');
-  if (!state || !readSessionToken(state)) {
+  const stateData = state ? readSessionToken(state) : null;
+  if (!stateData) {
     return fail('invalid_state', 'state missing, unsigned, or expired');
   }
+  const isLink = stateData.mode === 'link';
 
   const clientId = process.env.DISCORD_CLIENT_ID;
   const clientSecret = process.env.DISCORD_CLIENT_SECRET;
@@ -583,16 +601,59 @@ async function handleDiscordCallback(request, response) {
     const profile = await profileRes.json();
     const displayName = profile.global_name || profile.username || 'Discord User';
 
+    // A Discord id belongs to exactly one local row; refuse to attach it to a
+    // second account, whether the handshake is a login or a link.
+    const idOwner = await storage.getUserBySocialId('discord', profile.id);
+
+    if (isLink) {
+      const target = stateData.id ? await storage.getUser(stateData.id) : null;
+      if (!target?.id) {
+        return fail('link_no_account', 'the account to link no longer exists');
+      }
+      // Linking is per-account: this Discord profile cannot already be attached
+      // to somebody else.
+      if (idOwner && idOwner.id !== target.id) {
+        logAuth('discord.link', { outcome: 'discord_already_linked', userId: target.id });
+        return fail('discord_already_linked', 'that Discord account is linked to another user');
+      }
+
+      logAuth('discord.link', { outcome: 'linked', userId: target.id });
+      await storage.upsertUser({
+        id: target.id,
+        discordId: profile.id,
+        profileImageUrl: target.profileImageUrl || discordAvatarUrl(profile),
+      });
+      setHelperCookie(response, DISCORD_VERIFIER_COOKIE, '', 0);
+      setHelperCookie(response, DISCORD_STATE_COOKIE, '', 0);
+      return response.redirect('/settings?discord=linked');
+    }
+
     // Match on the immutable Discord id first, then fall back to email so an
     // existing password account gets linked instead of duplicated. Without the
     // id lookup first, every callback created a new row.
-    let user = await storage.getUserBySocialId('discord', profile.id);
+    let user = idOwner;
     const matchedBy = user ? 'discord_id' : null;
     if (!user && profile.email) {
       user = await storage.getUserByEmail(profile.email);
     }
 
     if (user) {
+      // A password account and a Discord login that only share an email are two
+      // different identities. Silently linking them on an email match would let
+      // anyone who controls a Discord account claiming that address take over
+      // the ProjectHub account. The account must initiate the link itself from
+      // the settings page.
+      if (user.password && !user.discordId) {
+        logAuth('discord.login', {
+          outcome: 'email_conflict_requires_link',
+          userId: user.id,
+        });
+        return fail(
+          'account_exists_requires_link',
+          'this email already has a password account; sign in and link Discord from settings',
+        );
+      }
+
       logAuth('discord.user_lookup', {
         outcome: 'existing',
         matchedBy: matchedBy || 'email',
@@ -791,18 +852,155 @@ async function handleAuthEndpoints(request, response, path) {
         }
 
         try {
-          // Update user
-          const updatedUser = await storage.upsertUser({
-            id: userData.id,
+          const current = await storage.getUser(userData.id);
+          if (!current) {
+            clearVisitorCookie(response);
+            return response.status(401).json({ message: 'Not authenticated' });
+          }
+
+          const updates = {
             firstName: body.firstName,
             lastName: body.lastName,
-            profileImageUrl: body.profileImageUrl
-          });
+            profileImageUrl: body.profileImageUrl,
+          };
 
-          return response.status(200).json({ user: publicUser(updatedUser) });
+          // Changing the email address is allowed, but it must be a valid,
+          // unclaimed address — the same rule the register form uses. An empty
+          // string is treated as "leave it alone", not "clear it".
+          if (typeof body.email === 'string' && body.email.trim() && body.email !== current.email) {
+            const emailError = emailProblem(body.email);
+            if (emailError) {
+              return response.status(400).json({ message: emailError });
+            }
+            const owner = await storage.getUserByEmail(body.email.trim());
+            if (owner && owner.id !== current.id) {
+              return response.status(400).json({ message: 'That email is already in use' });
+            }
+            updates.email = body.email.trim();
+          }
+
+          const updatedUser = await storage.upsertUser({ id: userData.id, ...updates });
+          logAuth('profile.update', { outcome: 'updated', userId: userData.id });
+
+          // The email is embedded in the signed session token, so a change
+          // needs a fresh token or the header session would keep reporting the
+          // old address. Re-issue it in the same shape login does.
+          const sessionToken = signSessionToken(updatedUser);
+          setSessionCookie(response, sessionToken);
+          return response.status(200).json({ user: publicUser(updatedUser), sessionToken });
         } catch (error) {
           console.error('Profile update error:', error);
           return response.status(500).json({ message: 'Failed to update profile' });
+        }
+      }
+
+      if (request.method === 'DELETE') {
+        const userData = readSessionToken(sessionTokenFrom(request.headers));
+        if (!userData?.id) {
+          return response.status(401).json({ message: 'Not authenticated' });
+        }
+
+        try {
+          await storage.deleteUser(userData.id);
+          // The signed token cannot be revoked, but deleting the row makes it
+          // useless: /api/auth/me already treats a valid token for a missing
+          // user as unauthenticated. Dropping the cookie removes the rest.
+          clearVisitorCookie(response);
+          logAuth('account.delete', { outcome: 'deleted', userId: userData.id });
+          return response.status(200).json({ message: 'Account deleted' });
+        } catch (error) {
+          console.error('Account deletion error:', error);
+          return response.status(500).json({ message: 'Failed to delete account' });
+        }
+      }
+      break;
+
+    case 'password':
+      if (request.method === 'POST') {
+        const body = await readJsonBody(request);
+        const userData = readSessionToken(sessionTokenFrom(request.headers));
+        if (!userData?.id) {
+          return response.status(401).json({ message: 'Not authenticated' });
+        }
+
+        try {
+          const user = await storage.getUser(userData.id);
+          if (!user) {
+            clearVisitorCookie(response);
+            return response.status(401).json({ message: 'Not authenticated' });
+          }
+
+          // Setting a password for the first time (a Discord-only account) needs
+          // no current password; changing an existing one does. Without this
+          // check anyone holding a stolen token could lock the real owner out.
+          if (user.password) {
+            if (!body.currentPassword) {
+              return response.status(400).json({ message: 'Current password is required' });
+            }
+            const valid = await bcrypt.compare(body.currentPassword, user.password);
+            if (!valid) {
+              logAuth('password.change', { outcome: 'wrong_current_password', userId: user.id });
+              return response.status(401).json({ message: 'Current password is incorrect' });
+            }
+          }
+
+          const passwordError = passwordProblem(body.newPassword);
+          if (passwordError) {
+            return response.status(400).json({ message: passwordError });
+          }
+
+          const hashedPassword = await bcrypt.hash(body.newPassword, 12);
+          // resetUserPassword also clears any pending reset token, which is the
+          // desired effect: a password change invalidates an outstanding link.
+          await storage.resetUserPassword(user.id, hashedPassword);
+          logAuth('password.change', {
+            outcome: user.password ? 'changed' : 'set',
+            userId: user.id,
+          });
+
+          const updated = await storage.getUser(user.id);
+          return response.status(200).json({
+            message: user.password ? 'Password updated' : 'Password set',
+            user: publicUser(updated),
+          });
+        } catch (error) {
+          console.error('Password change error:', error);
+          return response.status(500).json({ message: 'Failed to update password' });
+        }
+      }
+      break;
+
+    case 'discord':
+      // DELETE /api/auth/discord -> unlink Discord from the signed-in account.
+      // Only a password account may unlink, or it would be left with no way to
+      // sign in at all.
+      if (request.method === 'DELETE') {
+        const userData = readSessionToken(sessionTokenFrom(request.headers));
+        if (!userData?.id) {
+          return response.status(401).json({ message: 'Not authenticated' });
+        }
+
+        try {
+          const user = await storage.getUser(userData.id);
+          if (!user) {
+            clearVisitorCookie(response);
+            return response.status(401).json({ message: 'Not authenticated' });
+          }
+          if (!user.discordId) {
+            return response.status(400).json({ message: 'No Discord account is linked' });
+          }
+          if (!user.password) {
+            return response.status(400).json({
+              message: 'Set a password before unlinking Discord, or you will be locked out',
+            });
+          }
+
+          const updated = await storage.upsertUser({ id: user.id, discordId: null });
+          logAuth('discord.unlink', { outcome: 'unlinked', userId: user.id });
+          return response.status(200).json({ user: publicUser(updated) });
+        } catch (error) {
+          console.error('Discord unlink error:', error);
+          return response.status(500).json({ message: 'Failed to unlink Discord' });
         }
       }
       break;
@@ -925,7 +1123,7 @@ async function handleContactEndpoint(request, response) {
   // affects its outcome: if the mailbox write fails the contact form still
   // reports success, because the email really was delivered.
   try {
-    const { ingestMessage, createMailNotifications } = await import('./lib/mail-store.js');
+    const { ingestMessage, createMailNotifications } = await import('./_lib/mail-store.js');
     const ingested = await ingestMessage({
       // Resend's message id is the idempotency key, so a retried submission
       // cannot appear twice.

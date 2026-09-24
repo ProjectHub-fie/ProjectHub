@@ -125,6 +125,10 @@ class InMemoryStorage implements IStorage {
     }
   }
 
+  async deleteUser(id: string): Promise<void> {
+    this.users.delete(id);
+  }
+
   async upsertUser(userData: any): Promise<IUser> {
     let existingUser: IUser | null = null;
     
@@ -373,6 +377,7 @@ export interface IStorage {
   upsertUser(user: UpsertUser): Promise<IUser>;
   updateUserResetToken(id: string, token: string, expiry: Date): Promise<void>;
   resetUserPassword(id: string, hashedPassword: string): Promise<void>;
+  deleteUser(id: string): Promise<void>;
   
   // Verified projects operations
   getAllVerifiedProjects(): Promise<VerifiedProject[]>;
@@ -501,6 +506,18 @@ export class DatabaseStorage implements IStorage {
       );
     } catch (error: any) {
       console.error('resetUserPassword error:', error.message);
+      if (error.message?.includes('timeout')) {
+        throw new Error('Database timeout');
+      }
+      throw error;
+    }
+  }
+
+  async deleteUser(id: string): Promise<void> {
+    try {
+      await withTimeout(db.delete(users).where(eq(users.id, id)));
+    } catch (error: any) {
+      console.error('deleteUser error:', error.message);
       if (error.message?.includes('timeout')) {
         throw new Error('Database timeout');
       }

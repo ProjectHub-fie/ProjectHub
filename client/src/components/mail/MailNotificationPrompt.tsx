@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import {
   currentPermission,
   dismissPrompt,
+  ensurePushSubscription,
   promptDismissed,
   requestPermission,
 } from "@/lib/mail-notifications";
@@ -32,6 +33,10 @@ export function MailNotificationPrompt({ onEnabled }: { onEnabled?: () => void }
   const handleEnable = async () => {
     setBusy(true);
     const result = await requestPermission();
+    // Permission alone does not deliver anything: without a stored push
+    // subscription the server has nowhere to send the payload, so register one
+    // here too rather than leaving the banner a no-op.
+    if (result === "granted") await ensurePushSubscription();
     setBusy(false);
     setVisible(false);
     if (result === "granted") onEnabled?.();

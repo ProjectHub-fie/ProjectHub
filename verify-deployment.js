@@ -15,8 +15,8 @@ async function verifyDeployment() {
     console.log('\nTesting JavaScript modules...');
     
     const modulesToTest = [
-      './api/lib/db.js',
-      './api/lib/storage.js',
+      './api/_lib/db.js',
+      './api/_lib/storage.js',
       './shared/schema.js',
       './drizzle/schema.js'
     ];

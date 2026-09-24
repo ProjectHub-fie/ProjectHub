@@ -90,6 +90,10 @@ netlify.toml
 build/
 dist/
 
+# Orphaned API build output: nothing references it, and a stale `api/*` tree
+# under it would be misread as serverless functions. Removed, keep it gone.
+api-dist/
+
 # Local development files
 .vercel/
 .next/

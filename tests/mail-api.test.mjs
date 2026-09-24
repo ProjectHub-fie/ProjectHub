@@ -21,13 +21,13 @@ import {
   MAX_ATTACHMENT_BYTES,
   prepareAttachments,
   parseAddressList,
-} from '../api/lib/mail-routes.js';
+} from '../api/_lib/mail-routes.js';
 
 const source = (rel) =>
   readFileSync(fileURLToPath(new URL(`../${rel}`, import.meta.url)), 'utf8');
 
 test('every mail route is registered behind the owner/admin guard', () => {
-  const routes = source('api/lib/mail-routes.js');
+  const routes = source('api/_lib/mail-routes.js');
 
   // The router must take the session guards and apply them to every route.
   assert.match(routes, /buildMailRouter\(\{\s*requireAuth,\s*requireRole,\s*adminIdFrom\s*\}\)/,
@@ -60,7 +60,7 @@ test('the mail router is mounted in both backends', () => {
 });
 
 test('public mail stays on Resend and admin mail stays on Mailjet', () => {
-  const email = source('api/lib/email.js');
+  const email = source('api/_lib/email.js');
 
   // Two gates, two transports, deliberately not collapsed.
   assert.match(email, /export function isPublicEmailConfigured\(\) \{\s*return Boolean\(\s*process\.env\.RESEND_API_KEY/, 'public mail is gated on Resend');
@@ -94,7 +94,7 @@ test('the contact form mirrors into the inbox without changing the Resend send',
 });
 
 test('the Mailjet diagnostic endpoint is guarded and reports acceptance, not delivery', () => {
-  const routes = source('api/lib/mail-routes.js');
+  const routes = source('api/_lib/mail-routes.js');
   const start = routes.indexOf("router.post('/api/admin/mail/mailjet-test'");
   assert.ok(start !== -1, 'the diagnostic endpoint must exist');
 
@@ -193,14 +193,14 @@ test('the attachment allow-list does not include executable types', () => {
 });
 
 test('attachments are served as downloads with nosniff', () => {
-  const routes = source('api/lib/mail-routes.js');
+  const routes = source('api/_lib/mail-routes.js');
   const handler = routes.slice(routes.indexOf("attachments/:id"));
   assert.match(handler, /Content-Disposition.*attachment/, 'a download, never inline rendering');
   assert.match(handler, /X-Content-Type-Options.*nosniff/, 'the declared type is enforced');
 });
 
 test('mail data-layer queries stay paginated and body-free in lists', () => {
-  const store = source('api/lib/mail-store.js');
+  const store = source('api/_lib/mail-store.js');
 
   // List queries must not select the body columns.
   const listColumns = store.slice(store.indexOf('const LIST_COLUMNS'), store.indexOf('export async function listMessages'));
@@ -217,10 +217,70 @@ test('mail data-layer queries stay paginated and body-free in lists', () => {
 });
 
 test('notification rows never store a full body', () => {
-  const store = source('api/lib/mail-store.js');
+  const store = source('api/_lib/mail-store.js');
   const insert = store.slice(store.indexOf('export async function createMailNotifications'), store.indexOf('export async function listNotifications'));
 
   assert.match(insert, /toSnippet\(preview, 160\)/, 'only a short preview is stored');
   assert.ok(!/body_html|body_text/.test(insert), 'notifications must not carry a message body');
   assert.match(insert, /SELECT a\.id, \$\{type\}/, 'one statement writes every admin, not one query per admin');
+});
+
+test('an ingested message fans out a web push, not only an in-app row', () => {
+  const store = source('api/_lib/mail-store.js');
+  const push = source('api/_lib/push.js');
+
+  // The regression this pins: the mailbox wrote a mail_notifications row and lit
+  // the bell, but nothing ever called sendNotification, so no OS notification
+  // arrived. `deliverPush` is now part of the one function every inbound path
+  // already calls.
+  assert.match(store, /async function deliverPush/, 'a push fan-out helper must exist');
+  assert.match(store, /if \(!isMailDatabaseSeparate\(\)\) \{[\s\S]*?await deliverPush\(/, 'the shared-database branch pushes');
+  assert.match(store, /await deliverPush\(type, title, preview, threadId\);[\s\S]*?\n  return rows\.length;/, 'the split-database branch pushes too');
+
+  assert.match(push, /webpush\.sendNotification\(/, 'the payload is actually sent');
+  assert.match(push, /export async function sendMailPush/, 'a single entry point fans out to subscribers');
+  assert.match(push, /isPushConfigured/, 'push is skipped when no VAPID pair is set');
+  assert.match(push, /listPushDeliveries/, 'only opted-in administrators receive a push');
+});
+
+test('a stale push subscription is pruned but a send failure never breaks ingestion', () => {
+  const push = source('api/_lib/push.js');
+  const store = source('api/_lib/mail-store.js');
+
+  assert.match(push, /status === 404 \|\| status === 410/, 'a dropped subscription is recognised');
+  assert.match(push, /deletePushSubscription\(delivery\.adminId, delivery\.endpoint\)/, 'a dead endpoint is removed');
+
+  // The push call is wrapped: the message is already stored and must not be lost
+  // because a push service was unreachable.
+  const deliver = store.slice(store.indexOf('async function deliverPush'), store.indexOf('export async function listNotifications'));
+  assert.match(deliver, /try \{/, 'push failures are caught');
+  assert.match(deliver, /catch \(error\) \{[\s\S]*?console\.error/, 'a failure is logged, not thrown');
+
+  assert.match(push, /url: threadId \? `\/pbad\/mail\?thread=/, 'the payload deep-links into the thread');
+});
+
+test('push recipients are filtered by the per-admin desktop preference', () => {
+  const store = source('api/_lib/mail-store.js');
+  const deliveries = store.slice(store.indexOf('export async function listPushDeliveries'));
+
+  assert.match(deliveries, /LEFT JOIN mail_notification_settings/, 'the preference table is joined');
+  assert.match(deliveries, /COALESCE\(s\.desktop_enabled, false\) = true/, 'desktop alerts must be on');
+  for (const flag of ['notify_new_email', 'notify_project_request', 'notify_reply', 'notify_important']) {
+    assert.ok(deliveries.includes(flag), `the ${flag} preference gates a push`);
+  }
+});
+
+test('both UI paths that enable desktop alerts register a push subscription', () => {
+  const lib = source('client/src/lib/mail-notifications.ts');
+  const panel = source('client/src/components/mail/MailSettingsPanel.tsx');
+  const prompt = source('client/src/components/mail/MailNotificationPrompt.tsx');
+
+  assert.match(lib, /export async function ensurePushSubscription/, 'the subscription helper is shared');
+  assert.match(lib, /pushManager\.subscribe\(/, 'the browser subscription is created');
+  assert.match(lib, /\/api\/admin\/mail\/push\/subscribe/, 'the subscription is stored server-side');
+
+  // Setting the preference without a subscription is what made alerts silent.
+  assert.match(panel, /const subscribed = await ensurePushSubscription\(\)/, 'the settings switch subscribes');
+  assert.match(panel, /desktopEnabled: subscribed/, 'the preference follows a real subscription');
+  assert.match(prompt, /if \(result === "granted"\) await ensurePushSubscription\(\)/, 'the banner subscribes too');
 });

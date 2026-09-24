@@ -15,7 +15,7 @@ import test, { after } from 'node:test';
 import assert from 'node:assert/strict';
 import { callHandler, decodeToken } from './helpers/client-handler.mjs';
 import handler from '../api/index.js';
-import { storage } from '../api/lib/storage.js';
+import { storage } from '../api/_lib/storage.js';
 
 const runId = Math.random().toString(36).slice(2, 10);
 const email = (label) => `auth-test-${runId}-${label}@example.test`;
@@ -29,7 +29,7 @@ const track = (user) => { if (user?.id) created.push(user.id); return user; };
 
 after(async () => {
   if (!hasDatabase || created.length === 0) return;
-  const { db } = await import('../api/lib/db.js');
+  const { db } = await import('../api/_lib/db.js');
   const { users } = await import('../drizzle/schema.js');
   const { inArray } = await import('drizzle-orm');
   await db.delete(users).where(inArray(users.id, created));
@@ -136,7 +136,7 @@ test('blocked accounts cannot log in', { skip: !hasDatabase }, async () => {
   const user = await storage.getUserByEmail(addr);
   track(user);
 
-  const { db } = await import('../api/lib/db.js');
+  const { db } = await import('../api/_lib/db.js');
   const { users } = await import('../drizzle/schema.js');
   const { eq } = await import('drizzle-orm');
   await db.update(users).set({ isBlocked: true }).where(eq(users.id, user.id));

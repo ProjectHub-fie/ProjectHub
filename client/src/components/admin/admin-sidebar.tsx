@@ -1,4 +1,5 @@
 import {
+  Bot,
   CheckCircle,
   FileEdit,
   Inbox,
@@ -6,6 +7,7 @@ import {
   Mail,
   PenLine,
   Send,
+  Settings,
   ShieldCheck,
   Star,
   Trash2,
@@ -31,6 +33,7 @@ import {
 } from "@/components/ui/sidebar";
 import { AdminThemeToggle } from "@/components/admin/admin-theme-toggle";
 import { useMailNotifications } from "@/hooks/useMailNotifications";
+import { useAdminAuth } from "@/hooks/useAdminAuth";
 
 /**
  * Navigation for the administration dashboard.
@@ -65,6 +68,8 @@ export function AdminSidebar() {
   // Shared notification poll: this is what makes the unread badge update without
   // a full page reload. It returns no counts for a non-owner/admin session.
   const { counts } = useMailNotifications();
+  const { canManageBot } = useAdminAuth();
+  const onBot = location === "/bot" || location.startsWith("/bot/");
 
   const onMail = location === "/mail" || location.startsWith("/mail/");
   const activeView = new URLSearchParams(searchString).get("view") || "inbox";
@@ -153,11 +158,45 @@ export function AdminSidebar() {
                   })}
                 </SidebarMenuSub>
               </SidebarMenuItem>
+
+              {/* Owner/admin only, matching the server guard on /api/admin/bot. */}
+              {canManageBot && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={onBot}
+                    className={`rounded-lg px-3 py-2 cursor-pointer ${onBot ? "sidebar-nav-active" : ""}`}
+                  >
+                    <Link href="/bot" onClick={closeMobileSidebar}>
+                      <span className="truncate flex items-center gap-2">
+                        <Bot className="h-4 w-4" />
+                        Bot
+                      </span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
       </SidebarContent>
       <SidebarFooter className="border-t p-2 md:p-4">
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              asChild
+              isActive={location === "/settings"}
+              className={`rounded-lg px-3 py-2 cursor-pointer ${location === "/settings" ? "sidebar-nav-active" : ""}`}
+            >
+              <Link href="/settings" onClick={closeMobileSidebar}>
+                <span className="group-data-[collapsible=icon]:!hidden md:group-data-[collapsible=icon]:hidden truncate flex items-center gap-2">
+                  <Settings className="h-4 w-4" />
+                  Settings
+                </span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
         <div className="flex items-center justify-between px-2">
           <AdminThemeToggle />
         </div>

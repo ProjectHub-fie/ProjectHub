@@ -18,9 +18,11 @@ import bcrypt from 'bcryptjs';
 import multer from 'multer';
 import postgres from 'postgres';
 import crypto from 'node:crypto';
-import { describeDbError, normalizeDatabaseUrl } from '../lib/db.js';
-import { buildMailRouter, handleInboundMessage } from '../lib/mail-routes.js';
-import { ingestMessage, createMailNotifications, ensureMailSchema, purgeAdminMailData } from '../lib/mail-store.js';
+import { describeDbError, normalizeDatabaseUrl } from '../_lib/db.js';
+import { parseCookies } from '../_lib/session-token.js';
+import { buildMailRouter, handleInboundMessage } from '../_lib/mail-routes.js';
+import { buildBotRouter } from '../_lib/bot-routes.js';
+import { ingestMessage, createMailNotifications, ensureMailSchema, purgeAdminMailData } from '../_lib/mail-store.js';
 
 const sql = postgres(normalizeDatabaseUrl(process.env.DATABASE_URL), { ssl: 'require', max: 5 });
 
@@ -37,7 +39,7 @@ const ROLE_HIERARCHY = ['moderator', 'admin', 'owner'];
 
 /**
  * Creates the dashboard table if the shared database does not have it yet.
- * Mirrors the auto-seed convention already used by api/lib/storage.js, so the
+ * Mirrors the auto-seed convention already used by api/_lib/storage.js, so the
  * dashboard works on a fresh database without a separate migration step.
  * Cached so the DDL runs at most once per serverless instance.
  */
@@ -52,9 +54,16 @@ const ensureAdminSchema = () => {
           pin text NOT NULL UNIQUE,
           password_hash text NOT NULL,
           role text DEFAULT 'moderator' NOT NULL,
+          discord_id text,
           updated_at timestamp DEFAULT now() NOT NULL
         )
       `;
+      // Added after the table shipped, so an existing deployment gains it here.
+      // The unique index keeps one Discord account mapped to one administrator;
+      // the column-level UNIQUE on a fresh create would not reach a table that
+      // already existed.
+      await sql`ALTER TABLE admin_credentials ADD COLUMN IF NOT EXISTS discord_id text`;
+      await sql`CREATE UNIQUE INDEX IF NOT EXISTS admin_credentials_discord_id_idx ON admin_credentials (discord_id) WHERE discord_id IS NOT NULL`;
     } catch (error) {
       schemaReady = null;
       throw error;
@@ -69,9 +78,15 @@ const getAdminByPin = async (pin) => {
   return rows[0] || null;
 };
 
+const getAdminByDiscordId = async (discordId) => {
+  await ensureAdminSchema();
+  const rows = await sql`SELECT * FROM admin_credentials WHERE discord_id = ${discordId} LIMIT 1`;
+  return rows[0] || null;
+};
+
 const getAllAdmins = async () => {
   await ensureAdminSchema();
-  return sql`SELECT id, pin, email, role, updated_at FROM admin_credentials ORDER BY role, pin`;
+  return sql`SELECT id, pin, email, role, discord_id, updated_at FROM admin_credentials ORDER BY role, pin`;
 };
 
 const setAdminPassword = async (pin, email, hash, role = 'moderator') => {
@@ -199,6 +214,7 @@ function buildAdminRouter() {
         pin: a.pin,
         email: a.email,
         role: a.role,
+        discordId: a.discord_id || null,
         updatedAt: a.updated_at,
       })));
     } catch (error) {
@@ -291,6 +307,213 @@ function buildAdminRouter() {
     } catch (error) {
       console.error('Password change error:', error);
       res.status(500).json({ message: 'Failed to change password' });
+    }
+  });
+
+  /* -------------------------------------------------------------------------
+     Discord sign-in for administrators.
+
+     Separate from the public client flow: it authenticates an
+     `admin_credentials` row (not a `users` row) and then establishes the same
+     dashboard session a PIN/password login does. The two identities share
+     nothing, so a public Discord account can never reach /pbad.
+  ------------------------------------------------------------------------- */
+
+  const adminDiscordRedirectUri = () =>
+    process.env.DISCORD_ADMIN_CALLBACK_URL ||
+    (process.env.APP_ORIGIN ? `${process.env.APP_ORIGIN}/api/admin/auth/discord/callback` : '');
+
+  const isAbsoluteRedirect = (uri) => /^https?:\/\/[^/]+/i.test(uri || '');
+
+  /** Signs the OAuth state with SESSION_SECRET so the callback can trust it. */
+  const signAdminState = (value) =>
+    `${Buffer.from(value).toString('base64url')}.${crypto
+      .createHmac('sha256', process.env.SESSION_SECRET)
+      .update(Buffer.from(value).toString('base64url'))
+      .digest('base64url')}`;
+
+  const readAdminState = (token) => {
+    if (!token || typeof token !== 'string') return null;
+    const [payload, signature] = token.split('.');
+    if (!payload || !signature) return null;
+    const expected = crypto
+      .createHmac('sha256', process.env.SESSION_SECRET)
+      .update(payload)
+      .digest('base64url');
+    const a = Buffer.from(signature);
+    const b = Buffer.from(expected);
+    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+    try {
+      const parsed = JSON.parse(Buffer.from(payload, 'base64url').toString());
+      if (typeof parsed?.exp !== 'number' || Date.now() > parsed.exp) return null;
+      return parsed;
+    } catch {
+      return null;
+    }
+  };
+
+  router.get('/api/admin/auth/discord', (req, res) => {
+    const clientId = process.env.DISCORD_CLIENT_ID;
+    if (!clientId) {
+      return res.redirect('/pbad/login?discord=error&reason=not_configured');
+    }
+    const redirectUri = adminDiscordRedirectUri();
+    if (!isAbsoluteRedirect(redirectUri)) {
+      return res.redirect('/pbad/login?discord=error&reason=redirect_not_configured');
+    }
+
+    // `mode=link` starts the same handshake from the signed-in settings page.
+    // The admin id is baked into the signed state so the callback attaches the
+    // Discord identity to the account that initiated it.
+    const linking = req.query?.mode === 'link';
+    if (linking && !req.session?.isAdminLoggedIn) {
+      return res.redirect('/pbad/login?discord=error&reason=link_not_authenticated');
+    }
+
+    const verifier = crypto.randomBytes(32).toString('base64url');
+    const challenge = crypto.createHash('sha256').update(verifier).digest('base64url');
+    const state = signAdminState(JSON.stringify({
+      t: Date.now(),
+      exp: Date.now() + 600000,
+      ...(linking ? { mode: 'link', adminId: req.session.adminId } : {}),
+    }));
+
+    res.cookie('admin_discord_verifier', verifier, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'none',
+      maxAge: 600000,
+      path: '/',
+    });
+    res.cookie('admin_discord_state', state, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'none',
+      maxAge: 600000,
+      path: '/',
+    });
+
+    const authorizeUrl = new URL('https://discord.com/oauth2/authorize');
+    authorizeUrl.searchParams.set('client_id', clientId);
+    authorizeUrl.searchParams.set('redirect_uri', redirectUri);
+    authorizeUrl.searchParams.set('response_type', 'code');
+    authorizeUrl.searchParams.set('scope', 'identify');
+    authorizeUrl.searchParams.set('state', state);
+    authorizeUrl.searchParams.set('code_challenge', challenge);
+    authorizeUrl.searchParams.set('code_challenge_method', 'S256');
+
+    return res.redirect(authorizeUrl.toString());
+  });
+
+  router.get('/api/admin/auth/discord/callback', async (req, res) => {
+    const fail = (reason) => res.redirect(`/pbad/login?discord=error&reason=${encodeURIComponent(reason)}`);
+
+    const cookies = parseCookies(req.headers.cookie || '');
+    const { code, state: queryState } = req.query;
+    const state = queryState || cookies.admin_discord_state;
+    const verifier = cookies.admin_discord_verifier;
+    const stateData = readAdminState(state);
+
+    if (!code) return fail('missing_code');
+    if (!stateData) return fail('invalid_state');
+    if (!verifier) return fail('missing_verifier');
+
+    const clientId = process.env.DISCORD_CLIENT_ID;
+    const clientSecret = process.env.DISCORD_CLIENT_SECRET;
+    if (!clientId || !clientSecret) return fail('not_configured');
+
+    try {
+      const tokenRes = await fetch('https://discord.com/api/v10/oauth2/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          client_id: clientId,
+          client_secret: clientSecret,
+          grant_type: 'authorization_code',
+          code: String(code),
+          redirect_uri: adminDiscordRedirectUri(),
+          code_verifier: verifier,
+        }),
+      });
+      if (!tokenRes.ok) return fail('token_exchange');
+      const { access_token: accessToken } = await tokenRes.json();
+
+      const profileRes = await fetch('https://discord.com/api/v10/users/@me', {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (!profileRes.ok) return fail('profile');
+      const profile = await profileRes.json();
+
+      res.clearCookie('admin_discord_verifier', { path: '/' });
+      res.clearCookie('admin_discord_state', { path: '/' });
+
+      if (stateData.mode === 'link') {
+        // The signed state names the initiating admin; the caller must still be
+        // that admin, proved by their dashboard session.
+        if (!req.session?.isAdminLoggedIn || req.session.adminId !== stateData.adminId) {
+          return fail('link_not_authenticated');
+        }
+        const owner = await getAdminByDiscordId(profile.id);
+        if (owner && owner.id !== stateData.adminId) {
+          return fail('discord_already_linked');
+        }
+        await sql`UPDATE admin_credentials SET discord_id = ${profile.id}, updated_at = now() WHERE id = ${stateData.adminId}::uuid`;
+        return res.redirect('/pbad/settings?discord=linked');
+      }
+
+      const admin = await getAdminByDiscordId(profile.id);
+      if (!admin) {
+        // Only an administrator who has previously linked their Discord id may
+        // sign in this way. An unknown Discord account is refused rather than
+        // being allowed to claim an admin row by email.
+        return fail('admin_not_linked');
+      }
+
+      req.session.regenerate((regenerateError) => {
+        if (regenerateError) return fail('session');
+        req.session.isAdminLoggedIn = true;
+        req.session.adminId = admin.id;
+        req.session.adminRole = admin.role;
+        req.session.save((saveError) => {
+          if (saveError) return fail('session');
+          res.redirect('/pbad');
+        });
+      });
+    } catch (error) {
+      console.error('Admin Discord callback error:', error.message);
+      return fail('unexpected');
+    }
+  });
+
+  // Unlink Discord from the signed-in administrator's own row. Linking is only
+  // ever done through the OAuth callback, which proves ownership of the Discord
+  // identity rather than trusting an id the client supplies.
+  router.delete('/api/admin/auth/discord/link', requireAuth, async (req, res) => {
+    try {
+      await sql`UPDATE admin_credentials SET discord_id = NULL, updated_at = now() WHERE id = ${req.session.adminId}::uuid`;
+      res.json({ success: true, message: 'Discord unlinked' });
+    } catch (error) {
+      console.error('Admin Discord unlink error:', error);
+      res.status(500).json({ message: 'Failed to unlink Discord' });
+    }
+  });
+
+  // The administrator's own account, so the settings form knows what is linked.
+  router.get('/api/admin/me', requireAuth, async (req, res) => {
+    try {
+      const rows = await sql`SELECT id, pin, email, role, discord_id FROM admin_credentials WHERE id = ${req.session.adminId}::uuid LIMIT 1`;
+      const admin = rows[0];
+      if (!admin) return res.status(401).json({ message: 'Authentication required' });
+      res.json({
+        id: admin.id,
+        pin: admin.pin,
+        email: admin.email,
+        role: admin.role,
+        discordId: admin.discord_id || null,
+      });
+    } catch (error) {
+      console.error('Admin me error:', error);
+      res.status(500).json({ message: 'Failed to fetch admin' });
     }
   });
 
@@ -497,6 +720,10 @@ function buildAdminRouter() {
     requireRole,
     adminIdFrom: (req) => req.session?.adminId,
   }));
+
+  // The Discord bot configuration. Owner/admin only, same as mail: this page
+  // can point the bot at a channel and trigger a real alert.
+  router.use(buildBotRouter({ requireAuth, requireRole }));
 
   router.use('/api/admin', (_req, res) => res.status(404).json({ message: 'Admin endpoint not found' }));
 

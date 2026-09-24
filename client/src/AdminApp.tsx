@@ -21,6 +21,8 @@ const AdminManagement = lazy(() => import("@/pages/admin-info"));
 const AdminCreate = lazy(() => import("@/pages/create-admin"));
 const AdminLogin = lazy(() => import("@/pages/admin-login-page"));
 const AdminMail = lazy(() => import("@/pages/mail-page"));
+const AdminSettings = lazy(() => import("@/pages/admin-settings"));
+const AdminBot = lazy(() => import("@/pages/admin-bot"));
 
 /**
  * Registers the mail service worker.
@@ -37,7 +39,7 @@ function registerMailServiceWorker() {
   });
 }
 
-type AdminPermission = "viewUsers" | "manageProjects" | "manageAdmins" | "mail";
+type AdminPermission = "viewUsers" | "manageProjects" | "manageAdmins" | "mail" | "bot";
 
 function AdminLoading() {
   return (
@@ -88,7 +90,7 @@ function AdminNotFound() {
  * the URL staying secret or on this component running.
  */
 function AdminGuard({ permission, children }: { permission?: AdminPermission; children: React.ReactNode }) {
-  const { isLoading, isAuthenticated, canViewUsers, canManageProjects, canManageAdmins, canUseMail } = useAdminAuth();
+  const { isLoading, isAuthenticated, canViewUsers, canManageProjects, canManageAdmins, canUseMail, canManageBot } = useAdminAuth();
   const [, setLocation] = useLocation();
 
   React.useEffect(() => {
@@ -105,6 +107,8 @@ function AdminGuard({ permission, children }: { permission?: AdminPermission; ch
   // Mail is owner/admin only. This is the experience layer: every
   // /api/admin/mail route independently enforces the same rule server-side.
   if (permission === "mail" && !canUseMail) return <AdminAccessDenied />;
+  // The bot console is owner/admin only, same as mail.
+  if (permission === "bot" && !canManageBot) return <AdminAccessDenied />;
 
   return <>{children}</>;
 }
@@ -200,6 +204,12 @@ export default function AdminApp() {
                   </Route>
                   <Route path="/mail">
                     <AdminPage permission="mail"><AdminMail /></AdminPage>
+                  </Route>
+                  <Route path="/bot">
+                    <AdminPage permission="bot"><AdminBot /></AdminPage>
+                  </Route>
+                  <Route path="/settings">
+                    <AdminPage><AdminSettings /></AdminPage>
                   </Route>
                   <Route>
                     <AdminPage><AdminNotFound /></AdminPage>

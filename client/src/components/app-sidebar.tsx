@@ -1,4 +1,4 @@
-import { Home, Briefcase, FileText, LogIn, LogOut, Moon, Sun } from "lucide-react";
+import { Home, Briefcase, FileText, LogIn, LogOut, Moon, Sun, User, Settings } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import {
   Sidebar,
@@ -17,6 +17,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { useTheme } from "@/components/theme-provider";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
+import { displayName, userInitials } from "@/lib/user-display";
 
 /**
  * Navigation for the public client portal.
@@ -28,6 +29,16 @@ const items = [
   { title: "Home", url: "/", icon: Home },
   { title: "Projects", url: "/projects", icon: Briefcase },
   { title: "Dashboard", url: "/dashboard", icon: FileText },
+];
+
+/**
+ * Account pages, shown in the sidebar only while signed in. They live here
+ * rather than in `items` so an anonymous visitor never sees links to pages
+ * behind a session.
+ */
+const accountItems = [
+  { title: "Profile", url: "/client_profile", icon: User },
+  { title: "Settings", url: "/settings", icon: Settings },
 ];
 
 function PortalThemeToggle() {
@@ -112,23 +123,54 @@ export function AppSidebar() {
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>
+
+        {isAuthenticated && (
+          <SidebarGroup className="mt-2">
+            <SidebarGroupLabel className="group-data-[collapsible=icon]:!hidden md:group-data-[collapsible=icon]:hidden">
+              Account
+            </SidebarGroupLabel>
+            <SidebarGroupContent>
+              <SidebarMenu>
+                {accountItems.map((item) => (
+                  <SidebarMenuItem key={item.title} className="mb-1">
+                    <SidebarMenuButton
+                      asChild
+                      isActive={location === item.url}
+                      className={`rounded-lg px-3 py-2 cursor-pointer ${location === item.url ? "sidebar-nav-active" : ""}`}
+                    >
+                      <Link href={item.url} onClick={closeMobileSidebar}>
+                        <span className="group-data-[collapsible=icon]:!hidden md:group-data-[collapsible=icon]:hidden truncate flex items-center gap-2">
+                          <item.icon className="h-4 w-4" />
+                          {item.title}
+                        </span>
+                      </Link>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+              </SidebarMenu>
+            </SidebarGroupContent>
+          </SidebarGroup>
+        )}
       </SidebarContent>
 
       <SidebarFooter className="border-t p-2 md:p-4 space-y-3">
         {isAuthenticated && user && (
-          <div className="flex items-center gap-3 px-2">
+          <div className="flex items-center gap-3 px-2" data-testid="client-sidebar-user">
             <Avatar className="h-8 w-8 border border-border">
               <AvatarImage src={user.profileImageUrl || ""} />
               <AvatarFallback className="bg-primary/10 text-primary text-xs">
-                {user.firstName?.[0]}
-                {user.lastName?.[0]}
+                {userInitials(user)}
               </AvatarFallback>
             </Avatar>
             <div className="flex-1 min-w-0 group-data-[collapsible=icon]:!hidden md:group-data-[collapsible=icon]:hidden">
-              <p className="text-sm font-medium text-foreground truncate">
-                {user.firstName} {user.lastName}
+              <p className="text-sm font-medium text-foreground truncate" data-testid="client-sidebar-name">
+                {displayName(user)}
               </p>
-              <p className="text-xs text-muted-foreground truncate">{user.email}</p>
+              {user.email ? (
+                <p className="text-xs text-muted-foreground truncate" data-testid="client-sidebar-email">
+                  {user.email}
+                </p>
+              ) : null}
             </div>
           </div>
         )}

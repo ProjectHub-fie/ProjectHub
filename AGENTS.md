@@ -31,7 +31,7 @@ them in an `after` hook. `tests/admin-auth.test.mjs` creates real `admin_session
 rows when it logs in; they expire on their own but can be cleared with
 `DELETE FROM admin_sessions`.
 
-Always use `--test-force-exit`. `api/lib/db.js` holds a postgres pool open, which
+Always use `--test-force-exit`. `api/_lib/db.js` holds a postgres pool open, which
 keeps the event loop alive and otherwise hangs the runner.
 
 ### What the suite covers
@@ -80,11 +80,11 @@ literal fallback would be published in this repository, and anyone who read it
 could forge an authenticated session.
 
 `DATABASE_URL` is the single source of the connection string for the public API
-(`api/lib/db.js`), the admin function and its session store (`api/admin/index.js`).
+(`api/_lib/db.js`), the admin function and its session store (`api/admin/index.js`).
 Everything that touches the URL passes it through `normalizeDatabaseUrl`, whose
-implementation lives in `api/lib/db-url.js` so modules that must not open a pool
-(`server/db.ts`, `server/routes.ts`, `api/lib/mail-store.js`) can import just the
-pure function. `api/lib/db.js` re-exports it for callers that already import it.
+implementation lives in `api/_lib/db-url.js` so modules that must not open a pool
+(`server/db.ts`, `server/routes.ts`, `api/_lib/mail-store.js`) can import just the
+pure function. `api/_lib/db.js` re-exports it for callers that already import it.
 
 It does two things. It drops `channel_binding`: Neon's dashboard appends
 `channel_binding=require`, which asks for SCRAM-SHA-256-PLUS, and postgres.js only
@@ -112,7 +112,7 @@ and queried on that database instead of `DATABASE_URL`. Unset — the default �
 the mailbox shares the application database and nothing changes. This lets the
 mail write volume stay off the application database without a second code path.
 
-`api/lib/mail-store.js` is the only place that reads mail tables, so it owns the
+`api/_lib/mail-store.js` is the only place that reads mail tables, so it owns the
 choice. Two consequences are worth knowing before splitting the databases:
 
 - **Foreign keys cannot cross databases.** On a shared database the mail tables
@@ -132,7 +132,7 @@ alone and with `MAIL_DATABASE_URL` pointing at a second database.
 ### Mailjet sending is only successful when Mailjet says so
 
 Every outbound message — password reset and the whole admin mailbox — goes
-through one function, `mailjetSend` in `api/lib/email.js`. It posts to the v3.1
+through one function, `mailjetSend` in `api/_lib/email.js`. It posts to the v3.1
 Send API with Basic auth built from `MJ_APIKEY_PUBLIC`/`MJ_APIKEY_PRIVATE`, and
 the sender comes from `MJ_SENDER_EMAIL` (name from `MJ_SENDER_NAME`).
 
@@ -168,3 +168,129 @@ DATABASE_URL='postgres://...' node scripts/reset-owner-pin.mjs
 
 It rotates the PIN and password to fresh random values and prints them once.
 `--keep-pin` rotates only the password.
+
+### Discord sign-in and linking
+
+Discord is an optional second way in, for both portals. It is enabled only when
+`DISCORD_CLIENT_ID` and `DISCORD_CLIENT_SECRET` are set; without them the
+handshake redirects back with `not_configured` and the PIN/password form is the
+only way in. The callback URL must be absolute, which is why it is derived from
+`APP_ORIGIN` and why the start route refuses to build a handshake without one.
+Override it with `DISCORD_CALLBACK_URL` (public client) or
+`DISCORD_ADMIN_CALLBACK_URL` (admin dashboard) if the two are registered
+separately in the Discord application.
+
+A password account and a Discord login that only share an email are two
+different identities. Signing in with Discord when the email already belongs to
+a password account is refused as `account_exists_requires_link`: silently
+matching on the address would let whoever controls that Discord account take
+over the ProjectHub account. The account must initiate the link itself, from
+`/settings` (client) or `/pbad/settings` (admin), which runs the OAuth handshake
+with `mode=link`. Only Discord's own profile response supplies the id that gets
+stored — the browser never posts an id — so a forged id cannot attach itself to
+a row.
+
+The two rules that keep an account reachable are:
+
+- An account may not unlink its only sign-in method. A Discord-only account is
+  offered "set a password" and the unlink button stays disabled until one
+  exists; the server enforces the same rule, not just the UI.
+- An administrator may only sign in with Discord if their `admin_credentials`
+  row already carries that `discord_id`; an unknown Discord account gets
+  `admin_not_linked` rather than claiming a row by email.
+
+`discord_id` on `admin_credentials` is added by `ensureAdminSchema` for
+deployments that predate it, along with a unique index on the non-null values so
+one Discord account maps to one administrator.
+
+Client-facing pages are `/client_profile` (picture, name, email) and `/settings`
+(Discord, password, deletion). The email is part of the signed token payload, so
+a profile email change makes the server re-issue the token and the client stores
+the replacement.
+
+### Desktop mail notifications need VAPID keys
+
+The mailbox can send a browser push notification when mail arrives. It is
+enabled only when `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY` are set — without
+them `isPushConfigured()` in `api/_lib/push.js` returns false and every delivery
+is skipped, with the in-dashboard unread badge still working. The public key
+also has to reach the client as `VITE_VAPID_PUBLIC_KEY` (or it is embedded the
+same way the Turnstile site key is) for a subscription to be created at all.
+Generate a pair once and keep it stable: changing the keys invalidates every
+stored subscription. The same rules as Mailjet apply — a push is best-effort and
+its failure must never fail the mail ingestion that triggered it, and no message
+body travels in the payload.
+
+### `api/` files are counted as functions, so helpers go in `api/_lib`
+
+Vercel turns **every** file under `api/` into a Serverless Function. The plan
+allows 12, and the failure mode is a build error — "exceeded the limit" — not a
+warning. `api/lib` reached 15 files when the mail and bot helpers landed and the
+deploy failed; that is why the shared helpers now live in `api/_lib`.
+
+A path under `api/` is skipped when it contains `/_`, `/.`, `/node_modules/`, or
+ends with `.d.ts`. So `api/_lib` deploys **zero** functions and the directory name
+still says what it holds. Only two files are functions: `api/index.js` and
+`api/admin/index.js`.
+
+Practical consequences:
+
+- Put a new helper in `api/_lib`, never in `api/` — a file at `api/foo.js` costs a
+  function slot and is served as a public endpoint.
+- `tests/deployment-limits.test.mjs` re-implements Vercel's rule and asserts the
+  count and that imports resolve through `_lib`, so this is caught in CI.
+- Renaming the directory is safe across all three consumers: the two functions
+  import `./_lib` and `../_lib`, and the Express dev server and bot import
+  `api/_lib` by path. Scripts that copy `api/` (`scripts/build-vercel.mjs`) use a
+  recursive copy and carry `_lib` with it.
+
+### The Discord bot is a separate process, not a function
+
+`bot/index.js` is the private server bot (`&` prefix, mention replies). It holds
+a persistent Discord gateway connection, which a Vercel function cannot do — the
+function is request-scoped and capped at 30s in `vercel.json` — so the bot runs
+on any host that keeps a process alive (VPS, Railway, Fly, Render, Docker) via
+`npm run bot`. It is deliberately absent from `vercel.json`; only the control
+plane is serverless. Nothing under `api/` imports `discord.js`, so it is not
+pulled into a function bundle.
+
+The split matters when changing this feature: **the dashboard is serverless and
+must stay request/response, and only `bot/index.js` may assume a long-lived
+process.** Shared logic lives in `api/_lib` so both halves use the same rules.
+
+Configuration is stored, not hardcoded, and is edited at `/pbad/bot` (owner and
+admin only, the same `requireRole('admin')` rule as mail):
+
+- `bot_settings` holds one row: enabled flag, prefix, alert channel id, webhook,
+  threshold, cooldown, the three tier limits and the project label. Created
+  lazily by `ensureBotSchema`, following the `ensureAdminSchema` convention.
+- `bot_alert_state.last_alerted_at` is jsonb keyed by metric, and is what stops a
+  sustained overage from posting on every poll.
+
+Two secrets are environment-only and are never stored or returned: the bot token
+(`DISCORD_BOT_TOKEN`) and the Neon key (`NEON_API_KEY`). The webhook URL *is* a
+credential and is stored, but `getBotSettingsForDashboard` masks it via
+`maskWebhook` — the browser only ever sees that one is configured. `NEON_PROJECT_ID`
+is read from the environment rather than the database so the alert cannot be
+aimed at a different project by a dashboard write.
+
+`&dev` resolves the caller's Discord id against `admin_credentials.discord_id`
+first and `users.discord_id` second, because the same Discord account can be
+linked to either portal. An account linked to both is reported as both. A client
+whose account is blocked is reported as blocked, never as unlinked.
+
+The usage alert reads Neon's `consumption_history/v2` endpoint. Neon reports what
+was consumed, not the plan ceiling, so the limits are configured in the dashboard
+and default to the Free tier. `evaluateUsage` grades each metric (ok / warning /
+critical / exceeded) and the worst one sets the overall level; `shouldAlert` then
+applies a per-metric cooldown. Delivery goes to the channel and the webhook
+independently, and only metrics that actually reached a destination record their
+timestamp — so a total delivery failure retries on the next poll instead of being
+silently marked as sent. The embed posted to a webhook pins
+`allowed_mentions: { parse: [] }`, since a webhook post can otherwise ping roles.
+`POST /api/admin/bot/usage-preview` reads the live figures and evaluates them
+*without* sending, which is how "the bot is silent" is told apart from "usage is
+genuinely low" from the deployment that is actually running.
+
+The alert is best-effort, the same as Mailjet and push: a failed read or send is
+logged and the poll moves on.
