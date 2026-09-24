@@ -20,6 +20,8 @@ const ProjectPage = React.lazy(() => import("@/pages/project"));
 const ErrorPage = React.lazy(() => import("@/pages/error"));
 const NotFound = React.lazy(() => import("@/pages/not-found"));
 const ResetPassword = React.lazy(() => import("@/pages/reset-password"));
+const ClientProfile = React.lazy(() => import("@/pages/client-profile"));
+const Settings = React.lazy(() => import("@/pages/settings"));
 
 function Router() {
   const { isAuthenticated } = useAuth();
@@ -37,6 +39,8 @@ function Router() {
         <Route path="/login" component={Login} />
         <Route path="/projects" component={Projects} />
         <Route path="/dashboard" component={ProjectRequest} />
+        <Route path="/client_profile" component={ClientProfile} />
+        <Route path="/settings" component={Settings} />
         <Route path="/project/:slug" component={ProjectPage} />
         <Route path="/error" component={ErrorPage} />
         <Route path="/reset-password" component={ResetPassword} />

@@ -168,3 +168,55 @@ DATABASE_URL='postgres://...' node scripts/reset-owner-pin.mjs
 
 It rotates the PIN and password to fresh random values and prints them once.
 `--keep-pin` rotates only the password.
+
+### Discord sign-in and linking
+
+Discord is an optional second way in, for both portals. It is enabled only when
+`DISCORD_CLIENT_ID` and `DISCORD_CLIENT_SECRET` are set; without them the
+handshake redirects back with `not_configured` and the PIN/password form is the
+only way in. The callback URL must be absolute, which is why it is derived from
+`APP_ORIGIN` and why the start route refuses to build a handshake without one.
+Override it with `DISCORD_CALLBACK_URL` (public client) or
+`DISCORD_ADMIN_CALLBACK_URL` (admin dashboard) if the two are registered
+separately in the Discord application.
+
+A password account and a Discord login that only share an email are two
+different identities. Signing in with Discord when the email already belongs to
+a password account is refused as `account_exists_requires_link`: silently
+matching on the address would let whoever controls that Discord account take
+over the ProjectHub account. The account must initiate the link itself, from
+`/settings` (client) or `/pbad/settings` (admin), which runs the OAuth handshake
+with `mode=link`. Only Discord's own profile response supplies the id that gets
+stored — the browser never posts an id — so a forged id cannot attach itself to
+a row.
+
+The two rules that keep an account reachable are:
+
+- An account may not unlink its only sign-in method. A Discord-only account is
+  offered "set a password" and the unlink button stays disabled until one
+  exists; the server enforces the same rule, not just the UI.
+- An administrator may only sign in with Discord if their `admin_credentials`
+  row already carries that `discord_id`; an unknown Discord account gets
+  `admin_not_linked` rather than claiming a row by email.
+
+`discord_id` on `admin_credentials` is added by `ensureAdminSchema` for
+deployments that predate it, along with a unique index on the non-null values so
+one Discord account maps to one administrator.
+
+Client-facing pages are `/client_profile` (picture, name, email) and `/settings`
+(Discord, password, deletion). The email is part of the signed token payload, so
+a profile email change makes the server re-issue the token and the client stores
+the replacement.
+
+### Desktop mail notifications need VAPID keys
+
+The mailbox can send a browser push notification when mail arrives. It is
+enabled only when `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY` are set — without
+them `isPushConfigured()` in `api/lib/push.js` returns false and every delivery
+is skipped, with the in-dashboard unread badge still working. The public key
+also has to reach the client as `VITE_VAPID_PUBLIC_KEY` (or it is embedded the
+same way the Turnstile site key is) for a subscription to be created at all.
+Generate a pair once and keep it stable: changing the keys invalidates every
+stored subscription. The same rules as Mailjet apply — a push is best-effort and
+its failure must never fail the mail ingestion that triggered it, and no message
+body travels in the payload.

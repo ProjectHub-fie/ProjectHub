@@ -224,3 +224,63 @@ test('notification rows never store a full body', () => {
   assert.ok(!/body_html|body_text/.test(insert), 'notifications must not carry a message body');
   assert.match(insert, /SELECT a\.id, \$\{type\}/, 'one statement writes every admin, not one query per admin');
 });
+
+test('an ingested message fans out a web push, not only an in-app row', () => {
+  const store = source('api/lib/mail-store.js');
+  const push = source('api/lib/push.js');
+
+  // The regression this pins: the mailbox wrote a mail_notifications row and lit
+  // the bell, but nothing ever called sendNotification, so no OS notification
+  // arrived. `deliverPush` is now part of the one function every inbound path
+  // already calls.
+  assert.match(store, /async function deliverPush/, 'a push fan-out helper must exist');
+  assert.match(store, /if \(!isMailDatabaseSeparate\(\)\) \{[\s\S]*?await deliverPush\(/, 'the shared-database branch pushes');
+  assert.match(store, /await deliverPush\(type, title, preview, threadId\);[\s\S]*?\n  return rows\.length;/, 'the split-database branch pushes too');
+
+  assert.match(push, /webpush\.sendNotification\(/, 'the payload is actually sent');
+  assert.match(push, /export async function sendMailPush/, 'a single entry point fans out to subscribers');
+  assert.match(push, /isPushConfigured/, 'push is skipped when no VAPID pair is set');
+  assert.match(push, /listPushDeliveries/, 'only opted-in administrators receive a push');
+});
+
+test('a stale push subscription is pruned but a send failure never breaks ingestion', () => {
+  const push = source('api/lib/push.js');
+  const store = source('api/lib/mail-store.js');
+
+  assert.match(push, /status === 404 \|\| status === 410/, 'a dropped subscription is recognised');
+  assert.match(push, /deletePushSubscription\(delivery\.adminId, delivery\.endpoint\)/, 'a dead endpoint is removed');
+
+  // The push call is wrapped: the message is already stored and must not be lost
+  // because a push service was unreachable.
+  const deliver = store.slice(store.indexOf('async function deliverPush'), store.indexOf('export async function listNotifications'));
+  assert.match(deliver, /try \{/, 'push failures are caught');
+  assert.match(deliver, /catch \(error\) \{[\s\S]*?console\.error/, 'a failure is logged, not thrown');
+
+  assert.match(push, /url: threadId \? `\/pbad\/mail\?thread=/, 'the payload deep-links into the thread');
+});
+
+test('push recipients are filtered by the per-admin desktop preference', () => {
+  const store = source('api/lib/mail-store.js');
+  const deliveries = store.slice(store.indexOf('export async function listPushDeliveries'));
+
+  assert.match(deliveries, /LEFT JOIN mail_notification_settings/, 'the preference table is joined');
+  assert.match(deliveries, /COALESCE\(s\.desktop_enabled, false\) = true/, 'desktop alerts must be on');
+  for (const flag of ['notify_new_email', 'notify_project_request', 'notify_reply', 'notify_important']) {
+    assert.ok(deliveries.includes(flag), `the ${flag} preference gates a push`);
+  }
+});
+
+test('both UI paths that enable desktop alerts register a push subscription', () => {
+  const lib = source('client/src/lib/mail-notifications.ts');
+  const panel = source('client/src/components/mail/MailSettingsPanel.tsx');
+  const prompt = source('client/src/components/mail/MailNotificationPrompt.tsx');
+
+  assert.match(lib, /export async function ensurePushSubscription/, 'the subscription helper is shared');
+  assert.match(lib, /pushManager\.subscribe\(/, 'the browser subscription is created');
+  assert.match(lib, /\/api\/admin\/mail\/push\/subscribe/, 'the subscription is stored server-side');
+
+  // Setting the preference without a subscription is what made alerts silent.
+  assert.match(panel, /const subscribed = await ensurePushSubscription\(\)/, 'the settings switch subscribes');
+  assert.match(panel, /desktopEnabled: subscribed/, 'the preference follows a real subscription');
+  assert.match(prompt, /if \(result === "granted"\) await ensurePushSubscription\(\)/, 'the banner subscribes too');
+});

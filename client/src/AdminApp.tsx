@@ -21,6 +21,7 @@ const AdminManagement = lazy(() => import("@/pages/admin-info"));
 const AdminCreate = lazy(() => import("@/pages/create-admin"));
 const AdminLogin = lazy(() => import("@/pages/admin-login-page"));
 const AdminMail = lazy(() => import("@/pages/mail-page"));
+const AdminSettings = lazy(() => import("@/pages/admin-settings"));
 
 /**
  * Registers the mail service worker.
@@ -200,6 +201,9 @@ export default function AdminApp() {
                   </Route>
                   <Route path="/mail">
                     <AdminPage permission="mail"><AdminMail /></AdminPage>
+                  </Route>
+                  <Route path="/settings">
+                    <AdminPage><AdminSettings /></AdminPage>
                   </Route>
                   <Route>
                     <AdminPage><AdminNotFound /></AdminPage>

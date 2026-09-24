@@ -111,6 +111,9 @@ export const adminCredentials = pgTable('admin_credentials', {
   pin: text('pin').unique().notNull(),
   passwordHash: text('password_hash').notNull(),
   role: text('role').default('moderator').notNull(),
+  // The Discord id an administrator has linked for one-click sign-in. Null
+  // until linked; unique so one Discord account maps to one admin.
+  discordId: text('discord_id').unique(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
 

@@ -6,6 +6,7 @@ import {
   Mail,
   PenLine,
   Send,
+  Settings,
   ShieldCheck,
   Star,
   Trash2,
@@ -158,6 +159,22 @@ export function AdminSidebar() {
         </SidebarGroup>
       </SidebarContent>
       <SidebarFooter className="border-t p-2 md:p-4">
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              asChild
+              isActive={location === "/settings"}
+              className={`rounded-lg px-3 py-2 cursor-pointer ${location === "/settings" ? "sidebar-nav-active" : ""}`}
+            >
+              <Link href="/settings" onClick={closeMobileSidebar}>
+                <span className="group-data-[collapsible=icon]:!hidden md:group-data-[collapsible=icon]:hidden truncate flex items-center gap-2">
+                  <Settings className="h-4 w-4" />
+                  Settings
+                </span>
+              </Link>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
         <div className="flex items-center justify-between px-2">
           <AdminThemeToggle />
         </div>

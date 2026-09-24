@@ -1105,6 +1105,7 @@ export async function createMailNotifications({ type = 'new_email', title, previ
       WHERE ${excludeAdminId}::uuid IS NULL OR a.id <> ${excludeAdminId}::uuid
       RETURNING id
     `;
+    await deliverPush(type, title, preview, threadId);
     return rows.length;
   }
 
@@ -1123,7 +1124,26 @@ export async function createMailNotifications({ type = 'new_email', title, previ
     FROM unnest(${ids}::uuid[]) AS a
     RETURNING id
   `;
+  await deliverPush(type, title, preview, threadId);
   return rows.length;
+}
+
+/**
+ * Fire-and-await the web-push fan-out for a notification batch, swallowing any
+ * failure.
+ *
+ * It lives on `createMailNotifications` rather than beside each `ingestMessage`
+ * caller so every inbound path — the webhook, the contact-form mirror, the
+ * backfill — gets a push without having to remember to add one. A push problem
+ * must never fail the write that already succeeded, so errors are logged here.
+ */
+async function deliverPush(type, title, preview, threadId) {
+  try {
+    const { sendMailPush } = await import('./push.js');
+    await sendMailPush({ type, title, preview, threadId });
+  } catch (error) {
+    console.error('Mail push delivery failed:', error.message);
+  }
 }
 
 export async function listNotifications(adminId, { unreadOnly = false, limit = 20 } = {}) {
@@ -1264,6 +1284,64 @@ export async function listPushSubscriptions(adminId) {
   await ensureMailSchema();
   const sql = db();
   return sql`SELECT * FROM push_subscriptions WHERE admin_id = ${adminId}::uuid`;
+}
+
+/**
+ * Subscriptions that should receive a push for one event type.
+ *
+ * A push is sent only to an administrator who both registered a subscription and
+ * left desktop alerts on, and only for the event they kept enabled. Admins
+ * without a settings row fall back to the column defaults, matching
+ * `getNotificationSettings`. Both tables live on the mailbox database, so this is
+ * one join regardless of whether the mailbox is split from the application one.
+ */
+export async function listPushDeliveries({ type = 'new_email' } = {}) {
+  await ensureMailSchema();
+  const sql = db();
+
+  // The type-to-column choice is made in JavaScript and each branch is written
+  // out, rather than interpolating a column name, so the flag is never an
+  // identifier the driver has to quote. The default ('new_email') is the
+  // fallthrough, so an unrecognised type cannot widen the recipient set.
+  const rows =
+    type === 'project_request'
+      ? await sql`
+          SELECT p.admin_id, p.endpoint, p.p256dh, p.auth
+          FROM push_subscriptions p
+          LEFT JOIN mail_notification_settings s ON s.admin_id = p.admin_id
+          WHERE COALESCE(s.desktop_enabled, false) = true
+            AND COALESCE(s.notify_project_request, true) = true
+        `
+      : type === 'reply'
+        ? await sql`
+            SELECT p.admin_id, p.endpoint, p.p256dh, p.auth
+            FROM push_subscriptions p
+            LEFT JOIN mail_notification_settings s ON s.admin_id = p.admin_id
+            WHERE COALESCE(s.desktop_enabled, false) = true
+              AND COALESCE(s.notify_reply, true) = true
+          `
+        : type === 'important'
+          ? await sql`
+              SELECT p.admin_id, p.endpoint, p.p256dh, p.auth
+              FROM push_subscriptions p
+              LEFT JOIN mail_notification_settings s ON s.admin_id = p.admin_id
+              WHERE COALESCE(s.desktop_enabled, false) = true
+                AND COALESCE(s.notify_important, true) = true
+            `
+          : await sql`
+              SELECT p.admin_id, p.endpoint, p.p256dh, p.auth
+              FROM push_subscriptions p
+              LEFT JOIN mail_notification_settings s ON s.admin_id = p.admin_id
+              WHERE COALESCE(s.desktop_enabled, false) = true
+                AND COALESCE(s.notify_new_email, true) = true
+            `;
+
+  return rows.map((row) => ({
+    adminId: row.admin_id,
+    endpoint: row.endpoint,
+    p256dh: row.p256dh,
+    auth: row.auth,
+  }));
 }
 
 /* ------------------------------------------------------------- audit trail */

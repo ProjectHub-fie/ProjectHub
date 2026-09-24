@@ -348,9 +348,17 @@ export async function registerRoutes(expressApp: any): Promise<Server> {
       return res.status(503).json({ message: 'Discord login is not configured' });
     }
 
+    // "Link Discord" reuses the same handshake. The signed-in user's id is
+    // stashed on their session so the callback knows which account to attach
+    // to, instead of creating or logging into a different one.
+    const linking = req.query?.mode === 'link';
+    if (linking && !req.isAuthenticated()) {
+      return res.redirect('/login?discord=error&reason=link_not_authenticated');
+    }
+
     // Stateless signed nonce: the callback rejects handshakes we did not start.
     const state = Buffer.from(
-      JSON.stringify({ t: Date.now(), s: 'discord' })
+      JSON.stringify({ t: Date.now(), s: 'discord', link: linking ? req.user.id : null })
     ).toString('base64url');
 
     const authorizeUrl = new URL('https://discord.com/oauth2/authorize');
@@ -409,12 +417,48 @@ export async function registerRoutes(expressApp: any): Promise<Server> {
         ? `https://cdn.discordapp.com/avatars/${profile.id}/${profile.avatar}.png`
         : null;
 
-      let user = await storage.getUserBySocialId('discord', profile.id);
+      // Decode the nonce to learn whether this handshake is a link.
+      let linking: string | null = null;
+      try {
+        linking = JSON.parse(Buffer.from(String(state), 'base64url').toString()).link || null;
+      } catch {
+        linking = null;
+      }
+
+      const idOwner = await storage.getUserBySocialId('discord', profile.id);
+
+      if (linking) {
+        const target = await storage.getUser(String(linking));
+        if (!target) {
+          return res.redirect('/login?discord=error&reason=link_no_account');
+        }
+        // The link must be performed by the account it names; the session
+        // cookie from the top-level redirect is what proves that.
+        if (!req.isAuthenticated() || req.user.id !== target.id) {
+          return res.redirect('/login?discord=error&reason=link_not_authenticated');
+        }
+        if (idOwner && idOwner.id !== target.id) {
+          return res.redirect('/login?discord=error&reason=discord_already_linked');
+        }
+        await storage.upsertUser({
+          id: target.id,
+          discordId: profile.id,
+          profileImageUrl: target.profileImageUrl || avatarUrl,
+        });
+        return res.redirect('/settings?discord=linked');
+      }
+
+      let user = idOwner;
       if (!user && profile.email) {
         user = await storage.getUserByEmail(profile.email);
       }
 
       if (user) {
+        // Refuse to merge a password account and a Discord identity that merely
+        // share an email: the owner must link Discord from settings themselves.
+        if (user.password && !user.discordId) {
+          return res.redirect('/login?discord=error&reason=account_exists_requires_link');
+        }
         user = (await storage.upsertUser({
           id: user.id,
           discordId: profile.id,
@@ -444,11 +488,90 @@ export async function registerRoutes(expressApp: any): Promise<Server> {
 
   expressApp.patch('/api/auth/user', requireAuth, async (req: any, res: any) => {
     try {
-      const { firstName, lastName, profileImageUrl } = req.body;
-      const updatedUser = await storage.upsertUser({ id: req.user.id, firstName, lastName, profileImageUrl });
+      const { firstName, lastName, profileImageUrl, email } = req.body;
+      const current = await storage.getUser(req.user.id);
+      if (!current) return res.status(401).json({ message: 'Not authenticated' });
+
+      const updates: any = { firstName, lastName, profileImageUrl };
+
+      // Changing the email is allowed under the same rule the register form
+      // enforces; an empty string means "leave it unchanged".
+      if (typeof email === 'string' && email.trim() && email !== current.email) {
+        const problem = emailProblem(email);
+        if (problem) return res.status(400).json({ message: problem });
+        const owner = await storage.getUserByEmail(email.trim());
+        if (owner && owner.id !== current.id) {
+          return res.status(400).json({ message: 'That email is already in use' });
+        }
+        updates.email = email.trim();
+      }
+
+      const updatedUser = await storage.upsertUser({ id: req.user.id, ...updates });
       res.json({ user: updatedUser });
     } catch (error) {
       res.status(500).json({ message: "Failed to update profile" });
+    }
+  });
+
+  expressApp.delete('/api/auth/user', requireAuth, async (req: any, res: any) => {
+    try {
+      await storage.deleteUser(req.user.id);
+      req.logout(() => {
+        req.session?.destroy?.(() => {
+          res.clearCookie('projecthub.sid');
+          res.json({ message: 'Account deleted' });
+        });
+      });
+    } catch (error) {
+      res.status(500).json({ message: 'Failed to delete account' });
+    }
+  });
+
+  expressApp.post('/api/auth/password', requireAuth, async (req: any, res: any) => {
+    try {
+      const { currentPassword, newPassword } = req.body || {};
+      const user = await storage.getUser(req.user.id);
+      if (!user) return res.status(401).json({ message: 'Not authenticated' });
+
+      // Setting a first password needs no current one; changing an existing
+      // password does, so a stolen session cannot lock the owner out.
+      if (user.password) {
+        if (!currentPassword) {
+          return res.status(400).json({ message: 'Current password is required' });
+        }
+        const valid = await bcrypt.compare(currentPassword, user.password);
+        if (!valid) return res.status(401).json({ message: 'Current password is incorrect' });
+      }
+
+      const problem = passwordProblem(newPassword);
+      if (problem) return res.status(400).json({ message: problem });
+
+      const hashedPassword = await bcrypt.hash(newPassword, 12);
+      await storage.resetUserPassword(user.id, hashedPassword);
+      const updated = await storage.getUser(user.id);
+      res.json({ message: user.password ? 'Password updated' : 'Password set', user: updated });
+    } catch (error) {
+      res.status(500).json({ message: 'Failed to update password' });
+    }
+  });
+
+  expressApp.delete('/api/auth/discord', requireAuth, async (req: any, res: any) => {
+    try {
+      const user = await storage.getUser(req.user.id);
+      if (!user) return res.status(401).json({ message: 'Not authenticated' });
+      if (!user.discordId) {
+        return res.status(400).json({ message: 'No Discord account is linked' });
+      }
+      if (!user.password) {
+        return res.status(400).json({
+          message: 'Set a password before unlinking Discord, or you will be locked out',
+        });
+      }
+
+      const updated = await storage.upsertUser({ id: user.id, discordId: null });
+      res.json({ user: updated });
+    } catch (error) {
+      res.status(500).json({ message: 'Failed to unlink Discord' });
     }
   });
 

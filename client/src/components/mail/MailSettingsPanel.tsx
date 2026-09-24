@@ -9,7 +9,12 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/hooks/use-toast";
 import { mailApi, type MailSignature, type MailTemplate, type NotificationSettings } from "@/lib/mail-api";
-import { currentPermission, requestPermission, resetPromptDismissal } from "@/lib/mail-notifications";
+import {
+  currentPermission,
+  ensurePushSubscription,
+  requestPermission,
+  resetPromptDismissal,
+} from "@/lib/mail-notifications";
 
 /**
  * Mail settings: signature, templates and notification preferences.
@@ -89,28 +94,36 @@ export function MailSettingsPanel({ onTemplatesChanged }: { onTemplatesChanged?:
     resetPromptDismissal();
     const result = await requestPermission();
     setPermission(result);
-    if (result === "granted" && settings) {
-      // Permission and the stored preference move together: enabling desktop
-      // alerts without permission would silently do nothing.
-      await saveSettings({ ...settings, desktopEnabled: true });
-      try {
-        const { publicKey } = await mailApi.pushPublicKey();
-        if (publicKey && "serviceWorker" in navigator) {
-          const registration = await navigator.serviceWorker.register("/mail-sw.js", { scope: "/" });
-          const existing = await registration.pushManager.getSubscription();
-          const subscription = existing || await registration.pushManager.subscribe({
-            userVisibleOnly: true,
-            applicationServerKey: urlBase64ToUint8Array(publicKey),
-          });
-          const json = subscription.toJSON() as { endpoint?: string; keys?: Record<string, string> };
-          if (json.endpoint && json.keys) {
-            await mailApi.pushSubscribe({ endpoint: json.endpoint, keys: json.keys });
-          }
-        }
-      } catch {
-        // Push is best-effort; the in-dashboard badge still works without it.
-      }
+    if (result !== "granted" || !settings) return;
+
+    // Permission, the stored preference and a real subscription move together:
+    // flipping the preference without registering a subscription is what made
+    // desktop alerts silently never arrive.
+    const subscribed = await ensurePushSubscription();
+    await saveSettings({ ...settings, desktopEnabled: subscribed });
+    if (!subscribed) {
+      toast({
+        title: "Desktop alerts unavailable",
+        description: "Push could not be set up in this browser. The in-app badge still works.",
+        variant: "error",
+      });
     }
+  };
+
+  const disableDesktop = async () => {
+    // Drop the browser subscription as well as the preference, so a later
+    // re-enable starts from a clean subscription rather than a stale one.
+    try {
+      const registration = await navigator.serviceWorker.getRegistration("/");
+      const subscription = await registration?.pushManager.getSubscription();
+      if (subscription) {
+        await mailApi.pushUnsubscribe(subscription.endpoint);
+        await subscription.unsubscribe();
+      }
+    } catch {
+      // A failure here only leaves a subscription the preference now suppresses.
+    }
+    if (settings) await saveSettings({ ...settings, desktopEnabled: false });
   };
 
   const createTemplate = async () => {
@@ -366,7 +379,10 @@ export function MailSettingsPanel({ onTemplatesChanged }: { onTemplatesChanged?:
                 {permission === "granted" ? (
                   <Switch
                     checked={Boolean(settings?.desktopEnabled)}
-                    onCheckedChange={() => toggleSetting("desktopEnabled")}
+                    // Turning it on re-ensures a subscription; turning it off
+                    // removes both the subscription and the preference, so the
+                    // two can never drift apart.
+                    onCheckedChange={(next) => void (next ? enableDesktop() : disableDesktop())}
                     aria-label="Desktop notifications"
                   />
                 ) : (
@@ -430,12 +446,4 @@ export function MailSettingsPanel({ onTemplatesChanged }: { onTemplatesChanged?:
   );
 }
 
-/** Converts a base64 VAPID key into the Uint8Array `pushManager.subscribe` wants. */
-function urlBase64ToUint8Array(base64String: string) {
-  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
-  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
-  const raw = window.atob(base64);
-  const output = new Uint8Array(raw.length);
-  for (let i = 0; i < raw.length; i += 1) output[i] = raw.charCodeAt(i);
-  return output;
-}
+

@@ -28,6 +28,10 @@ export function signSessionToken(user) {
     email: user.email,
     firstName: user.firstName,
     lastName: user.lastName,
+    // Only the OAuth `state` nonce carries a mode; a real user row never does.
+    // It lets one callback distinguish "sign in with Discord" from "link
+    // Discord to the account already signed in".
+    ...(user.mode ? { mode: user.mode } : {}),
     iat: issuedAt,
     exp: issuedAt + SESSION_TTL_MS,
   })).toString('base64url');
@@ -76,6 +80,15 @@ export function publicUser(user) {
     firstName: user.firstName ?? null,
     lastName: user.lastName ?? null,
     profileImageUrl: user.profileImageUrl ?? null,
+    // Whether the account has a password and which social identities are
+    // linked drives the account settings UI: a Discord-only account is offered
+    // "set a password", a password account is offered "link Discord". The hash
+    // itself is never exposed — only its presence.
+    hasPassword: Boolean(user.password),
+    discordId: user.discordId ?? null,
+    // A password account is one registered with email/password; a `discord`
+    // account was created through Discord and has never set a password.
+    accountType: user.password ? 'password' : 'discord',
   };
 }
 

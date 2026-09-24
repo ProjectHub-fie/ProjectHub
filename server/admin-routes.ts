@@ -76,6 +76,7 @@ export async function registerAdminRoutes(app: Express): Promise<Server> {
         pin: a.pin,
         email: a.email,
         role: a.role,
+        discordId: a.discordId || null,
         updatedAt: a.updatedAt
       })));
     } catch (error) {
@@ -238,6 +239,188 @@ export async function registerAdminRoutes(app: Express): Promise<Server> {
     } catch (error) {
       console.error('Error fetching admin role:', error);
       res.status(500).json({ message: "Failed to fetch admin role" });
+    }
+  });
+
+  /* -------------------------------------------------------------------------
+     Discord sign-in for administrators (mirrors api/admin/index.js).
+
+     It authenticates an `admin_credentials` row, never a public `users` row,
+     and then establishes the same dashboard session a PIN/password login does.
+  ------------------------------------------------------------------------- */
+  const adminDiscordRedirectUri = () =>
+    process.env.DISCORD_ADMIN_CALLBACK_URL ||
+    (process.env.APP_ORIGIN ? `${process.env.APP_ORIGIN}/api/admin/auth/discord/callback` : '');
+
+  const isAbsoluteRedirect = (uri: string) => /^https?:\/\/[^/]+/i.test(uri || '');
+
+  const signAdminState = (value: string) => {
+    const payload = Buffer.from(value).toString('base64url');
+    const signature = crypto
+      .createHmac('sha256', process.env.SESSION_SECRET as string)
+      .update(payload)
+      .digest('base64url');
+    return `${payload}.${signature}`;
+  };
+
+  const readAdminState = (token: string): any => {
+    if (!token || typeof token !== 'string') return null;
+    const [payload, signature] = token.split('.');
+    if (!payload || !signature) return null;
+    const expected = crypto
+      .createHmac('sha256', process.env.SESSION_SECRET as string)
+      .update(payload)
+      .digest('base64url');
+    const a = Buffer.from(signature);
+    const b = Buffer.from(expected);
+    if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+    try {
+      const parsed = JSON.parse(Buffer.from(payload, 'base64url').toString());
+      if (typeof parsed?.exp !== 'number' || Date.now() > parsed.exp) return null;
+      return parsed;
+    } catch {
+      return null;
+    }
+  };
+
+  app.get('/api/admin/auth/discord', (req: Request, res: any) => {
+    const clientId = process.env.DISCORD_CLIENT_ID;
+    if (!clientId) return res.redirect('/pbad/login?discord=error&reason=not_configured');
+
+    const redirectUri = adminDiscordRedirectUri();
+    if (!isAbsoluteRedirect(redirectUri)) {
+      return res.redirect('/pbad/login?discord=error&reason=redirect_not_configured');
+    }
+
+    const linking = req.query?.mode === 'link';
+    if (linking && !req.session?.isAdminLoggedIn) {
+      return res.redirect('/pbad/login?discord=error&reason=link_not_authenticated');
+    }
+
+    const verifier = crypto.randomBytes(32).toString('base64url');
+    const challenge = crypto.createHash('sha256').update(verifier).digest('base64url');
+    const state = signAdminState(JSON.stringify({
+      t: Date.now(),
+      exp: Date.now() + 600000,
+      ...(linking ? { mode: 'link', adminId: req.session!.adminId } : {}),
+    }));
+
+    res.cookie('admin_discord_verifier', verifier, {
+      httpOnly: true, sameSite: 'lax', maxAge: 600000, path: '/',
+    });
+    res.cookie('admin_discord_state', state, {
+      httpOnly: true, sameSite: 'lax', maxAge: 600000, path: '/',
+    });
+
+    const authorizeUrl = new URL('https://discord.com/oauth2/authorize');
+    authorizeUrl.searchParams.set('client_id', clientId);
+    authorizeUrl.searchParams.set('redirect_uri', redirectUri);
+    authorizeUrl.searchParams.set('response_type', 'code');
+    authorizeUrl.searchParams.set('scope', 'identify');
+    authorizeUrl.searchParams.set('state', state);
+    authorizeUrl.searchParams.set('code_challenge', challenge);
+    authorizeUrl.searchParams.set('code_challenge_method', 'S256');
+
+    res.redirect(authorizeUrl.toString());
+  });
+
+  app.get('/api/admin/auth/discord/callback', async (req: Request, res: any) => {
+    const fail = (reason: string) => res.redirect(`/pbad/login?discord=error&reason=${encodeURIComponent(reason)}`);
+
+    const { code, state: queryState } = req.query;
+    const state = queryState || req.cookies?.admin_discord_state;
+    const verifier = req.cookies?.admin_discord_verifier;
+    const stateData = readAdminState(String(state || ''));
+
+    if (!code) return fail('missing_code');
+    if (!stateData) return fail('invalid_state');
+    if (!verifier) return fail('missing_verifier');
+
+    const clientId = process.env.DISCORD_CLIENT_ID;
+    const clientSecret = process.env.DISCORD_CLIENT_SECRET;
+    if (!clientId || !clientSecret) return fail('not_configured');
+
+    try {
+      const tokenRes = await fetch('https://discord.com/api/v10/oauth2/token', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams({
+          client_id: clientId,
+          client_secret: clientSecret,
+          grant_type: 'authorization_code',
+          code: String(code),
+          redirect_uri: adminDiscordRedirectUri(),
+          code_verifier: String(verifier),
+        }),
+      });
+      if (!tokenRes.ok) return fail('token_exchange');
+      const { access_token: accessToken } = await tokenRes.json();
+
+      const profileRes = await fetch('https://discord.com/api/v10/users/@me', {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (!profileRes.ok) return fail('profile');
+      const profile = await profileRes.json();
+
+      res.clearCookie('admin_discord_verifier', { path: '/' });
+      res.clearCookie('admin_discord_state', { path: '/' });
+
+      if (stateData.mode === 'link') {
+        if (!req.session?.isAdminLoggedIn || req.session.adminId !== stateData.adminId) {
+          return fail('link_not_authenticated');
+        }
+        const owner = await adminStorage.getAdminByDiscordId(profile.id);
+        if (owner && owner.id !== stateData.adminId) return fail('discord_already_linked');
+        await adminStorage.setAdminDiscordId(stateData.adminId, profile.id);
+        return res.redirect('/pbad/settings?discord=linked');
+      }
+
+      const admin = await adminStorage.getAdminByDiscordId(profile.id);
+      // An administrator must have linked Discord first; an unknown Discord
+      // account cannot claim an admin row by email.
+      if (!admin) return fail('admin_not_linked');
+
+      req.session!.regenerate((regenerateError: any) => {
+        if (regenerateError) return fail('session');
+        req.session!.isAdminLoggedIn = true;
+        req.session!.adminId = admin.id;
+        req.session!.adminRole = admin.role;
+        req.session!.save((saveError: any) => {
+          if (saveError) return fail('session');
+          res.redirect('/pbad');
+        });
+      });
+    } catch (error: any) {
+      console.error('Admin Discord callback error:', error.message);
+      return fail('unexpected');
+    }
+  });
+
+  app.delete('/api/admin/auth/discord/link', requireAuth, async (req: Request, res: any) => {
+    try {
+      await adminStorage.setAdminDiscordId(req.session!.adminId, null);
+      res.json({ success: true, message: 'Discord unlinked' });
+    } catch (error) {
+      console.error('Admin Discord unlink error:', error);
+      res.status(500).json({ message: 'Failed to unlink Discord' });
+    }
+  });
+
+  app.get('/api/admin/me', requireAuth, async (req: Request, res: any) => {
+    try {
+      const admins = await adminStorage.getAllAdmins();
+      const admin = admins.find((a: any) => a.id === req.session!.adminId);
+      if (!admin) return res.status(401).json({ message: 'Authentication required' });
+      res.json({
+        id: admin.id,
+        pin: admin.pin,
+        email: admin.email,
+        role: admin.role,
+        discordId: admin.discordId || null,
+      });
+    } catch (error) {
+      console.error('Admin me error:', error);
+      res.status(500).json({ message: 'Failed to fetch admin' });
     }
   });
 

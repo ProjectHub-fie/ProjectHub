@@ -247,6 +247,17 @@ export class DatabaseStorage {
     await db.update(users).set({ password: hashedPassword, resetToken: null, resetTokenExpiry: null, updatedAt: new Date() }).where(eq(users.id, id));
   }
 
+  /**
+   * Permanently removes a user row.
+   *
+   * Departmental rows that reference the user (project_requests,
+   * project_interactions) cascade at the database level, so no manual cleanup
+   * is required. Used by the account-deletion flow.
+   */
+  async deleteUser(id) {
+    await db.delete(users).where(eq(users.id, id));
+  }
+
   async upsertUser(userData) {
     let existingUser = null;
     if (userData.id) {
