@@ -1,4 +1,5 @@
 import {
+  Bot,
   CheckCircle,
   FileEdit,
   Inbox,
@@ -32,6 +33,7 @@ import {
 } from "@/components/ui/sidebar";
 import { AdminThemeToggle } from "@/components/admin/admin-theme-toggle";
 import { useMailNotifications } from "@/hooks/useMailNotifications";
+import { useAdminAuth } from "@/hooks/useAdminAuth";
 
 /**
  * Navigation for the administration dashboard.
@@ -66,6 +68,8 @@ export function AdminSidebar() {
   // Shared notification poll: this is what makes the unread badge update without
   // a full page reload. It returns no counts for a non-owner/admin session.
   const { counts } = useMailNotifications();
+  const { canManageBot } = useAdminAuth();
+  const onBot = location === "/bot" || location.startsWith("/bot/");
 
   const onMail = location === "/mail" || location.startsWith("/mail/");
   const activeView = new URLSearchParams(searchString).get("view") || "inbox";
@@ -154,6 +158,24 @@ export function AdminSidebar() {
                   })}
                 </SidebarMenuSub>
               </SidebarMenuItem>
+
+              {/* Owner/admin only, matching the server guard on /api/admin/bot. */}
+              {canManageBot && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={onBot}
+                    className={`rounded-lg px-3 py-2 cursor-pointer ${onBot ? "sidebar-nav-active" : ""}`}
+                  >
+                    <Link href="/bot" onClick={closeMobileSidebar}>
+                      <span className="truncate flex items-center gap-2">
+                        <Bot className="h-4 w-4" />
+                        Bot
+                      </span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

@@ -12,7 +12,9 @@
     "db:bootstrap": "node scripts/db-bootstrap.mjs",
     "db:seed-admin": "node scripts/seed-admin.mjs",
     "test": "node --test --test-force-exit \"tests/*.test.mjs\"",
-    "test:unit": "node --test --test-force-exit tests/session-token.test.mjs tests/client-auth.test.mjs tests/portal-ui.test.mjs tests/db-config.test.mjs"
+    "test:unit": "node --test --test-force-exit tests/session-token.test.mjs tests/client-auth.test.mjs tests/portal-ui.test.mjs tests/db-config.test.mjs",
+    "bot": "node bot/index.js",
+    "bot:dev": "NODE_ENV=development dotenv -e .env -- node bot/index.js"
   },
   "dependencies": {
     "@firebasegen/default-connector": "file:dataconnect-generated/js/default-connector",
@@ -64,6 +66,7 @@
     "connect-mongo": "^6.0.0",
     "connect-pg-simple": "^10.0.0",
     "date-fns": "^3.6.0",
+    "discord.js": "^14.27.0",
     "dotenv": "^17.2.3",
     "drizzle-orm": "^0.45.1",
     "drizzle-zod": "^0.8.3",

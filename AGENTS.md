@@ -220,3 +220,54 @@ Generate a pair once and keep it stable: changing the keys invalidates every
 stored subscription. The same rules as Mailjet apply — a push is best-effort and
 its failure must never fail the mail ingestion that triggered it, and no message
 body travels in the payload.
+
+### The Discord bot is a separate process, not a function
+
+`bot/index.js` is the private server bot (`&` prefix, mention replies). It holds
+a persistent Discord gateway connection, which a Vercel function cannot do — the
+function is request-scoped and capped at 30s in `vercel.json` — so the bot runs
+on any host that keeps a process alive (VPS, Railway, Fly, Render, Docker) via
+`npm run bot`. It is deliberately absent from `vercel.json`; only the control
+plane is serverless. Nothing under `api/` imports `discord.js`, so it is not
+pulled into a function bundle.
+
+The split matters when changing this feature: **the dashboard is serverless and
+must stay request/response, and only `bot/index.js` may assume a long-lived
+process.** Shared logic lives in `api/lib` so both halves use the same rules.
+
+Configuration is stored, not hardcoded, and is edited at `/pbad/bot` (owner and
+admin only, the same `requireRole('admin')` rule as mail):
+
+- `bot_settings` holds one row: enabled flag, prefix, alert channel id, webhook,
+  threshold, cooldown, the three tier limits and the project label. Created
+  lazily by `ensureBotSchema`, following the `ensureAdminSchema` convention.
+- `bot_alert_state.last_alerted_at` is jsonb keyed by metric, and is what stops a
+  sustained overage from posting on every poll.
+
+Two secrets are environment-only and are never stored or returned: the bot token
+(`DISCORD_BOT_TOKEN`) and the Neon key (`NEON_API_KEY`). The webhook URL *is* a
+credential and is stored, but `getBotSettingsForDashboard` masks it via
+`maskWebhook` — the browser only ever sees that one is configured. `NEON_PROJECT_ID`
+is read from the environment rather than the database so the alert cannot be
+aimed at a different project by a dashboard write.
+
+`&dev` resolves the caller's Discord id against `admin_credentials.discord_id`
+first and `users.discord_id` second, because the same Discord account can be
+linked to either portal. An account linked to both is reported as both. A client
+whose account is blocked is reported as blocked, never as unlinked.
+
+The usage alert reads Neon's `consumption_history/v2` endpoint. Neon reports what
+was consumed, not the plan ceiling, so the limits are configured in the dashboard
+and default to the Free tier. `evaluateUsage` grades each metric (ok / warning /
+critical / exceeded) and the worst one sets the overall level; `shouldAlert` then
+applies a per-metric cooldown. Delivery goes to the channel and the webhook
+independently, and only metrics that actually reached a destination record their
+timestamp — so a total delivery failure retries on the next poll instead of being
+silently marked as sent. The embed posted to a webhook pins
+`allowed_mentions: { parse: [] }`, since a webhook post can otherwise ping roles.
+`POST /api/admin/bot/usage-preview` reads the live figures and evaluates them
+*without* sending, which is how "the bot is silent" is told apart from "usage is
+genuinely low" from the deployment that is actually running.
+
+The alert is best-effort, the same as Mailjet and push: a failed read or send is
+logged and the poll moves on.

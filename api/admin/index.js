@@ -21,6 +21,7 @@ import crypto from 'node:crypto';
 import { describeDbError, normalizeDatabaseUrl } from '../lib/db.js';
 import { parseCookies } from '../lib/session-token.js';
 import { buildMailRouter, handleInboundMessage } from '../lib/mail-routes.js';
+import { buildBotRouter } from '../lib/bot-routes.js';
 import { ingestMessage, createMailNotifications, ensureMailSchema, purgeAdminMailData } from '../lib/mail-store.js';
 
 const sql = postgres(normalizeDatabaseUrl(process.env.DATABASE_URL), { ssl: 'require', max: 5 });
@@ -719,6 +720,10 @@ function buildAdminRouter() {
     requireRole,
     adminIdFrom: (req) => req.session?.adminId,
   }));
+
+  // The Discord bot configuration. Owner/admin only, same as mail: this page
+  // can point the bot at a channel and trigger a real alert.
+  router.use(buildBotRouter({ requireAuth, requireRole }));
 
   router.use('/api/admin', (_req, res) => res.status(404).json({ message: 'Admin endpoint not found' }));
 
