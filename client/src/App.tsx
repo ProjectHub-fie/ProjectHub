@@ -132,7 +132,10 @@ function Router() {
   const [location] = useLocation();
   const [isAdmin, setIsAdmin] = useState(false);
 
-  if (REDIRECT_ENTRY_PATHS.includes(location)) {
+  // Normalize a trailing slash so "/pbad/" forwards like "/pbad".
+  const path = location.length > 1 && location.endsWith("/") ? location.slice(0, -1) : location;
+
+  if (REDIRECT_ENTRY_PATHS.includes(path)) {
     return <RedirectPage />;
   }
 
