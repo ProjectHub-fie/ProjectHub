@@ -496,6 +496,35 @@ test('the password reset email carries the token the reset endpoint looks up', (
   assert.ok(text.includes(token), 'text must include the token');
 });
 
+test('the reset email button links the dynamic reset URL, not a placeholder', () => {
+  const token = 'abc123def456';
+  const resetUrl = `https://example.com/reset-password?email=a%40b.com&token=${token}`;
+  const { html } = passwordResetEmail(token, resetUrl);
+
+  // The URL as it appears in href is HTML-escaped (`&` -> `&amp;`).
+  const escaped = resetUrl.replace(/&/g, '&amp;');
+  assert.ok(html.includes(`href="${escaped}"`), 'the button must carry a real href');
+  assert.ok(!/href="#"|href=""/.test(html), 'no placeholder href may ship in the email');
+
+  // The button and the fallback link both resolve to the same URL, so a client
+  // that refuses the button still leaves a working link; the address is also
+  // repeated as plain text for a client that strips anchors altogether.
+  const hrefs = [...html.matchAll(/href="([^"]+)"/g)].map((m) => m[1]);
+  const matching = hrefs.filter((href) => href === escaped);
+  assert.ok(matching.length >= 2, 'the button and the fallback link must both point at the reset URL');
+  assert.ok(html.includes(`>${escaped}<`), 'the reset URL must also appear as plain text');
+});
+
+test('the fallback reset link is visibly a link, not plain text', () => {
+  const resetUrl = 'https://example.com/reset-password?token=abc123def456';
+  const { html } = passwordResetEmail('abc123def456', resetUrl);
+  const escaped = resetUrl;
+
+  const fallback = html.slice(html.indexOf('Or paste this link into your browser:'));
+  assert.match(fallback, new RegExp(`<a href="${escaped.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}"[^>]*text-decoration:underline`),
+    'the fallback anchor must be underlined so it reads as a link');
+});
+
 test('the contact notification keeps the message body', () => {
   const { subject, html } = contactNotificationEmail({
     name: 'Ada',

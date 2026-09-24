@@ -183,21 +183,29 @@ function renderLayout({ preheader, heading, intro, bodyHtml, footnoteHtml }) {
 </html>`;
 }
 
-/** Gradient call-to-action button with a visible URL fallback beneath it. */
+/**
+ * Gradient call-to-action button with a visible URL fallback beneath it.
+ *
+ * The anchor carries the button styling itself rather than living inside a
+ * wrapper table. Some clients flatten nested tables and drop the anchor along
+ * with them, which leaves a button that looks present but is not clickable. The
+ * dynamic URL is repeated below as an underlined link *and* as plain text, so a
+ * client that refuses to link the button still leaves a usable address: the
+ * earlier fallback was styled `text-decoration:none`, which read as ordinary
+ * text rather than a link.
+ */
 function renderButton(url, label) {
-  return `<table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto 20px auto;">
-  <tr>
-    <td align="center" bgcolor="${BRAND.accentTo}" style="border-radius:10px;background-color:${BRAND.accentTo};background-image:linear-gradient(90deg,${BRAND.accentFrom} 0%,${BRAND.accentTo} 100%);">
-      <a href="${escapeHtml(url)}" style="display:inline-block;padding:14px 30px;font-family:'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:10px;">${escapeHtml(
-        label,
-      )}</a>
-    </td>
-  </tr>
-</table>
+  const href = escapeHtml(url);
+  return `<p style="margin:0 0 20px 0;text-align:center;">
+  <a href="${href}" target="_blank" rel="noopener noreferrer" style="display:inline-block;padding:14px 30px;font-family:'Segoe UI',Roboto,Helvetica,Arial,sans-serif;font-size:15px;font-weight:600;color:#ffffff;text-decoration:none;border-radius:10px;background-color:${BRAND.accentTo};background-image:linear-gradient(90deg,${BRAND.accentFrom} 0%,${BRAND.accentTo} 100%);">${escapeHtml(
+    label,
+  )}</a>
+</p>
 <p style="margin:0 0 8px 0;font-size:12px;color:${BRAND.muted};">Or paste this link into your browser:</p>
-<p style="margin:0 0 24px 0;font-size:12px;word-break:break-all;">
-  <a href="${escapeHtml(url)}" style="color:${BRAND.accentTo};text-decoration:none;">${escapeHtml(url)}</a>
-</p>`;
+<p style="margin:0 0 8px 0;font-size:12px;word-break:break-all;">
+  <a href="${href}" target="_blank" rel="noopener noreferrer" style="color:${BRAND.accentTo};text-decoration:underline;">${href}</a>
+</p>
+<p style="margin:0 0 24px 0;font-size:12px;color:${BRAND.muted};word-break:break-all;">${href}</p>`;
 }
 
 function renderCodeBlock(code) {
@@ -230,7 +238,7 @@ export function passwordResetEmail(resetToken, resetUrl) {
     intro,
     bodyHtml: `
       ${renderCodeBlock(resetToken)}
-      ${link ? renderButton(link, 'Reset my password') : ''}
+      ${link ? renderButton(link, 'Reset Password') : ''}
       <p style="margin:0;font-size:13px;line-height:1.65;color:${BRAND.muted};">
         If you did not request this, you can safely ignore this email — your password will not change.
       </p>

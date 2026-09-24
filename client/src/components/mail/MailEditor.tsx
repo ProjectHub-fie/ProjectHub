@@ -121,13 +121,43 @@ const EMAIL_BLOCKS: Array<{ label: string; description: string; html: string }> 
   },
 ];
 
+/** Escapes text placed inside an attribute or between tags in inserted markup. */
+function escapeLinkPart(value: string) {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
 export function MailEditor({ value, onChange, placeholder = "Write your messageâ€¦", className }: EditorProps) {
   const editorRef = useRef<HTMLDivElement>(null);
   // The last HTML this component emitted. Used to tell our own change apart from
   // an external one (loading a temporary template), so typing does not fight the
   // parent's state.
   const lastEmitted = useRef(value);
+  // The caret/selection inside the editor. `window.prompt` moves focus to the
+  // dialog, and a `createLink` issued afterwards has nothing to act on, so the
+  // range is captured while the document still owns it and restored before the
+  // link is applied.
+  const savedRange = useRef<Range | null>(null);
   const [isEmpty, setIsEmpty] = useState(!value);
+
+  useEffect(() => {
+    const remember = () => {
+      const editor = editorRef.current;
+      const selection = window.getSelection();
+      if (!editor || !selection || selection.rangeCount === 0) return;
+      const range = selection.getRangeAt(0);
+      // Only a range inside the editor is meaningful here; anything else (the
+      // toolbar, the page) is ignored rather than clobbering the saved one.
+      if (editor.contains(range.commonAncestorContainer)) {
+        savedRange.current = range.cloneRange();
+      }
+    };
+    document.addEventListener("selectionchange", remember);
+    return () => document.removeEventListener("selectionchange", remember);
+  }, []);
 
   useEffect(() => {
     const element = editorRef.current;
@@ -168,6 +198,21 @@ export function MailEditor({ value, onChange, placeholder = "Write your messageâ
     [emit],
   );
 
+  // Restores the range captured before a dialog stole focus. `execCommand`
+  // operates on the live selection, so without this `createLink` has no target.
+  const restoreSelection = useCallback(() => {
+    const editor = editorRef.current;
+    if (!editor) return false;
+    editor.focus();
+    const range = savedRange.current;
+    if (!range) return false;
+    const selection = window.getSelection();
+    if (!selection) return false;
+    selection.removeAllRanges();
+    selection.addRange(range);
+    return true;
+  }, []);
+
   const promptForLink = () => {
     const url = window.prompt("Link URL", "https://");
     if (!url) return;
@@ -177,13 +222,30 @@ export function MailEditor({ value, onChange, placeholder = "Write your messageâ
       window.alert("That link type is not allowed.");
       return;
     }
-    command("createLink", url);
+
+    // A selection was captured, so wrap the highlighted words in the link.
+    restoreSelection();
+    const hasSelectedText = Boolean(window.getSelection()?.toString());
+    if (hasSelectedText) {
+      document.execCommand("createLink", false, url);
+      emit();
+      return;
+    }
+
+    // Nothing selected: `createLink` would be a no-op and the toolbar button
+    // would appear broken. Insert an anchor whose text is the URL instead, so a
+    // link always lands in the message.
+    const href = escapeLinkPart(url);
+    insertHtml(
+      `<a href="${href}" target="_blank" rel="noopener noreferrer" style="color:#2563eb;text-decoration:underline;">${href}</a>`,
+    );
   };
 
   const promptForImage = () => {
     const url = window.prompt("Image URL", "https://");
     if (!url || !/^https?:\/\//i.test(url)) return;
-    insertHtml(`<img src="${url}" alt="" style="max-width:100%;height:auto;border-radius:8px;" />`);
+    restoreSelection();
+    insertHtml(`<img src="${escapeLinkPart(url)}" alt="" style="max-width:100%;height:auto;border-radius:8px;" />`);
   };
 
   const ToolbarButton = ({

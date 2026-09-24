@@ -175,3 +175,25 @@ test('the authenticated avatar never falls back to the logged-out glyph', () => 
     'the anonymous glyph must only appear after the signed-in branches',
   );
 });
+
+test('the reset page fills its fields from the emailed link', () => {
+  const page = source('client/src/pages/reset-password.tsx');
+
+  // The reset email links to /reset-password?email=...&token=..., so the page
+  // must read both parameters rather than wait for the user to retype them.
+  assert.match(page, /new URLSearchParams\(window\.location\.search\)/,
+    'the link parameters must be read from the query string');
+  assert.match(page, /searchParams\.get\("token"\)/, 'the token parameter must seed the recovery code');
+  assert.match(page, /searchParams\.get\("email"\)/, 'the email parameter must seed the email field');
+  assert.ok(
+    !/useState\(\(\) => \{\s*if \(initialEmail\)/.test(page),
+    'seeding state inside a render-phase useState callback is not how React hydrates it',
+  );
+});
+
+test('the reset-sent message warns about the spam folder', () => {
+  const login = source('client/src/pages/login.tsx');
+
+  assert.match(login, /check your spam or junk folder/i,
+    'a confirmation must tell the user where to look if the mail is not in the inbox');
+});
