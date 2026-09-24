@@ -9,29 +9,12 @@ if (!databaseUrl) {
 }
 
 /**
- * Removes connection parameters the `postgres` driver does not understand.
- *
- * Neon's dashboard emits `channel_binding=require` in the connection string.
- * That requests SCRAM-SHA-256-PLUS (TLS channel binding), which postgres.js
- * does not implement — it only speaks `SCRAM-SHA-256` without the `-PLUS`
- * variant. The driver does not forward the parameter to the server; it treats
- * it as an unrecognised startup option and ignores it, so requests the driver
- * cannot honour must be dropped before it sees them rather than left to be
- * silently misinterpreted.
+ * Removes connection parameters the `postgres` driver does not understand and
+ * makes the SSL mode explicit. The implementation lives in `db-url.js` so
+ * modules that must not open a pool can share it.
  */
-export function normalizeDatabaseUrl(rawUrl) {
-  if (typeof rawUrl !== 'string' || rawUrl.length === 0) return rawUrl;
-
-  try {
-    const parsed = new URL(rawUrl);
-    parsed.searchParams.delete('channel_binding');
-    return parsed.toString();
-  } catch {
-    // Not a URL the WHATWG parser accepts; hand it back untouched and let the
-    // driver produce its own, more specific connection error.
-    return rawUrl;
-  }
-}
+import { normalizeDatabaseUrl } from './db-url.js';
+export { normalizeDatabaseUrl };
 
 const connectionUrl = normalizeDatabaseUrl(databaseUrl);
 

@@ -326,6 +326,45 @@ function mailjetRecipientSlots(entry) {
   );
 }
 
+const EMAIL_ADDRESS =
+  /^[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+(?:\.[A-Za-z0-9!#$%&'*+/=?^_`{|}~-]+)*@(?:[A-Za-z0-9](?:[A-Za-z0-9-]*[A-Za-z0-9])?\.)+[A-Za-z]{2,}$/;
+
+function isEmailAddress(value) {
+  return typeof value === 'string' && value.length <= 254 && EMAIL_ADDRESS.test(value.trim());
+}
+
+/** First address in a Send API recipient list, as a bare string. */
+function mailjetFirstAddress(list) {
+  const first = Array.isArray(list) ? list[0] : list;
+  if (!first) return undefined;
+  return typeof first === 'string' ? first : first.Email;
+}
+
+/**
+ * Validates a Send API message before it is posted.
+ *
+ * Returns a reason, or null when Mailjet has everything it needs. The composer
+ * enforces the same rules, but a caller can bypass the form, and Mailjet answers
+ * a malformed request with an error or an empty queue — never a delivery — so the
+ * check has to live at the transport too.
+ */
+function validateMailjetMessage(message) {
+  const from = message?.From?.Email;
+  if (!isEmailAddress(from)) return 'sender address is missing or invalid';
+
+  const recipients = Array.isArray(message?.To) ? message.To : [];
+  if (recipients.length === 0) return 'at least one recipient is required';
+  if (!recipients.every((slot) => isEmailAddress(slot?.Email))) {
+    return 'a recipient address is invalid';
+  }
+
+  if (!String(message?.Subject || '').trim()) return 'a subject is required';
+  const hasHtml = String(message?.HTMLPart || '').trim().length > 0;
+  const hasText = String(message?.TextPart || '').trim().length > 0;
+  if (!hasHtml && !hasText) return 'an email body is required';
+  return null;
+}
+
 /**
  * Low-level Mailjet send used by every outbound message.
  *
@@ -334,6 +373,29 @@ function mailjetRecipientSlots(entry) {
  * cases, plus the per-recipient tracking ids when Mailjet provides them.
  */
 async function mailjetSend(message, { requireMessageId = true } = {}) {
+  // Diagnostics deliberately report only whether credentials exist, never their
+  // value, and never the Authorization header. Any of these five lines is what
+  // tells a broken deployment apart from a rejected send.
+  console.log('[MAILJET] Request starting');
+  console.log('[MAILJET] Public key configured:', !!process.env.MJ_APIKEY_PUBLIC);
+  console.log('[MAILJET] Private key configured:', !!process.env.MJ_APIKEY_PRIVATE);
+
+  const recipient = mailjetFirstAddress(message?.To);
+  const sender = message?.From?.Email;
+  console.log('[MAILJET] Recipient:', recipient);
+  console.log('[MAILJET] Sender:', sender);
+
+  const validationError = validateMailjetMessage(message);
+  if (validationError) {
+    console.error('[MAILJET] Request rejected before sending:', validationError);
+    return { sent: false, reason: 'invalid_message', errorMessage: validationError };
+  }
+
+  if (!process.env.MJ_APIKEY_PUBLIC || !process.env.MJ_APIKEY_PRIVATE) {
+    console.error('[MAILJET] Credentials missing; request not attempted');
+    return { sent: false, reason: 'not_configured' };
+  }
+
   const auth = Buffer.from(
     `${process.env.MJ_APIKEY_PUBLIC}:${process.env.MJ_APIKEY_PRIVATE}`,
   ).toString('base64');
@@ -351,11 +413,14 @@ async function mailjetSend(message, { requireMessageId = true } = {}) {
     const payload = await res.json().catch(() => ({}));
     const entry = Array.isArray(payload?.Messages) ? payload.Messages[0] : null;
 
+    console.log('[MAILJET] HTTP status:', res.status);
+    console.log('[MAILJET] Response:', JSON.stringify(payload));
+
     if (!res.ok || !entry || entry.Status === 'error') {
       const detail = entry?.Errors?.[0] || payload?.ErrorMessage;
       const queued = !entry && res.ok ? 'no message entry returned (nothing queued)' : '';
       console.error(
-        'Mailjet send failed:',
+        '[MAILJET] Request rejected:',
         `status=${res.status}`,
         `total=${payload?.Total ?? 'n/a'} count=${payload?.Count ?? 'n/a'}`,
         queued,
@@ -379,7 +444,7 @@ async function mailjetSend(message, { requireMessageId = true } = {}) {
     // mode, or a send the account is not permitted to make.
     if (requireMessageId && delivered.length === 0) {
       console.error(
-        'Mailjet send failed:',
+        '[MAILJET] Request rejected:',
         'success status without a queued message',
         `status=${res.status}`,
         `recipients=${slots.length}`,
@@ -393,6 +458,7 @@ async function mailjetSend(message, { requireMessageId = true } = {}) {
       };
     }
 
+    console.log('[MAILJET] Request accepted');
     return {
       sent: true,
       id: delivered[0] ? Number(delivered[0].MessageID) : undefined,
@@ -403,7 +469,7 @@ async function mailjetSend(message, { requireMessageId = true } = {}) {
       })),
     };
   } catch (error) {
-    console.error('Mailjet send threw:', error.message);
+    console.error('[MAILJET] Request threw:', error.message);
     return { sent: false, reason: 'send_failed', errorMessage: error.message };
   }
 }
@@ -508,6 +574,31 @@ export async function sendAdminEmail({
       Base64Content: file.base64Content,
     }));
   }
+
+  return mailjetSend(message);
+}
+
+/**
+ * Minimal message used by the administrator diagnostic endpoint.
+ *
+ * Goes through the same `mailjetSend` as every other message, so whatever this
+ * reports is what a real send from this deployment would do — credentials,
+ * sender validation and account permissions included.
+ */
+export async function sendMailjetTestEmail({ to }) {
+  if (!isAdminMailConfigured()) {
+    return { sent: false, reason: 'not_configured' };
+  }
+
+  const message = {
+    From: { Email: mailjetSenderEmail(), Name: mailjetSenderName() },
+    To: [{ Email: to }],
+    Subject: 'ProjectHub Mailjet test',
+    TextPart:
+      'This is a ProjectHub Mailjet diagnostic message. Receiving it means the deployed credentials and sender are accepted by Mailjet.',
+    HTMLPart:
+      '<p>This is a ProjectHub Mailjet diagnostic message.</p><p>Receiving it means the deployed credentials and sender are accepted by Mailjet.</p>',
+  };
 
   return mailjetSend(message);
 }

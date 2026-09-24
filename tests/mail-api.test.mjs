@@ -93,6 +93,40 @@ test('the contact form mirrors into the inbox without changing the Resend send',
   }
 });
 
+test('the Mailjet diagnostic endpoint is guarded and reports acceptance, not delivery', () => {
+  const routes = source('api/lib/mail-routes.js');
+  const start = routes.indexOf("router.post('/api/admin/mail/mailjet-test'");
+  assert.ok(start !== -1, 'the diagnostic endpoint must exist');
+
+  const handler = routes.slice(start, routes.indexOf("router.get('/api/admin/mail/counts'", start));
+  assert.match(handler, /\.\.\.mailGuard/, 'the diagnostic must reuse the mail guard');
+  assert.match(handler, /isAdminMailConfigured\(\)/, 'it must refuse when Mailjet is unconfigured');
+  assert.match(handler, /sendMailjetTestEmail\(\{ to: recipient \}\)/, 'it must go through the shared Mailjet sender');
+  assert.match(handler, /accepted: true/, 'it must report acceptance');
+  assert.match(handler, /accepted: false/, 'it must report a rejection');
+  // The 503 message names the variables an operator must set, which is helpful;
+  // what must never appear is their value. Only the sender address (not a
+  // secret) is ever read into a response.
+  assert.ok(!/process\.env\.MJ_APIKEY_PUBLIC|process\.env\.MJ_APIKEY_PRIVATE/.test(handler),
+    'the diagnostic must never read an API key into a response');
+});
+
+test('the client diagnostic never claims delivery', () => {
+  const lib = source('client/src/lib/mail-api.ts');
+  assert.match(lib, /mailjetTest: \(to: string\)/, 'the client exposes the diagnostic call');
+
+  const panel = source('client/src/components/mail/MailSettingsPanel.tsx');
+  assert.match(panel, /mailApi\.mailjetTest\(recipient\)/, 'the panel calls the diagnostic');
+  assert.match(panel, /Mailjet accepted the test/, 'acceptance wording');
+  assert.match(panel, /Mailjet did not accept the test/, 'rejection wording');
+
+  // Only the handler's own slice: the surrounding copy explains that acceptance
+  // is not delivery, which is exactly the distinction being preserved.
+  const start = panel.indexOf('const runMailjetTest');
+  const handler = panel.slice(start, panel.indexOf('};', panel.indexOf('finally', start)) + 2);
+  assert.ok(!/delivered/i.test(handler), 'the diagnostic must not claim delivery, only acceptance');
+});
+
 test('an inbound webhook is refused when no secret is configured', () => {
   const serverless = source('api/admin/index.js');
   const express = source('server/admin-routes.ts');

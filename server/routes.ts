@@ -18,6 +18,7 @@ import {
   createResetToken,
   hashResetToken,
 } from '../api/lib/email.js';
+import { normalizeDatabaseUrl } from '../api/lib/db-url.js';
 
 // Server-side email validation. The contact form validates too, but the browser
 // can be bypassed, so this is the check that actually holds.
@@ -144,7 +145,7 @@ export async function registerRoutes(expressApp: any): Promise<Server> {
   try {
     const PgSession = connectPgSimple(session);
     const pgPool = new pg.Pool({
-      connectionString: process.env.DATABASE_URL,
+      connectionString: normalizeDatabaseUrl(process.env.DATABASE_URL),
       ssl: { rejectUnauthorized: false },
       connectionTimeoutMillis: 5000,
       idleTimeoutMillis: 30000,

@@ -46,7 +46,7 @@ import {
   setMessageTrashed,
   updateTemplate,
 } from './mail-store.js';
-import { isAdminMailConfigured, sendAdminEmail, isPublicEmailConfigured } from './email.js';
+import { isAdminMailConfigured, sendAdminEmail, isPublicEmailConfigured, sendMailjetTestEmail } from './email.js';
 
 const MAX_ATTACHMENT_BYTES = 5 * 1024 * 1024;
 const MAX_TOTAL_ATTACHMENT_BYTES = 10 * 1024 * 1024;
@@ -226,6 +226,60 @@ export function buildMailRouter({ requireAuth, requireRole, adminIdFrom }) {
       mailjetConfigured: isAdminMailConfigured(),
       resendConfigured: isPublicEmailConfigured(),
     });
+  });
+
+  /**
+   * Administrator diagnostic: sends one minimal message through Mailjet and
+   * reports the real outcome.
+   *
+   * The point is to distinguish, from the deployment that is actually running,
+   * "the keys are absent", "the sender is not validated", "Mailjet rejected the
+   * request" and "Mailjet accepted it" without reading credentials. It reuses the
+   * mail guard, so an anonymous caller can never reach it, and it never returns
+   * the keys.
+   */
+  router.post('/api/admin/mail/mailjet-test', ...mailGuard, async (req, res) => {
+    const [recipient] = parseAddressList(req.body?.to);
+    if (!recipient || !EMAIL_PATTERN.test(recipient)) {
+      return res.status(400).json({ message: 'A valid test recipient is required' });
+    }
+
+    if (!isAdminMailConfigured()) {
+      return res.status(503).json({
+        message:
+          'Mailjet is not configured on the server (MJ_APIKEY_PUBLIC / MJ_APIKEY_PRIVATE / MJ_SENDER_EMAIL)',
+      });
+    }
+
+    try {
+      const result = await sendMailjetTestEmail({ to: recipient });
+
+      if (!result.sent) {
+        await recordAudit(req.mailAdminId, 'mail.mailjet_test.failed', {
+          details: { reason: result.reason, errorCode: result.errorCode || null },
+        });
+        return res.status(502).json({
+          accepted: false,
+          reason: result.reason,
+          status: result.status || null,
+          message: result.errorMessage || 'Mailjet did not accept the test message',
+        });
+      }
+
+      await recordAudit(req.mailAdminId, 'mail.mailjet_test.accepted', {
+        details: { status: result.status || null },
+      });
+
+      res.json({
+        accepted: true,
+        messageId: result.id || null,
+        status: result.status || null,
+        sender: process.env.MJ_SENDER_EMAIL || null,
+        message: 'Mailjet accepted the test message. Delivery is reported separately in Mailjet statistics.',
+      });
+    } catch (error) {
+      fail(res, error, 'Failed to run the Mailjet test');
+    }
   });
 
   router.get('/api/admin/mail/counts', ...mailGuard, async (_req, res) => {

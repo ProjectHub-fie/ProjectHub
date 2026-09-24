@@ -18,7 +18,7 @@
  * fresh database working without a separate migration step.
  */
 import postgres from 'postgres';
-import { normalizeDatabaseUrl } from './db.js';
+import { normalizeDatabaseUrl } from './db-url.js';
 import { sanitizeEmailHtml, toSnippet } from './mail-sanitize.js';
 
 let _sql = null;

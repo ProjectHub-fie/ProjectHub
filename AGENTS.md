@@ -81,12 +81,21 @@ could forge an authenticated session.
 
 `DATABASE_URL` is the single source of the connection string for the public API
 (`api/lib/db.js`), the admin function and its session store (`api/admin/index.js`).
-Both pass it through `normalizeDatabaseUrl` first, which drops `channel_binding`:
-Neon's dashboard appends `channel_binding=require`, which asks for
-SCRAM-SHA-256-PLUS, and postgres.js only implements plain SCRAM-SHA-256, so the
-parameter must not reach the driver. Put the real value in the deployment
-environment, never in a tracked file — a connection string in git is a
-credential leak even in a private repository, because it survives in history.
+Everything that touches the URL passes it through `normalizeDatabaseUrl`, whose
+implementation lives in `api/lib/db-url.js` so modules that must not open a pool
+(`server/db.ts`, `server/routes.ts`, `api/lib/mail-store.js`) can import just the
+pure function. `api/lib/db.js` re-exports it for callers that already import it.
+
+It does two things. It drops `channel_binding`: Neon's dashboard appends
+`channel_binding=require`, which asks for SCRAM-SHA-256-PLUS, and postgres.js only
+implements plain SCRAM-SHA-256, so the parameter must not reach the driver. It
+also rewrites `sslmode=prefer|require|verify-ca` to `verify-full`, because
+`pg-connection-string` already treats those three as `verify-full` but warns
+about them, and that warning reads like a connection failure when it is not.
+Writing `verify-full` keeps today's behaviour and silences it. Put the real value
+in the deployment environment, never in a tracked file — a connection string in
+git is a credential leak even in a private repository, because it survives in
+history.
 
 Turnstile is optional and enabled only when `TURNSTILE_SECRET_KEY` is set on the
 server. The client mirrors that with `captchaRequired`, derived from
@@ -119,6 +128,34 @@ choice. Two consequences are worth knowing before splitting the databases:
 
 `tests/mail-flow.test.mjs` exercises both shapes: it passes with `DATABASE_URL`
 alone and with `MAIL_DATABASE_URL` pointing at a second database.
+
+### Mailjet sending is only successful when Mailjet says so
+
+Every outbound message — password reset and the whole admin mailbox — goes
+through one function, `mailjetSend` in `api/lib/email.js`. It posts to the v3.1
+Send API with Basic auth built from `MJ_APIKEY_PUBLIC`/`MJ_APIKEY_PRIVATE`, and
+the sender comes from `MJ_SENDER_EMAIL` (name from `MJ_SENDER_NAME`).
+
+It counts a send as successful only when Mailjet returns a real, non-zero
+`MessageID`. Three shapes look like success and are not: a 200 whose
+`Messages[].Status` is `error`; a 200 with an empty `Messages` array; and a
+`Status: "success"` with `MessageID: 0` (Sandbox mode, or a sender the account
+will not send as). Each is reported as `{ sent: false }`, so a caller can never
+claim "sent" for mail that never left the account.
+
+`validateMailjetMessage` runs before the request: a missing/invalid recipient,
+sender or subject, or an empty body, is refused as `invalid_message` rather than
+posted. Before every request `mailjetSend` logs a `[MAILJET]` line for whether
+each key is configured, the recipient and the sender; after it, the HTTP status
+and the parsed response. Only those five fields — never a key value, the
+Authorization header or a token.
+
+Administrators can exercise the real deployed credentials from the mailbox
+settings' Diagnostics tab, which calls `POST /api/admin/mail/mailjet-test`
+(behind the same owner/admin `mailGuard`). It sends one minimal message through
+the same `mailjetSend` and reports `accepted: true/false` plus the MessageID.
+Acceptance is not delivery — the endpoint and its UI copy say so; Mailjet's own
+statistics are what report a bounce or a block.
 
 ### Admin credentials
 
