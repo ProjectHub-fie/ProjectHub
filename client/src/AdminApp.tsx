@@ -23,6 +23,7 @@ const AdminLogin = lazy(() => import("@/pages/admin-login-page"));
 const AdminMail = lazy(() => import("@/pages/mail-page"));
 const AdminSettings = lazy(() => import("@/pages/admin-settings"));
 const AdminBot = lazy(() => import("@/pages/admin-bot"));
+const AdminTests = lazy(() => import("@/pages/admin-tests"));
 
 /**
  * Registers the mail service worker.
@@ -39,7 +40,7 @@ function registerMailServiceWorker() {
   });
 }
 
-type AdminPermission = "viewUsers" | "manageProjects" | "manageAdmins" | "mail" | "bot";
+type AdminPermission = "viewUsers" | "manageProjects" | "manageAdmins" | "mail" | "bot" | "tests";
 
 function AdminLoading() {
   return (
@@ -90,7 +91,7 @@ function AdminNotFound() {
  * the URL staying secret or on this component running.
  */
 function AdminGuard({ permission, children }: { permission?: AdminPermission; children: React.ReactNode }) {
-  const { isLoading, isAuthenticated, canViewUsers, canManageProjects, canManageAdmins, canUseMail, canManageBot } = useAdminAuth();
+  const { isLoading, isAuthenticated, canViewUsers, canManageProjects, canManageAdmins, canUseMail, canManageBot, canRunTests } = useAdminAuth();
   const [, setLocation] = useLocation();
 
   React.useEffect(() => {
@@ -109,6 +110,9 @@ function AdminGuard({ permission, children }: { permission?: AdminPermission; ch
   if (permission === "mail" && !canUseMail) return <AdminAccessDenied />;
   // The bot console is owner/admin only, same as mail.
   if (permission === "bot" && !canManageBot) return <AdminAccessDenied />;
+  // The test runner is owner only: it executes code on the host. Mirrors
+  // requireRole('owner') on /api/admin/tests.
+  if (permission === "tests" && !canRunTests) return <AdminAccessDenied />;
 
   return <>{children}</>;
 }
@@ -207,6 +211,9 @@ export default function AdminApp() {
                   </Route>
                   <Route path="/bot">
                     <AdminPage permission="bot"><AdminBot /></AdminPage>
+                  </Route>
+                  <Route path="/tests">
+                    <AdminPage permission="tests"><AdminTests /></AdminPage>
                   </Route>
                   <Route path="/settings">
                     <AdminPage><AdminSettings /></AdminPage>

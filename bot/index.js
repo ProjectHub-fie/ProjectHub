@@ -37,7 +37,7 @@ import {
   isValidWebhookUrl,
 } from '../api/_lib/bot-logic.js';
 import { getBotSettings, getAlertState, recordAlertTimes, resolveDiscordIdentity } from '../api/_lib/bot-store.js';
-import { fetchUsage, fetchProjectName, isNeonConfigured } from '../api/_lib/neon-usage.js';
+import { fetchUsage, fetchProjectNames, projectScopeFromEnv, orgIdFromEnv, isNeonConfigured } from '../api/_lib/neon-usage.js';
 
 const POLL_INTERVAL_MS = Number(process.env.BOT_POLL_INTERVAL_MINUTES || 15) * 60 * 1000;
 const SETTINGS_REFRESH_MS = 60 * 1000;
@@ -200,12 +200,14 @@ export async function runUsageCheck({ client = null, now = Date.now(), fetchImpl
   if (!config.enabled && !force) return { skipped: 'disabled' };
   if (!isNeonConfigured()) return { skipped: 'no_neon_key' };
 
-  const projectId = process.env.NEON_PROJECT_ID;
-  if (!projectId) return { skipped: 'no_project_id' };
+  // The scope is every project in the organization unless the environment
+  // narrows it: `NEON_PROJECT_IDS` (or `NEON_PROJECT_ID`) filters to those.
+  const projectIds = projectScopeFromEnv();
+  const orgId = orgIdFromEnv();
 
   let usage;
   try {
-    usage = await fetchUsage({ projectId, fetchImpl });
+    usage = await fetchUsage({ projectIds, orgId, fetchImpl });
   } catch (error) {
     console.error('[bot] usage read failed:', error.message);
     return { skipped: 'read_failed', error: error.message };
@@ -222,11 +224,18 @@ export async function runUsageCheck({ client = null, now = Date.now(), fetchImpl
 
   if (!decision.alert) return { evaluation, decision, sent: false };
 
-  const projectName = config.projectName || (await fetchProjectName(projectId, fetchImpl));
+  // The label is organization-wide unless the environment narrowed the scope to
+  // explicit projects, in which case naming them is more honest than a count.
+  const names = await fetchProjectNames(usage.perProject.map((p) => p.id), fetchImpl).catch(() => ({}));
+  const orgWide = usage.scope === 'org';
+  const projectName = config.projectName || (orgWide ? 'All projects' : names[usage.perProject[0]?.id] || projectIds.join(', '));
   const embed = buildAlertEmbed({
     projectName,
-    projectId,
+    projectId: orgWide ? null : usage.perProject[0]?.id,
     evaluation: { ...evaluation, metrics: decision.breaching },
+    projectCount: usage.projectCount,
+    topProjects: usage.perProject,
+    projectNames: names,
     at: new Date(now),
   });
 

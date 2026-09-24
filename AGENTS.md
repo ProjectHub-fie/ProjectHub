@@ -49,6 +49,28 @@ keeps the event loop alive and otherwise hangs the runner.
   the types, and those modules import nothing from React or the DOM). Both files
   also grep `api/index.js` and `server/routes.ts` to assert the backends carry
   the same validators, because the form is not a security boundary.
+- `admin-test-runner.test.mjs` — the TAP parser, output capping, and the
+  guardrails on the one route that spawns a process. It runs the sibling
+  `deployment-limits.test.mjs` for real rather than re-running its own folder,
+  which would recurse.
+
+### The test-runner console
+
+`/pbad/tests` (owner only) runs the repository's `tests/` folder and shows the
+TAP summary. It is the only route that starts a process, so `api/_lib/test-routes.js`
+builds one fixed argument list and reads no request field at all; the spawn uses
+`shell: false`. One run at a time is enforced with a module-level promise, and a
+missing `tests/` folder is a `503` rather than a spawn error. `tests/` is in
+`.vercelignore`, so this only works where the folder is deployed — a long-lived
+host or local development.
+
+The spawned child deletes `NODE_TEST_CONTEXT`/`NODE_TEST_WORKER_ID` from its
+environment. A nested runner that inherits them attaches to the parent's test
+protocol instead of emitting TAP, which is what a naive spawn does when the
+endpoint is exercised from the suite.
+
+`runTestSuite` takes an optional `target` that only the tests pass; the HTTP
+route never does, so a request cannot choose what runs.
 
 ### Client modules are loadable from node:test
 
@@ -270,18 +292,26 @@ admin only, the same `requireRole('admin')` rule as mail):
 Two secrets are environment-only and are never stored or returned: the bot token
 (`DISCORD_BOT_TOKEN`) and the Neon key (`NEON_API_KEY`). The webhook URL *is* a
 credential and is stored, but `getBotSettingsForDashboard` masks it via
-`maskWebhook` — the browser only ever sees that one is configured. `NEON_PROJECT_ID`
-is read from the environment rather than the database so the alert cannot be
-aimed at a different project by a dashboard write.
+`maskWebhook` — the browser only ever sees that one is configured. The Neon
+project scope (`NEON_PROJECT_IDS`, or the single `NEON_PROJECT_ID`, plus an
+optional `NEON_ORG_ID`) is read from the environment rather than the database so
+the alert cannot be aimed at a different set of projects by a dashboard write.
 
 `&dev` resolves the caller's Discord id against `admin_credentials.discord_id`
 first and `users.discord_id` second, because the same Discord account can be
 linked to either portal. An account linked to both is reported as both. A client
 whose account is blocked is reported as blocked, never as unlinked.
 
-The usage alert reads Neon's `consumption_history/v2` endpoint. Neon reports what
-was consumed, not the plan ceiling, so the limits are configured in the dashboard
-and default to the Free tier. `evaluateUsage` grades each metric (ok / warning /
+The usage alert reads Neon's `consumption_history/v2` endpoint. The scope is
+every project in the organization by default, because that is what an
+usage-based Neon plan bills; `NEON_PROJECT_IDS` narrows it. `project_ids` is
+omitted from the request for the org-wide read, which is what asks Neon for every
+project, and the read follows `pagination.cursor` to the end because a partial
+page would silently under-report. Consumption is summed across the scope and
+`perProject` carries the breakdown that the embed and the dashboard show. Neon
+reports what was consumed, not the plan ceiling, so the limits are configured in
+the dashboard, default to the Free tier, and are organization-wide ceilings
+rather than per-project ones. `evaluateUsage` grades each metric (ok / warning /
 critical / exceeded) and the worst one sets the overall level; `shouldAlert` then
 applies a per-metric cooldown. Delivery goes to the channel and the webhook
 independently, and only metrics that actually reached a destination record their

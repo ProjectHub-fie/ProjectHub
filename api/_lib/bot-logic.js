@@ -174,6 +174,11 @@ const ALERT_TITLES = {
  * Deliberately not a discord.js EmbedBuilder: keeping it a plain object means
  * the same value can be posted to a channel and serialised into a webhook body
  * by one code path, and the tests can assert on it without a Discord client.
+ *
+ * When the read covered the whole organization, the totals are organization-wide
+ * and a single project link would be misleading, so the embed reports the project
+ * count and names the largest consumers instead. `topProjects` is already sorted
+ * by compute, largest first.
  */
 export function buildAlertEmbed({
   projectName,
@@ -183,6 +188,9 @@ export function buildAlertEmbed({
   periodStart = null,
   dashboardUrl = 'https://console.neon.tech',
   at = new Date(),
+  projectCount = 0,
+  topProjects = [],
+  projectNames = {},
 } = {}) {
   const breaching = (evaluation?.metrics || []).filter((metric) => metric.level !== 'ok');
   const fields = (breaching.length ? breaching : evaluation?.metrics || []).map((metric) => ({
@@ -191,11 +199,25 @@ export function buildAlertEmbed({
     inline: true,
   }));
 
+  // Who is responsible, when more than one project shares the quota. Capped so a
+  // large organization does not produce an embed Discord would reject.
+  const ranked = topProjects
+    .filter((p) => p.computeTimeSeconds > 0)
+    .slice(0, 5)
+    .map((p) => {
+      const name = projectNames[p.id] || p.id;
+      return `\`${name}\` — ${formatQuantity(p.computeTimeSeconds, 'seconds')}`;
+    });
+  if (ranked.length) {
+    fields.push({ name: 'Top projects by compute', value: ranked.join('\n'), inline: false });
+  }
+
   return {
     title: `${ALERT_TITLES[evaluation?.level] || ALERT_TITLES.critical}: ${projectName || 'project'}`,
     description:
-      `Project \`${projectName || projectId || 'unknown'}\` has reached the ` +
-      `${evaluation?.thresholdPercent ?? 80}% alert threshold on ${breaching.length} metric(s).`,
+      `\`${projectName || projectId || 'unknown'}\` has reached the ` +
+      `${evaluation?.thresholdPercent ?? 80}% alert threshold on ${breaching.length} metric(s)` +
+      `${projectCount > 1 ? ` across ${projectCount} projects` : ''}.`,
     color: ALERT_COLORS[evaluation?.level] || ALERT_COLORS.critical,
     fields,
     footer: { text: organizationName ? `Neon · ${organizationName}` : 'Neon usage monitor' },

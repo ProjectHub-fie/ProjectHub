@@ -2,6 +2,7 @@ import {
   Bot,
   CheckCircle,
   FileEdit,
+  FlaskConical,
   Inbox,
   LayoutDashboard,
   Mail,
@@ -68,8 +69,9 @@ export function AdminSidebar() {
   // Shared notification poll: this is what makes the unread badge update without
   // a full page reload. It returns no counts for a non-owner/admin session.
   const { counts } = useMailNotifications();
-  const { canManageBot } = useAdminAuth();
+  const { canManageBot, canRunTests } = useAdminAuth();
   const onBot = location === "/bot" || location.startsWith("/bot/");
+  const onTests = location === "/tests" || location.startsWith("/tests/");
 
   const onMail = location === "/mail" || location.startsWith("/mail/");
   const activeView = new URLSearchParams(searchString).get("view") || "inbox";
@@ -171,6 +173,23 @@ export function AdminSidebar() {
                       <span className="truncate flex items-center gap-2">
                         <Bot className="h-4 w-4" />
                         Bot
+                      </span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
+              {/* Owner only: this page starts a process on the host. */}
+              {canRunTests && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={onTests}
+                    className={`rounded-lg px-3 py-2 cursor-pointer ${onTests ? "sidebar-nav-active" : ""}`}
+                  >
+                    <Link href="/tests" onClick={closeMobileSidebar}>
+                      <span className="truncate flex items-center gap-2">
+                        <FlaskConical className="h-4 w-4" />
+                        Tests
                       </span>
                     </Link>
                   </SidebarMenuButton>

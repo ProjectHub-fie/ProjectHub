@@ -347,3 +347,185 @@ test('the alert tolerates one metric failing instead of losing the whole poll', 
   const neon = source('api/_lib/neon-usage.js');
   assert.match(neon, /unavailable/, 'unavailable metrics are reported, not thrown');
 });
+
+/* --------------------------------------------- organization-wide usage */
+
+const {
+  fetchUsage,
+  projectScopeFromEnv,
+  fetchProjectNames,
+} = await import('../api/_lib/neon-usage.js');
+
+/** A fetch double that serves a canned consumption page, and records the URL. */
+function neonFetchDouble({ rows, cursor = null, onCall } = {}) {
+  return async (url, init) => {
+    onCall?.(url, init);
+    const parsed = new URL(url);
+    return {
+      ok: true,
+      async json() {
+        return {
+          projects: rows.map((row) => ({
+            project_id: row.id,
+            consumption_history: row.points.map((value) => ({ [parsed.searchParams.get('metrics')]: value })),
+          })),
+          pagination: { cursor },
+        };
+      },
+      async text() {
+        return '';
+      },
+    };
+  };
+}
+
+test('with no project ids the read is organization-wide and omits project_ids', async () => {
+  process.env.NEON_API_KEY = 'test-key';
+  const urls = [];
+  const result = await fetchUsage({
+    projectIds: null,
+    orgId: 'org-1',
+    fetchImpl: neonFetchDouble({
+      rows: [
+        { id: 'p1', points: [10, 5] },
+        { id: 'p2', points: [1] },
+      ],
+      onCall: (url) => urls.push(url),
+    }),
+  });
+
+  assert.equal(result.scope, 'org');
+  assert.ok(urls.length > 0);
+  for (const url of urls) {
+    assert.equal(new URL(url).searchParams.getAll('project_ids').length, 0, 'project_ids must be absent');
+    assert.equal(new URL(url).searchParams.get('org_id'), 'org-1');
+  }
+});
+
+test('the org-wide total is the sum of every project, with a breakdown', async () => {
+  process.env.NEON_API_KEY = 'test-key';
+  const result = await fetchUsage({
+    projectIds: null,
+    fetchImpl: neonFetchDouble({
+      rows: [
+        { id: 'p1', points: [10, 5] },
+        { id: 'p2', points: [2] },
+      ],
+    }),
+  });
+
+  // p1 contributes 10 + 5, p2 contributes 2, so the scope total is 17.
+  assert.equal(result.usage.computeTimeSeconds, 17);
+  assert.equal(result.projectCount, 2);
+  // Sorted by compute, largest first.
+  assert.deepEqual(result.perProject.map((p) => p.id), ['p1', 'p2']);
+  assert.equal(result.perProject[0].computeTimeSeconds, 15);
+});
+
+test('an explicit project list filters the read and is sent as project_ids', async () => {
+  process.env.NEON_API_KEY = 'test-key';
+  const urls = [];
+  const result = await fetchUsage({
+    projectIds: ['p1', 'p2'],
+    fetchImpl: neonFetchDouble({ rows: [{ id: 'p1', points: [7] }], onCall: (url) => urls.push(url) }),
+  });
+
+  assert.equal(result.scope, 'projects');
+  for (const url of urls) {
+    assert.deepEqual(new URL(url).searchParams.getAll('project_ids'), ['p1', 'p2']);
+  }
+});
+
+test('pagination is followed so usage is never under-reported', async () => {
+  process.env.NEON_API_KEY = 'test-key';
+  // Each metric read is answered with one page that carries a cursor and a
+  // second that does not, so a reader that ignored the cursor would miss half.
+  const secondPages = [];
+  const seen = new Set();
+  const fetchImpl = async (url) => {
+    const parsed = new URL(url);
+    const metric = parsed.searchParams.get('metrics');
+    const isSecondPage = seen.has(metric);
+    seen.add(metric);
+    if (isSecondPage) secondPages.push(metric);
+    return {
+      ok: true,
+      async json() {
+        return {
+          projects: [
+            {
+              project_id: isSecondPage ? 'p2' : 'p1',
+              consumption_history: [{ [metric]: 10 }],
+            },
+          ],
+          pagination: { cursor: isSecondPage ? null : 'next' },
+        };
+      },
+      async text() {
+        return '';
+      },
+    };
+  };
+
+  const result = await fetchUsage({ projectIds: null, fetchImpl });
+  // Every metric group asked for its second page.
+  assert.ok(secondPages.length > 0, 'a cursor page was requested');
+  // Ten on each of the two pages, for the compute metric.
+  assert.equal(result.usage.computeTimeSeconds, 20);
+  assert.equal(result.projectCount, 2);
+});
+
+test('NEON_PROJECT_IDS narrows the scope, and neither set means the whole org', () => {
+  assert.deepEqual(projectScopeFromEnv({ NEON_PROJECT_IDS: 'a, b', NEON_PROJECT_ID: 'c' }), ['a', 'b']);
+  assert.deepEqual(projectScopeFromEnv({ NEON_PROJECT_ID: 'c' }), ['c']);
+  assert.equal(projectScopeFromEnv({}), null);
+});
+
+test('project names are looked up per id and never fail the read', async () => {
+  process.env.NEON_API_KEY = 'test-key';
+  const names = await fetchProjectNames(['p1', 'p2'], async (url) => {
+    if (url.includes('p2')) throw new Error('network');
+    return { ok: true, async json() { return { project: { name: 'ProjectHub' } }; } };
+  });
+  assert.deepEqual(names, { p1: 'ProjectHub' });
+});
+
+test('the usage-preview no longer demands a single project id', () => {
+  const routes = source('api/_lib/bot-routes.js');
+  assert.doesNotMatch(routes, /NEON_PROJECT_ID is not configured/);
+  assert.match(routes, /projectScopeFromEnv/);
+  assert.match(routes, /scope:/);
+});
+
+test('the bot alerts on the organization scope, not a single project', () => {
+  const bot = source('bot/index.js');
+  assert.match(bot, /projectScopeFromEnv\(\)/);
+  assert.match(bot, /topProjects/);
+  assert.match(bot, /projectCount/);
+});
+
+test('the org-wide embed counts projects and names the largest consumers', () => {
+  const embed = buildAlertEmbed({
+    projectName: 'All projects',
+    projectId: null,
+    evaluation: BREACHING,
+    projectCount: 3,
+    topProjects: [
+      { id: 'p1', computeTimeSeconds: 7200 },
+      { id: 'p2', computeTimeSeconds: 3600 },
+      { id: 'p3', computeTimeSeconds: 0 },
+    ],
+    projectNames: { p1: 'ProjectHub', p2: 'bot' },
+  });
+
+  assert.match(embed.description, /across 3 projects/);
+  const ranked = embed.fields.find((f) => /Top projects/.test(f.name));
+  assert.ok(ranked, 'the breakdown field is present');
+  assert.match(ranked.value, /ProjectHub/);
+  assert.match(ranked.value, /bot/);
+  // A project with zero compute is not worth a line.
+  assert.doesNotMatch(ranked.value, /p3/);
+  // With no single project there is no per-project URL to link to.
+  assert.equal(embed.url, 'https://console.neon.tech');
+});
+

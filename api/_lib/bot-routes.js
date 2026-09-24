@@ -14,7 +14,7 @@
 import express from 'express';
 import { getBotSettingsForDashboard, saveBotSettings, getAlertState } from './bot-store.js';
 import { isValidWebhookUrl, isSnowflake, evaluateUsage, formatQuantity } from './bot-logic.js';
-import { fetchUsage, isNeonConfigured } from './neon-usage.js';
+import { fetchUsage, fetchProjectNames, projectScopeFromEnv, orgIdFromEnv, isNeonConfigured } from './neon-usage.js';
 
 /**
  * Builds the bot router.
@@ -96,7 +96,11 @@ export function buildBotRouter({ requireAuth, requireRole }) {
         prefix: settings.prefix,
         botTokenConfigured: settings.botTokenConfigured,
         neonKeyConfigured: settings.neonKeyConfigured,
-        projectIdConfigured: Boolean(process.env.NEON_PROJECT_ID),
+        // The scope is every project unless the environment narrows it, so this
+        // reports which mode is active rather than demanding a single id.
+        scope: projectScopeFromEnv() ? 'projects' : 'org',
+        projectIds: projectScopeFromEnv() || [],
+        orgId: orgIdFromEnv(),
         destinations: {
           channel: Boolean(settings.alertChannelId),
           webhook: settings.webhookConfigured,
@@ -111,28 +115,40 @@ export function buildBotRouter({ requireAuth, requireRole }) {
   /**
    * Diagnostic: reads Neon usage and evaluates the alert WITHOUT sending it.
    *
-   * This is what lets an operator verify the API key, the project id and the
+   * This is what lets an operator verify the API key, the scope and the
    * configured limits from the deployment that is actually running, without
    * spamming the alert channel. It returns the same numbers the alert would, so
    * "the bot is silent" can be told apart from "usage is genuinely low".
+   *
+   * The scope follows the environment: every project by default, or the
+   * configured ids. A single project id is no longer required, because an
+   * organization-wide quota is the more useful reading.
    */
   router.post('/api/admin/bot/usage-preview', ...botGuard, async (_req, res) => {
     if (!isNeonConfigured()) {
       return res.status(400).json({ message: 'NEON_API_KEY is not configured on the server' });
     }
-    const projectId = process.env.NEON_PROJECT_ID;
-    if (!projectId) {
-      return res.status(400).json({ message: 'NEON_PROJECT_ID is not configured on the server' });
-    }
 
     try {
       const settings = await getBotSettingsForDashboard();
-      const { usage, unavailable, from, to } = await fetchUsage({ projectId });
-      const evaluation = evaluateUsage(usage, settings, settings.alertThresholdPercent);
+      const projectIds = projectScopeFromEnv();
+      const result = await fetchUsage({ projectIds, orgId: orgIdFromEnv() });
+      const evaluation = evaluateUsage(result.usage, settings, settings.alertThresholdPercent);
+
+      // Label the projects the read covered, best-effort.
+      const names = await fetchProjectNames(result.perProject.map((p) => p.id));
 
       res.json({
-        projectId,
-        window: { from, to },
+        scope: result.scope,
+        projectIds: projectIds || [],
+        projectCount: result.projectCount,
+        perProject: result.perProject.map((p) => ({
+          id: p.id,
+          name: names[p.id] || null,
+          computeTimeSeconds: p.computeTimeSeconds || 0,
+          formatted: formatQuantity(p.computeTimeSeconds || 0, 'seconds'),
+        })),
+        window: { from: result.from, to: result.to },
         usage: Object.fromEntries(
           evaluation.metrics.map((metric) => [
             metric.key,
@@ -148,7 +164,7 @@ export function buildBotRouter({ requireAuth, requireRole }) {
         level: evaluation.level,
         wouldAlert: evaluation.level !== 'ok',
         thresholdPercent: evaluation.thresholdPercent,
-        unavailable,
+        unavailable: result.unavailable,
       });
     } catch (error) {
       fail(res, error, 'Failed to read Neon usage');
