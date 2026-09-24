@@ -21,8 +21,10 @@ halves is in `api/_lib`, so there is one definition of the alert rules.
 | --- | --- | --- |
 | `DISCORD_BOT_TOKEN` | yes | The bot account's token. Enable **Message Content Intent** in the Discord developer portal, or prefix commands and mentions will not arrive. |
 | `DATABASE_URL` | yes | The same database the web app uses. The bot reads its configuration and resolves roles from it. |
-| `NEON_API_KEY` | for usage alerts | A Neon API key with access to the project. |
-| `NEON_PROJECT_ID` | for usage alerts | The Neon project to monitor. |
+| `NEON_API_KEY` | for usage alerts | A Neon API key with access to the organization's projects. |
+| `NEON_PROJECT_IDS` | no | Comma-separated project ids to measure. Unset, the alert measures **every project in the organization**. |
+| `NEON_PROJECT_ID` | no | A single project id, for when `NEON_PROJECT_IDS` is not set. Both unset means every project. |
+| `NEON_ORG_ID` | no | Restricts an organization-wide read to one organization. |
 | `BOT_POLL_INTERVAL_MINUTES` | no | How often to check usage. Default `15`. |
 | `MAIL_DATABASE_URL` | no | Only if the mailbox was split onto its own database. |
 
@@ -54,7 +56,8 @@ The bot re-reads this every minute, so a change takes effect without a restart.
 
 The **Usage check** button on that page reads the live Neon figures and shows
 what the alert would decide *without sending anything* — use it to confirm the
-key, the project id and the limits are right.
+key, the scope and the limits are right. It also lists the projects that
+contributed the most compute, so a shared quota can be traced to a project.
 
 ## Commands
 
@@ -72,5 +75,9 @@ proves the identity.
 
 Neon's consumption API reports what was consumed, not the plan ceiling, so the
 limits are entered in the dashboard. The defaults match the Free tier; set them to
-the plan the project is actually on. A limit of `0` means "unknown" for that
-metric and it never alerts.
+the plan the organization is actually on.
+
+Usage is summed across every project in the organization by default, so these are
+**organization-wide ceilings**, not per-project ones — which matches how Neon's
+usage-based plans bill. Set `NEON_PROJECT_IDS` to measure a subset instead. A
+limit of `0` means "unknown" for that metric and it never alerts.

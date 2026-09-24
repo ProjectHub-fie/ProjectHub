@@ -45,7 +45,9 @@ type BotStatus = {
   prefix: string;
   botTokenConfigured: boolean;
   neonKeyConfigured: boolean;
-  projectIdConfigured: boolean;
+  scope: "org" | "projects";
+  projectIds: string[];
+  orgId: string | null;
   destinations: { channel: boolean; webhook: boolean };
   neon: boolean;
 };
@@ -73,7 +75,10 @@ const bytesToGb = (bytes: number) => Number((Number(bytes || 0) / BYTES_PER_GB).
 const gbToBytes = (gb: string) => Math.max(0, Math.round(Number(gb || 0) * BYTES_PER_GB));
 
 type UsagePreview = {
-  projectId: string;
+  scope: "org" | "projects";
+  projectIds: string[];
+  projectCount: number;
+  perProject: { id: string; name: string | null; computeTimeSeconds: number; formatted: string }[];
   window: { from: string; to: string };
   usage: Record<string, { used: number; formatted: string; limit: number; percent: number; level: string }>;
   level: string;
@@ -195,7 +200,7 @@ export default function AdminBotPage() {
   }
 
   const preview = previewMutation.data;
-  const ready = Boolean(status?.botTokenConfigured && status?.neonKeyConfigured && status?.projectIdConfigured);
+  const ready = Boolean(status?.botTokenConfigured && status?.neonKeyConfigured);
   const hasDestination = Boolean(form.alertChannelId.trim() || settings?.webhookConfigured);
 
   return (
@@ -229,9 +234,13 @@ export default function AdminBotPage() {
           detail={status?.neonKeyConfigured ? "NEON_API_KEY is set" : "Set NEON_API_KEY"}
         />
         <StatusTile
-          ok={Boolean(status?.projectIdConfigured)}
-          label="Neon project"
-          detail={status?.projectIdConfigured ? "NEON_PROJECT_ID is set" : "Set NEON_PROJECT_ID"}
+          ok={Boolean(status)}
+          label="Neon scope"
+          detail={
+            status?.scope === "org"
+              ? "All projects in the organization"
+              : `NEON_PROJECT_IDS: ${status?.projectIds.length ?? 0} project(s)`
+          }
         />
       </div>
 
@@ -441,7 +450,8 @@ export default function AdminBotPage() {
             </div>
           </div>
           <p className="text-xs text-muted-foreground">
-            Defaults match the Neon Free tier. Adjust these to the plan the project is actually on.
+            Defaults match the Neon Free tier. Usage is summed across every project in the
+            organization, so these are organization-wide ceilings, not per-project ones.
           </p>
         </CardContent>
       </Card>
@@ -475,13 +485,19 @@ export default function AdminBotPage() {
 
           {preview && (
             <div className="space-y-4" data-testid="usage-preview-result">
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <span className="text-sm text-muted-foreground">Overall</span>
                 <Badge className={LEVEL_STYLES[preview.level] || ""}>{preview.level}</Badge>
                 <span className="text-xs text-muted-foreground">
                   {preview.wouldAlert ? "An alert would fire at this level." : "Below the alert threshold."}
                 </span>
               </div>
+
+              <p className="text-xs text-muted-foreground" data-testid="usage-preview-scope">
+                {preview.scope === "org"
+                  ? `Measured across all ${preview.projectCount} project(s) in the organization.`
+                  : `Measured across ${preview.projectCount} configured project(s): ${preview.projectIds.join(", ")}`}
+              </p>
 
               {Object.entries(preview.usage).map(([key, metric]) => (
                 <div key={key} className="space-y-1">
@@ -494,6 +510,19 @@ export default function AdminBotPage() {
                   <Progress value={Math.min(100, metric.percent)} className="h-2" />
                 </div>
               ))}
+
+              {/* Which project is responsible, when the quota is shared. */}
+              {preview.perProject?.length > 0 && (
+                <div className="space-y-1" data-testid="usage-preview-projects">
+                  <p className="text-xs font-medium text-muted-foreground">Top projects by compute</p>
+                  {preview.perProject.slice(0, 5).map((project) => (
+                    <div key={project.id} className="flex items-center justify-between text-xs">
+                      <span className="truncate font-mono">{project.name || project.id}</span>
+                      <span className="text-muted-foreground">{project.formatted}</span>
+                    </div>
+                  ))}
+                </div>
+              )}
 
               {preview.unavailable?.length > 0 && (
                 <p className="text-xs text-amber-600 dark:text-amber-400">
