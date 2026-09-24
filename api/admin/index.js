@@ -18,11 +18,11 @@ import bcrypt from 'bcryptjs';
 import multer from 'multer';
 import postgres from 'postgres';
 import crypto from 'node:crypto';
-import { describeDbError, normalizeDatabaseUrl } from '../lib/db.js';
-import { parseCookies } from '../lib/session-token.js';
-import { buildMailRouter, handleInboundMessage } from '../lib/mail-routes.js';
-import { buildBotRouter } from '../lib/bot-routes.js';
-import { ingestMessage, createMailNotifications, ensureMailSchema, purgeAdminMailData } from '../lib/mail-store.js';
+import { describeDbError, normalizeDatabaseUrl } from '../_lib/db.js';
+import { parseCookies } from '../_lib/session-token.js';
+import { buildMailRouter, handleInboundMessage } from '../_lib/mail-routes.js';
+import { buildBotRouter } from '../_lib/bot-routes.js';
+import { ingestMessage, createMailNotifications, ensureMailSchema, purgeAdminMailData } from '../_lib/mail-store.js';
 
 const sql = postgres(normalizeDatabaseUrl(process.env.DATABASE_URL), { ssl: 'require', max: 5 });
 
@@ -39,7 +39,7 @@ const ROLE_HIERARCHY = ['moderator', 'admin', 'owner'];
 
 /**
  * Creates the dashboard table if the shared database does not have it yet.
- * Mirrors the auto-seed convention already used by api/lib/storage.js, so the
+ * Mirrors the auto-seed convention already used by api/_lib/storage.js, so the
  * dashboard works on a fresh database without a separate migration step.
  * Cached so the DDL runs at most once per serverless instance.
  */

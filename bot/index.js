@@ -35,9 +35,9 @@ import {
   formatQuantity,
   formatPercent,
   isValidWebhookUrl,
-} from '../api/lib/bot-logic.js';
-import { getBotSettings, getAlertState, recordAlertTimes, resolveDiscordIdentity } from '../api/lib/bot-store.js';
-import { fetchUsage, fetchProjectName, isNeonConfigured } from '../api/lib/neon-usage.js';
+} from '../api/_lib/bot-logic.js';
+import { getBotSettings, getAlertState, recordAlertTimes, resolveDiscordIdentity } from '../api/_lib/bot-store.js';
+import { fetchUsage, fetchProjectName, isNeonConfigured } from '../api/_lib/neon-usage.js';
 
 const POLL_INTERVAL_MS = Number(process.env.BOT_POLL_INTERVAL_MINUTES || 15) * 60 * 1000;
 const SETTINGS_REFRESH_MS = 60 * 1000;

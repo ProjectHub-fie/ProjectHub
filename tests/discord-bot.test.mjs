@@ -29,7 +29,7 @@ const {
   maskWebhook,
   isValidWebhookUrl,
   isSnowflake,
-} = await import('../api/lib/bot-logic.js');
+} = await import('../api/_lib/bot-logic.js');
 
 /* ------------------------------------------------------------- the prefix */
 
@@ -76,7 +76,7 @@ test('the admin PIN is never carried into the reply', () => {
   assert.ok(!JSON.stringify(resolved).includes('9876'), 'the PIN must not appear in the resolved roles');
 
   // And the bot must not read it from the database at all.
-  const store = source('api/lib/bot-store.js');
+  const store = source('api/_lib/bot-store.js');
   assert.match(store, /SELECT id, role, email FROM admin_credentials/);
   assert.ok(!/SELECT[^`]*\bpin\b[^`]*FROM admin_credentials/.test(store), 'the PIN is not selected');
 });
@@ -293,7 +293,7 @@ test('the bot console never asks for a secret, only reports whether one is set',
   assert.match(page, /neonKeyConfigured/, 'it reports key presence');
 
   // And the API must report presence, not the value.
-  const routes = source('api/lib/bot-routes.js');
+  const routes = source('api/_lib/bot-routes.js');
   assert.match(routes, /botTokenConfigured/);
   assert.match(routes, /neonKeyConfigured/);
   assert.ok(!/res\.json\([\s\S]{0,200}process\.env\.DISCORD_BOT_TOKEN/.test(routes), 'the token value is never returned');
@@ -305,7 +305,7 @@ test('both backends mount the same bot router behind the owner/admin guard', () 
   for (const backend of [serverless, express]) {
     assert.match(backend, /buildBotRouter\(\{\s*requireAuth,\s*requireRole\s*\}\)/);
   }
-  const routes = source('api/lib/bot-routes.js');
+  const routes = source('api/_lib/bot-routes.js');
   assert.match(routes, /requireRole\('admin'\)/, 'a moderator is refused server-side');
 });
 
@@ -337,13 +337,13 @@ test('the mention reply is pinned not to ping, and the alert posts to both desti
 });
 
 test('the Neon alert read never logs the API key', () => {
-  const neon = source('api/lib/neon-usage.js');
+  const neon = source('api/_lib/neon-usage.js');
   assert.match(neon, /NEON_API_KEY/);
   assert.ok(!/console\.log\([^)]*process\.env\.NEON_API_KEY/.test(neon), 'the key is not logged');
   assert.match(neon, /Authorization: `Bearer \$\{process\.env\.NEON_API_KEY\}`/, 'it is only sent to Neon');
 });
 
 test('the alert tolerates one metric failing instead of losing the whole poll', () => {
-  const neon = source('api/lib/neon-usage.js');
+  const neon = source('api/_lib/neon-usage.js');
   assert.match(neon, /unavailable/, 'unavailable metrics are reported, not thrown');
 });

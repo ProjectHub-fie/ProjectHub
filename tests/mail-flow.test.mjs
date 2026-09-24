@@ -42,8 +42,8 @@ before(async () => {
 
   const { default: postgres } = await import('postgres');
 
-  const { ensureMailSchema, mailDatabaseUrl } = await import('../api/lib/mail-store.js');
-  const { normalizeDatabaseUrl } = await import('../api/lib/db.js');
+  const { ensureMailSchema, mailDatabaseUrl } = await import('../api/_lib/mail-store.js');
+  const { normalizeDatabaseUrl } = await import('../api/_lib/db.js');
 
   sql = postgres(normalizeDatabaseUrl(mailDatabaseUrl()), { ssl: 'require', max: 3 });
   appSql = postgres(normalizeDatabaseUrl(process.env.DATABASE_URL), { ssl: 'require', max: 3 });
@@ -69,7 +69,7 @@ before(async () => {
   `;
   adminId = admin.id;
 
-  const { buildMailRouter } = await import('../api/lib/mail-routes.js');
+  const { buildMailRouter } = await import('../api/_lib/mail-routes.js');
 
   // A stub session guard: the real ones live in api/admin/index.js and are
   // covered elsewhere. What matters here is that the router consults them.
@@ -104,7 +104,7 @@ after(async () => {
   // On a shared database ON DELETE CASCADE removes every mail row. On a split
   // database the cascade cannot reach the mailbox, so clean up explicitly.
   await appSql`DELETE FROM admin_credentials WHERE id = ${adminId}`;
-  const { purgeAdminMailData } = await import('../api/lib/mail-store.js');
+  const { purgeAdminMailData } = await import('../api/_lib/mail-store.js');
   await purgeAdminMailData(adminId);
   await sql.end();
   await appSql.end();
@@ -164,7 +164,7 @@ test('an admin and an owner are both allowed', { skip: !hasDatabase }, async () 
 /* --------------------------------------------------------------- ingestion */
 
 test('an inbound message lands in the inbox, unread, and is idempotent', { skip: !hasDatabase }, async () => {
-  const { ingestMessage, listMessages, getMailCounts } = await import('../api/lib/mail-store.js');
+  const { ingestMessage, listMessages, getMailCounts } = await import('../api/_lib/mail-store.js');
 
   const first = await ingestMessage({
     providerMessageId: `${prefix}-resend-1`,
@@ -206,7 +206,7 @@ test('an inbound message lands in the inbox, unread, and is idempotent', { skip:
 });
 
 test('a malicious body is sanitised at ingestion, not at render', { skip: !hasDatabase }, async () => {
-  const { ingestMessage, getMessage } = await import('../api/lib/mail-store.js');
+  const { ingestMessage, getMessage } = await import('../api/_lib/mail-store.js');
 
   const created = await ingestMessage({
     providerMessageId: `${prefix}-xss-1`,
@@ -228,7 +228,7 @@ test('a malicious body is sanitised at ingestion, not at render', { skip: !hasDa
 /* --------------------------------------------------------------- threading */
 
 test('a reply joins the existing thread instead of starting a new one', { skip: !hasDatabase }, async () => {
-  const { ingestMessage, getThreadMessages, listMessages } = await import('../api/lib/mail-store.js');
+  const { ingestMessage, getThreadMessages, listMessages } = await import('../api/_lib/mail-store.js');
 
   const original = await ingestMessage({
     providerMessageId: `${prefix}-thread-root`,
@@ -268,7 +268,7 @@ test('a reply joins the existing thread instead of starting a new one', { skip: 
 /* --------------------------------------------------------- flags and views */
 
 test('read, star and trash flags survive a round trip', { skip: !hasDatabase }, async () => {
-  const store = await import('../api/lib/mail-store.js');
+  const store = await import('../api/_lib/mail-store.js');
 
   const created = await store.ingestMessage({
     providerMessageId: `${prefix}-flags`,
@@ -302,7 +302,7 @@ test('read, star and trash flags survive a round trip', { skip: !hasDatabase }, 
 });
 
 test('unread and attachment filters narrow the list', { skip: !hasDatabase }, async () => {
-  const store = await import('../api/lib/mail-store.js');
+  const store = await import('../api/_lib/mail-store.js');
 
   await store.ingestMessage({
     providerMessageId: `${prefix}-filter-unread`,
@@ -321,7 +321,7 @@ test('unread and attachment filters narrow the list', { skip: !hasDatabase }, as
 });
 
 test('search matches subject and body server-side', { skip: !hasDatabase }, async () => {
-  const store = await import('../api/lib/mail-store.js');
+  const store = await import('../api/_lib/mail-store.js');
   const needle = `zebra-${runId}`;
 
   await store.ingestMessage({
@@ -342,7 +342,7 @@ test('search matches subject and body server-side', { skip: !hasDatabase }, asyn
 });
 
 test('pagination is bounded and slices the result set', { skip: !hasDatabase }, async () => {
-  const store = await import('../api/lib/mail-store.js');
+  const store = await import('../api/_lib/mail-store.js');
 
   const page1 = await store.listMessages({ view: 'inbox', page: 1, pageSize: 1 });
   assert.equal(page1.rows.length, 1, 'a page size of one returns one row');
@@ -355,7 +355,7 @@ test('pagination is bounded and slices the result set', { skip: !hasDatabase }, 
 /* ----------------------------------------------------------------- drafts */
 
 test('a draft is created, updated in place and deleted', { skip: !hasDatabase }, async () => {
-  const store = await import('../api/lib/mail-store.js');
+  const store = await import('../api/_lib/mail-store.js');
 
   const created = await store.saveDraft({
     adminId,
@@ -384,7 +384,7 @@ test('a draft is created, updated in place and deleted', { skip: !hasDatabase },
 });
 
 test("one admin cannot read or delete another admin's draft", { skip: !hasDatabase }, async () => {
-  const store = await import('../api/lib/mail-store.js');
+  const store = await import('../api/_lib/mail-store.js');
 
   const [other] = await appSql`
     INSERT INTO admin_credentials (email, pin, password_hash, role)
@@ -410,7 +410,7 @@ test("one admin cannot read or delete another admin's draft", { skip: !hasDataba
 /* -------------------------------------------------------------- templates */
 
 test('templates can be created, duplicated and deleted', { skip: !hasDatabase }, async () => {
-  const store = await import('../api/lib/mail-store.js');
+  const store = await import('../api/_lib/mail-store.js');
 
   const created = await store.createTemplate({
     name: `${prefix} Welcome`,
@@ -437,7 +437,7 @@ test('templates can be created, duplicated and deleted', { skip: !hasDatabase },
 /* -------------------------------------------------------------- signature */
 
 test('a signature is stored per admin and never shared', { skip: !hasDatabase }, async () => {
-  const store = await import('../api/lib/mail-store.js');
+  const store = await import('../api/_lib/mail-store.js');
 
   await store.saveSignature(adminId, {
     name: 'Shilpi',
@@ -467,7 +467,7 @@ test('a signature is stored per admin and never shared', { skip: !hasDatabase },
 /* ---------------------------------------------------------- notifications */
 
 test('a notification holds a preview, never a body', { skip: !hasDatabase }, async () => {
-  const store = await import('../api/lib/mail-store.js');
+  const store = await import('../api/_lib/mail-store.js');
 
   const created = await store.ingestMessage({
     providerMessageId: `${prefix}-notify`,
@@ -504,7 +504,7 @@ test('a notification holds a preview, never a body', { skip: !hasDatabase }, asy
 });
 
 test('notification preferences are per admin', { skip: !hasDatabase }, async () => {
-  const store = await import('../api/lib/mail-store.js');
+  const store = await import('../api/_lib/mail-store.js');
 
   await store.saveNotificationSettings(adminId, { notifyNewEmail: false, soundEnabled: true });
   const mine = await store.getNotificationSettings(adminId);
@@ -523,7 +523,7 @@ test('notification preferences are per admin', { skip: !hasDatabase }, async () 
 /* ------------------------------------------------- default insert surface */
 
 test('a new message defaults to unread and in no trash', { skip: !hasDatabase }, async () => {
-  const store = await import('../api/lib/mail-store.js');
+  const store = await import('../api/_lib/mail-store.js');
 
   const created = await store.ingestMessage({
     providerMessageId: `${prefix}-defaults`,
@@ -544,7 +544,7 @@ test('a new message defaults to unread and in no trash', { skip: !hasDatabase },
 /* -------------------------------------------------------------- audit log */
 
 test('sent sends are recorded in the audit log without a body or secret', { skip: !hasDatabase }, async () => {
-  const store = await import('../api/lib/mail-store.js');
+  const store = await import('../api/_lib/mail-store.js');
 
   await store.recordAudit(adminId, 'mail.sent', {
     targetType: 'message',

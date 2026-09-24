@@ -13,7 +13,7 @@ runs anywhere that keeps a process alive — a VPS, Railway, Fly, Render, Docker
 or a small always-on box — while the web app stays on Vercel as it is.
 
 Only the configuration lives in the web app. Everything shared between the two
-halves is in `api/lib`, so there is one definition of the alert rules.
+halves is in `api/_lib`, so there is one definition of the alert rules.
 
 ## Environment
 

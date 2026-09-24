@@ -3,7 +3,7 @@
  *
  * `MAIL_DATABASE_URL` lets the mailbox sit on its own database. These pin the
  * resolution rules and the guards that keep a split deployment correct, without
- * needing a live database: importing api/lib/mail-store.js opens no connection
+ * needing a live database: importing api/_lib/mail-store.js opens no connection
  * (postgres.js connects lazily on the first query).
  */
 import './helpers/env.mjs';
@@ -21,7 +21,7 @@ const withMailDb = async (value, fn) => {
   else process.env.MAIL_DATABASE_URL = value;
   try {
     // Re-imported fresh so the module re-reads process.env each time.
-    const mod = await import(`../api/lib/mail-store.js?case=${Math.random()}`);
+    const mod = await import(`../api/_lib/mail-store.js?case=${Math.random()}`);
     return await fn(mod);
   } finally {
     if (previous === undefined) delete process.env.MAIL_DATABASE_URL;
@@ -53,13 +53,13 @@ test('a MAIL_DATABASE_URL identical to DATABASE_URL is not treated as separate',
 });
 
 test('the mail connection normalizes its URL and is lazy', () => {
-  const store = readFileSync(new URL('../api/lib/mail-store.js', import.meta.url), 'utf8');
+  const store = readFileSync(new URL('../api/_lib/mail-store.js', import.meta.url), 'utf8');
   assert.match(store, /postgres\(normalizeDatabaseUrl\(mailDatabaseUrl\(\)\)/,
     'the mail pool must normalize whichever URL it resolves');
 });
 
 test('admin foreign keys are conditional on the databases being shared', () => {
-  const store = readFileSync(new URL('../api/lib/mail-store.js', import.meta.url), 'utf8');
+  const store = readFileSync(new URL('../api/_lib/mail-store.js', import.meta.url), 'utf8');
   assert.match(store, /isMailDatabaseSeparate\(\)[\s\S]{0,80}sql\.unsafe\(''\)/,
     'a split mailbox must omit the cross-database admin foreign key');
   assert.match(store, /REFERENCES admin_credentials\(id\) ON DELETE/,

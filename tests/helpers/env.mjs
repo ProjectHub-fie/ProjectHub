@@ -2,7 +2,7 @@
  * Shared test environment bootstrap.
  *
  * Import this before any api/ module: those modules read process.env at import
- * time (api/lib/db.js throws when DATABASE_URL is missing), so the defaults have
+ * time (api/_lib/db.js throws when DATABASE_URL is missing), so the defaults have
  * to exist first.
  */
 process.env.SESSION_SECRET ||= 'test-secret-not-for-production';
@@ -18,7 +18,7 @@ delete process.env.TURNSTILE_SECRET_KEY;
  */
 export const hasDatabase = Boolean(process.env.DATABASE_URL);
 
-// A syntactically valid but unreachable URL. Importing api/lib/db.js must not
+// A syntactically valid but unreachable URL. Importing api/_lib/db.js must not
 // throw, and tests that do not touch the database never open a connection
 // (postgres.js connects lazily on first query).
 process.env.DATABASE_URL ||= 'postgresql://placeholder:placeholder@127.0.0.1:1/placeholder';

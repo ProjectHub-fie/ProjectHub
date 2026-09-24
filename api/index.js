@@ -2,8 +2,8 @@
  * Comprehensive Vercel Edge Function handler
  * Implements all required API endpoints for ProjectHub frontend with database integration
  */
-import { DatabaseStorage } from './lib/storage.js';
-import { describeDbError } from './lib/db.js';
+import { DatabaseStorage } from './_lib/storage.js';
+import { describeDbError } from './_lib/db.js';
 import {
   isEmailConfigured,
   isPasswordResetEmailConfigured,
@@ -16,7 +16,7 @@ import {
   contactNotificationEmail,
   createResetToken,
   hashResetToken,
-} from './lib/email.js';
+} from './_lib/email.js';
 import bcrypt from 'bcryptjs';
 import crypto from 'node:crypto';
 import {
@@ -27,7 +27,7 @@ import {
   sessionCookie,
   clearedSessionCookie,
   sessionTokenFrom,
-} from './lib/session-token.js';
+} from './_lib/session-token.js';
 
 // Server-side email validation. The form validates too, but the browser is
 // trivially bypassed, so this is the check that actually holds.
@@ -164,7 +164,7 @@ function logAuth(event, fields = {}) {
 
 /**
  * The user shape sent to the client is defined alongside the session token in
- * ./lib/session-token.js so every backend returns the same fields.
+ * ./_lib/session-token.js so every backend returns the same fields.
  */
 
 /**
@@ -1123,7 +1123,7 @@ async function handleContactEndpoint(request, response) {
   // affects its outcome: if the mailbox write fails the contact form still
   // reports success, because the email really was delivered.
   try {
-    const { ingestMessage, createMailNotifications } = await import('./lib/mail-store.js');
+    const { ingestMessage, createMailNotifications } = await import('./_lib/mail-store.js');
     const ingested = await ingestMessage({
       // Resend's message id is the idempotency key, so a retried submission
       // cannot appear twice.

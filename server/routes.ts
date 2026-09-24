@@ -17,8 +17,8 @@ import {
   contactNotificationEmail,
   createResetToken,
   hashResetToken,
-} from '../api/lib/email.js';
-import { normalizeDatabaseUrl } from '../api/lib/db-url.js';
+} from '../api/_lib/email.js';
+import { normalizeDatabaseUrl } from '../api/_lib/db-url.js';
 
 // Server-side email validation. The contact form validates too, but the browser
 // can be bypassed, so this is the check that actually holds.
@@ -701,7 +701,7 @@ export async function registerRoutes(expressApp: any): Promise<Server> {
       // Mirror the delivered message into the Admin Mail inbox, exactly as the
       // serverless handler does, so local development shows the same behaviour.
       try {
-        const { ingestMessage, createMailNotifications } = await import('../api/lib/mail-store.js');
+        const { ingestMessage, createMailNotifications } = await import('../api/_lib/mail-store.js');
         const ingested = await ingestMessage({
           providerMessageId: emailResult.id ? `resend-${emailResult.id}` : null,
           direction: 'inbound',

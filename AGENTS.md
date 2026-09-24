@@ -31,7 +31,7 @@ them in an `after` hook. `tests/admin-auth.test.mjs` creates real `admin_session
 rows when it logs in; they expire on their own but can be cleared with
 `DELETE FROM admin_sessions`.
 
-Always use `--test-force-exit`. `api/lib/db.js` holds a postgres pool open, which
+Always use `--test-force-exit`. `api/_lib/db.js` holds a postgres pool open, which
 keeps the event loop alive and otherwise hangs the runner.
 
 ### What the suite covers
@@ -80,11 +80,11 @@ literal fallback would be published in this repository, and anyone who read it
 could forge an authenticated session.
 
 `DATABASE_URL` is the single source of the connection string for the public API
-(`api/lib/db.js`), the admin function and its session store (`api/admin/index.js`).
+(`api/_lib/db.js`), the admin function and its session store (`api/admin/index.js`).
 Everything that touches the URL passes it through `normalizeDatabaseUrl`, whose
-implementation lives in `api/lib/db-url.js` so modules that must not open a pool
-(`server/db.ts`, `server/routes.ts`, `api/lib/mail-store.js`) can import just the
-pure function. `api/lib/db.js` re-exports it for callers that already import it.
+implementation lives in `api/_lib/db-url.js` so modules that must not open a pool
+(`server/db.ts`, `server/routes.ts`, `api/_lib/mail-store.js`) can import just the
+pure function. `api/_lib/db.js` re-exports it for callers that already import it.
 
 It does two things. It drops `channel_binding`: Neon's dashboard appends
 `channel_binding=require`, which asks for SCRAM-SHA-256-PLUS, and postgres.js only
@@ -112,7 +112,7 @@ and queried on that database instead of `DATABASE_URL`. Unset — the default �
 the mailbox shares the application database and nothing changes. This lets the
 mail write volume stay off the application database without a second code path.
 
-`api/lib/mail-store.js` is the only place that reads mail tables, so it owns the
+`api/_lib/mail-store.js` is the only place that reads mail tables, so it owns the
 choice. Two consequences are worth knowing before splitting the databases:
 
 - **Foreign keys cannot cross databases.** On a shared database the mail tables
@@ -132,7 +132,7 @@ alone and with `MAIL_DATABASE_URL` pointing at a second database.
 ### Mailjet sending is only successful when Mailjet says so
 
 Every outbound message — password reset and the whole admin mailbox — goes
-through one function, `mailjetSend` in `api/lib/email.js`. It posts to the v3.1
+through one function, `mailjetSend` in `api/_lib/email.js`. It posts to the v3.1
 Send API with Basic auth built from `MJ_APIKEY_PUBLIC`/`MJ_APIKEY_PRIVATE`, and
 the sender comes from `MJ_SENDER_EMAIL` (name from `MJ_SENDER_NAME`).
 
@@ -212,7 +212,7 @@ the replacement.
 
 The mailbox can send a browser push notification when mail arrives. It is
 enabled only when `VAPID_PUBLIC_KEY` and `VAPID_PRIVATE_KEY` are set — without
-them `isPushConfigured()` in `api/lib/push.js` returns false and every delivery
+them `isPushConfigured()` in `api/_lib/push.js` returns false and every delivery
 is skipped, with the in-dashboard unread badge still working. The public key
 also has to reach the client as `VITE_VAPID_PUBLIC_KEY` (or it is embedded the
 same way the Turnstile site key is) for a subscription to be created at all.
@@ -220,6 +220,29 @@ Generate a pair once and keep it stable: changing the keys invalidates every
 stored subscription. The same rules as Mailjet apply — a push is best-effort and
 its failure must never fail the mail ingestion that triggered it, and no message
 body travels in the payload.
+
+### `api/` files are counted as functions, so helpers go in `api/_lib`
+
+Vercel turns **every** file under `api/` into a Serverless Function. The plan
+allows 12, and the failure mode is a build error — "exceeded the limit" — not a
+warning. `api/lib` reached 15 files when the mail and bot helpers landed and the
+deploy failed; that is why the shared helpers now live in `api/_lib`.
+
+A path under `api/` is skipped when it contains `/_`, `/.`, `/node_modules/`, or
+ends with `.d.ts`. So `api/_lib` deploys **zero** functions and the directory name
+still says what it holds. Only two files are functions: `api/index.js` and
+`api/admin/index.js`.
+
+Practical consequences:
+
+- Put a new helper in `api/_lib`, never in `api/` — a file at `api/foo.js` costs a
+  function slot and is served as a public endpoint.
+- `tests/deployment-limits.test.mjs` re-implements Vercel's rule and asserts the
+  count and that imports resolve through `_lib`, so this is caught in CI.
+- Renaming the directory is safe across all three consumers: the two functions
+  import `./_lib` and `../_lib`, and the Express dev server and bot import
+  `api/_lib` by path. Scripts that copy `api/` (`scripts/build-vercel.mjs`) use a
+  recursive copy and carry `_lib` with it.
 
 ### The Discord bot is a separate process, not a function
 
@@ -233,7 +256,7 @@ pulled into a function bundle.
 
 The split matters when changing this feature: **the dashboard is serverless and
 must stay request/response, and only `bot/index.js` may assume a long-lived
-process.** Shared logic lives in `api/lib` so both halves use the same rules.
+process.** Shared logic lives in `api/_lib` so both halves use the same rules.
 
 Configuration is stored, not hardcoded, and is edited at `/pbad/bot` (owner and
 admin only, the same `requireRole('admin')` rule as mail):

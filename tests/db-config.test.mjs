@@ -11,7 +11,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { normalizeDatabaseUrl, findDbErrorCode, describeDbError } from '../api/lib/db.js';
+import { normalizeDatabaseUrl, findDbErrorCode, describeDbError } from '../api/_lib/db.js';
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 
@@ -101,8 +101,8 @@ test('the connection points normalize the URL before the driver sees it', async 
   const { readFileSync } = await import('node:fs');
   const read = (rel) => readFileSync(new URL(`../${rel}`, import.meta.url), 'utf8');
 
-  assert.match(read('api/lib/db.js'), /postgres\(connectionUrl/,
-    'api/lib/db.js must connect with the normalized URL');
+  assert.match(read('api/_lib/db.js'), /postgres\(connectionUrl/,
+    'api/_lib/db.js must connect with the normalized URL');
   assert.match(read('api/admin/index.js'), /postgres\(normalizeDatabaseUrl\(process\.env\.DATABASE_URL\)/,
     'the admin function must normalize its URL');
   assert.match(read('api/admin/index.js'), /conString: normalizeDatabaseUrl\(process\.env\.DATABASE_URL\)/,

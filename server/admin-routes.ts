@@ -4,9 +4,9 @@ import crypto from "node:crypto";
 import bcrypt from "bcryptjs";
 import multer from "multer";
 import { adminStorage } from "./admin-storage.js";
-import { buildMailRouter, handleInboundMessage } from "../api/lib/mail-routes.js";
-import { buildBotRouter } from "../api/lib/bot-routes.js";
-import { createMailNotifications } from "../api/lib/mail-store.js";
+import { buildMailRouter, handleInboundMessage } from "../api/_lib/mail-routes.js";
+import { buildBotRouter } from "../api/_lib/bot-routes.js";
+import { createMailNotifications } from "../api/_lib/mail-store.js";
 
 declare module "express-session" {
   interface SessionData {
