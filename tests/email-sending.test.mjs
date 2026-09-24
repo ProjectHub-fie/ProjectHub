@@ -19,6 +19,8 @@ import {
   isPasswordResetEmailConfigured,
   isPublicEmailConfigured,
   sendPasswordResetEmail,
+  sendAdminEmail,
+  sendMailjetTestEmail,
   sendPublicEmail,
   passwordResetEmail,
   contactNotificationEmail,
@@ -300,6 +302,111 @@ test('sendPasswordResetEmail reports the MessageID when Mailjet accepts a messag
     globalThis.fetch = originalFetch;
   }
 });
+test('a malformed message is rejected before any Mailjet request is made', async () => {
+  const originalFetch = globalThis.fetch;
+  let called = false;
+  const cases = [
+    ['no recipient', { to: '', subject: 'Hello', html: '<p>hi</p>' }],
+    ['bad recipient', { to: 'not-an-email', subject: 'Hello', html: '<p>hi</p>' }],
+    ['no subject', { to: 'someone@example.com', subject: '   ', html: '<p>hi</p>' }],
+    ['no body', { to: 'someone@example.com', subject: 'Hello', html: '' }],
+  ];
+  try {
+    globalThis.fetch = async () => {
+      called = true;
+      return new Response('{}', { status: 200 });
+    };
+
+    // One send per withOnlyMailjet block: the env helper restores variables as
+    // soon as the callback returns its promise, so only the first awaited send
+    // in a block sees them.
+    for (const [label, payload] of cases) {
+      await withOnlyMailjet(async () => {
+        const result = await sendPasswordResetEmail(payload);
+        assert.equal(result.sent, false, label);
+        assert.equal(result.reason, 'invalid_message', label);
+      });
+    }
+
+    assert.equal(called, false, 'an invalid message must never reach Mailjet');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('the [MAILJET] diagnostics report configuration without leaking credentials', async () => {
+  const originalFetch = globalThis.fetch;
+  const lines = [];
+  const originalLog = console.log;
+  try {
+    await withOnlyMailjet(async () => {
+      globalThis.fetch = async () =>
+        new Response(
+          JSON.stringify({ Messages: [{ Status: 'success', To: [{ Email: 'someone@example.com', MessageID: 42 }] }] }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+
+      console.log = (...args) => lines.push(args.join(' '));
+      await sendPasswordResetEmail({
+        to: 'someone@example.com',
+        subject: 'Hello',
+        html: '<p>hi</p>',
+      });
+    });
+
+    const joined = lines.join('\n');
+    assert.match(joined, /\[MAILJET\] Request starting/);
+    assert.match(joined, /\[MAILJET\] Public key configured: true/);
+    assert.match(joined, /\[MAILJET\] Private key configured: true/);
+    assert.match(joined, /\[MAILJET\] Recipient: someone@example\.com/);
+    assert.match(joined, /\[MAILJET\] Sender: sender@example\.com/);
+    assert.match(joined, /\[MAILJET\] HTTP status: 200/);
+    assert.match(joined, /\[MAILJET\] Request accepted/);
+
+    // The actual key material must never be logged.
+    assert.ok(!joined.includes('public-key'), 'the public key value must not be logged');
+    assert.ok(!joined.includes('private-key'), 'the private key value must not be logged');
+    assert.ok(!/Basic [A-Za-z0-9+/=]+/.test(joined), 'the Authorization header must not be logged');
+  } finally {
+    console.log = originalLog;
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('sendMailjetTestEmail uses the configured sender and reports acceptance', async () => {
+  const originalFetch = globalThis.fetch;
+  let body;
+  try {
+    await withOnlyMailjet(async () => {
+      globalThis.fetch = async (_url, init) => {
+        body = JSON.parse(init.body);
+        return new Response(
+          JSON.stringify({ Messages: [{ Status: 'success', To: [{ Email: 'admin@example.com', MessageID: 7 }] }] }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      };
+
+      const result = await sendMailjetTestEmail({ to: 'admin@example.com' });
+      assert.equal(result.sent, true);
+      assert.equal(result.id, 7);
+    });
+
+    assert.equal(body.Messages[0].From.Email, 'sender@example.com');
+    assert.equal(body.Messages[0].To[0].Email, 'admin@example.com');
+    assert.ok(body.Messages[0].TextPart && body.Messages[0].HTMLPart, 'the test carries both parts');
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
+test('sendMailjetTestEmail reports not_configured without credentials', async () => {
+  await withEnv(MAILJET_VARS, {}, async () => {
+    const result = await sendMailjetTestEmail({ to: 'admin@example.com' });
+    assert.equal(result.sent, false);
+    assert.equal(result.reason, 'not_configured');
+  });
+});
+
 test('sendPublicEmail reports not_configured without a Resend key', async () => {
   await withEnv(RESEND_VARS, {}, async () => {
     const result = await sendPublicEmail({

@@ -23,16 +23,33 @@ test('normalizeDatabaseUrl strips channel_binding, which postgres.js cannot hono
   assert.equal(normalized.searchParams.has('channel_binding'), false);
 });
 
+test('normalizeDatabaseUrl rewrites the deprecated SSL modes to verify-full', () => {
+  // pg-connection-string treats prefer/require/verify-ca as verify-full anyway,
+  // but warns on them and will adopt weaker libpq semantics next major. Writing
+  // verify-full keeps today's behaviour and silences a misleading warning.
+  for (const mode of ['prefer', 'require', 'verify-ca']) {
+    const normalized = new URL(normalizeDatabaseUrl(NEON_URL.replace('sslmode=require', `sslmode=${mode}`)));
+    assert.equal(normalized.searchParams.get('sslmode'), 'verify-full', `${mode} must become verify-full`);
+  }
+});
+
+test('normalizeDatabaseUrl leaves verify-full and disable untouched', () => {
+  const full = normalizeDatabaseUrl('postgresql://user:pw@host:5432/db?sslmode=verify-full');
+  assert.equal(new URL(full).searchParams.get('sslmode'), 'verify-full');
+  const disabled = normalizeDatabaseUrl('postgresql://user:pw@host:5432/db?sslmode=disable');
+  assert.equal(new URL(disabled).searchParams.get('sslmode'), 'disable');
+});
+
 test('normalizeDatabaseUrl preserves the parameters that still matter', () => {
   const normalized = new URL(normalizeDatabaseUrl(NEON_URL));
-  assert.equal(normalized.searchParams.get('sslmode'), 'require');
+  assert.equal(normalized.searchParams.get('sslmode'), 'verify-full');
   assert.equal(normalized.host, 'ep-flat-smoke-ahi3peq6-pooler.c-3.us-east-1.aws.neon.tech');
   assert.equal(normalized.username, 'neondb_owner');
   assert.equal(normalized.pathname, '/neondb');
 });
 
 test('normalizeDatabaseUrl leaves an already-clean URL alone', () => {
-  const clean = 'postgresql://user:pw@host:5432/db?sslmode=require';
+  const clean = 'postgresql://user:pw@host:5432/db?sslmode=verify-full';
   assert.equal(normalizeDatabaseUrl(clean), clean);
 });
 

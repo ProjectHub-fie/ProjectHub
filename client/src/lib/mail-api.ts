@@ -185,6 +185,13 @@ const query = (params: Record<string, unknown>) => {
 
 export const mailApi = {
   status: () => request<{ mailjetConfigured: boolean; resendConfigured: boolean }>("/status"),
+
+  mailjetTest: (to: string) =>
+    request<{ accepted: boolean; messageId: string | null; status: number | null; sender: string | null; message: string }>(
+      "/mailjet-test",
+      { method: "POST", body: JSON.stringify({ to }) },
+    ),
+
   counts: () => request<MailCounts>("/counts"),
 
   listMessages: (params: {
