@@ -1,0 +1,32 @@
+# Keep the build context small; the image is built from the repository, and the
+# dependency tree is reinstalled inside it from the lockfile.
+#
+# `tests/` and `.git/` are deliberately NOT ignored. The admin test-runner
+# console runs the suite from an image built from this repository, and the
+# db-config test reads `git ls-files`, so both have to be present in the image.
+
+node_modules
+dist
+api-dist
+build
+
+# Deployment control planes are not part of the runtime image.
+.vercel
+.netlify
+.netlify.toml
+netlify
+
+# Secrets never enter the image. Compose supplies them as environment variables.
+.env
+.env.*
+!.env.docker.example
+
+# Local editor / OS noise.
+.vscode
+.idea
+.DS_Store
+*.log
+npm-debug.log*
+
+# Generated at build time.
+*.tsbuildinfo

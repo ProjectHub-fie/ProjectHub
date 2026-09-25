@@ -71,3 +71,36 @@ test('the admin delete route purges mail rows for a split mailbox', () => {
   assert.match(admin, /purgeAdminMailData\(id\)/,
     'deleting an admin must clean up mail rows the cascade cannot reach');
 });
+
+test('the mailbox DDL and drizzle/schema.ts agree on every mail_messages column', () => {
+  // `scripts/db-bootstrap.mjs` derives its DDL from drizzle/schema.ts, while the
+  // mailbox creates and queries its own tables in mail-store.js. If the two
+  // disagree on a column name, a bootstrapped database gets a column the mailbox
+  // never reads and every ingest fails with 42703 — which is exactly what the
+  // old `references` vs `message_references` split did.
+  const store = readFileSync(new URL('../api/_lib/mail-store.js', import.meta.url), 'utf8');
+  const schema = readFileSync(new URL('../drizzle/schema.ts', import.meta.url), 'utf8');
+
+  const mailboxBlock = store.slice(
+    store.indexOf('CREATE TABLE IF NOT EXISTS mail_messages'),
+    store.indexOf('CREATE TABLE IF NOT EXISTS mail_attachments'),
+  );
+  const schemaBlock = schema.slice(
+    schema.indexOf("pgTable('mail_messages'"),
+    schema.indexOf("pgTable('mail_attachments'"),
+  );
+
+  const mailboxColumns = new Set([...mailboxBlock.matchAll(/^\s{4,}([a-z_]+) (?:uuid|text|boolean|integer|timestamp|jsonb)/gm)].map((m) => m[1]));
+  const schemaColumns = new Set([...schemaBlock.matchAll(/\w+\((?:'|\")([a-z_]+)(?:'|\")\)/g)].map((m) => m[1]));
+
+  assert.ok(mailboxColumns.size > 15, 'the mailbox column list was parsed');
+  const missing = [...mailboxColumns].filter((c) => !schemaColumns.has(c));
+  assert.deepEqual(missing, [], `drizzle/schema.ts is missing mail_messages columns: ${missing.join(', ')}`);
+
+  // `references` is reserved, so the column is `message_references`; the JS field
+  // in schema.ts keeps the header name. Guard the name itself, not just presence.
+  assert.match(schema, /text\('message_references'\)/, 'schema.ts must use the mailbox column name');
+  assert.ok(!/text\('references'\)\.array/.test(schema), 'the old reserved-word column name must be gone');
+  assert.match(store, /RENAME COLUMN \"references\" TO message_references/,
+    'a pre-fix database must be healed in place');
+});

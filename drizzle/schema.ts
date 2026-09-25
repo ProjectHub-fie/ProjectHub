@@ -184,7 +184,12 @@ export const mailMessages = pgTable('mail_messages', {
   // admin mail. Keeps the two providers independently attributable.
   provider: text('provider'),
   inReplyTo: text('in_reply_to'),
-  references: text('references').array(),
+  // Same name the mailbox's own DDL uses. The RFC header is `References`, but
+  // `references` is a reserved word, so the column is `message_references`; the
+  // JS field keeps the header name. `db-bootstrap` derives its DDL from this
+  // schema, so if the two disagree a bootstrapped database gets a column the
+  // mailbox never queries.
+  messageReferences: text('message_references').array(),
   // Source record this message mirrors, so a public form submission is linked
   // to its inbox copy instead of being stored twice with no relation.
   sourceType: text('source_type'),

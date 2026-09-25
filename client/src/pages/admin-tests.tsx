@@ -2,7 +2,8 @@
  * Test runner console.
  *
  * Runs the repository's `tests/` folder from the admin dashboard and shows the
- * result. The server runs one fixed command — `node --test tests/` — and accepts
+ * result. The server runs one fixed command — `node --test tests/*.test.mjs` —
+ * and accepts
  * no input from this page, so there is nothing here to configure: a button, the
  * summary, and the raw output for when a test fails.
  *
@@ -12,7 +13,7 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery } from "@tanstack/react-query";
-import { AlertTriangle, CheckCircle2, FlaskConical, Loader2, Play, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Container, FlaskConical, Loader2, Play, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -20,6 +21,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 type TestStatus = {
   available: boolean;
   running: boolean;
+  mode: "local" | "docker" | "unavailable";
+  image: string | null;
   command: string;
   timeoutMs: number;
 };
@@ -124,20 +127,34 @@ export default function AdminTestsPage() {
         </Button>
       </div>
 
-      {/* The exact command, shown so there is no doubt what the button does. */}
+      {/* The exact command, shown so there is no doubt what the button does.
+          In docker mode the container runs the same command, so the line is
+          still accurate; the mode note below says where it runs. */}
       <div className="rounded-md border bg-muted/40 p-3">
         <p className="text-xs text-muted-foreground">Runs exactly this, with no arguments from this page:</p>
         <code className="mt-1 block font-mono text-xs" data-testid="tests-command">
-          {status?.command || "node --test tests/"}
+          {status?.command || "node --test tests/*.test.mjs"}
         </code>
       </div>
+
+      {status?.mode === "docker" && (
+        <div className="flex items-start gap-2 rounded-md border border-sky-500/40 bg-sky-500/10 p-3 text-sm text-sky-700 dark:text-sky-400">
+          <Container className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>
+            This deployment excludes <code>tests/</code>, so the suite runs in a Docker
+            image built from the repository{status.image ? <> (<code>{status.image}</code>)</> : null}.
+            The same command runs inside it.
+          </span>
+        </div>
+      )}
 
       {status && !status.available && (
         <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-400">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
           <span>
-            The <code>tests/</code> folder is excluded from this deployment, so the suite
-            cannot run here. This works on a long-lived host or locally.
+            The <code>tests/</code> folder is absent and no Docker image was found, so the
+            suite cannot run here. Deploy with the provided <code>Dockerfile</code> /{" "}
+            <code>docker-compose.yml</code>, or set <code>TEST_RUNNER_IMAGE</code>.
           </span>
         </div>
       )}

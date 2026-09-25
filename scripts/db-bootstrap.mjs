@@ -26,6 +26,7 @@ import fs from 'fs';
 import os from 'os';
 import path from 'path';
 import postgres from 'postgres';
+import { sslOptionForUrl } from '../api/_lib/db-url.js';
 
 // Codes meaning "already in that state"; safe to skip so the script re-runs.
 const ALREADY_EXISTS = new Set([
@@ -78,7 +79,7 @@ async function main() {
   const statements = splitStatements(generateDdl());
   console.log(`Applying ${statements.length} statements...`);
 
-  const sql = postgres(url, { ssl: { rejectUnauthorized: false }, max: 1 });
+  const sql = postgres(url, { ssl: sslOptionForUrl(url), max: 1 });
 
   try {
     let applied = 0;

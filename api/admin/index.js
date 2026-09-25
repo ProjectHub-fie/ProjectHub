@@ -18,14 +18,14 @@ import bcrypt from 'bcryptjs';
 import multer from 'multer';
 import postgres from 'postgres';
 import crypto from 'node:crypto';
-import { describeDbError, normalizeDatabaseUrl } from '../_lib/db.js';
+import { describeDbError, normalizeDatabaseUrl, sslOptionForUrl } from '../_lib/db.js';
 import { parseCookies } from '../_lib/session-token.js';
 import { buildMailRouter, handleInboundMessage } from '../_lib/mail-routes.js';
 import { buildBotRouter } from '../_lib/bot-routes.js';
 import { buildTestRouter } from '../_lib/suite-runner.js';
 import { ingestMessage, createMailNotifications, ensureMailSchema, purgeAdminMailData } from '../_lib/mail-store.js';
 
-const sql = postgres(normalizeDatabaseUrl(process.env.DATABASE_URL), { ssl: 'require', max: 5 });
+const sql = postgres(normalizeDatabaseUrl(process.env.DATABASE_URL), { ssl: sslOptionForUrl(process.env.DATABASE_URL), max: 5 });
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -312,12 +312,14 @@ function buildAdminRouter() {
   });
 
   /* -------------------------------------------------------------------------
-     Discord sign-in for administrators.
+     Discord linking for administrators.
 
-     Separate from the public client flow: it authenticates an
-     `admin_credentials` row (not a `users` row) and then establishes the same
-     dashboard session a PIN/password login does. The two identities share
-     nothing, so a public Discord account can never reach /pbad.
+     This is a link, not a sign-in. An administrator always enters the dashboard
+     with their PIN and password; connecting Discord only attaches a
+     `discord_id` to that already-authenticated row, which is what the bot reads
+     to report the administrator's role in `&dev`. A Discord account can never
+     by itself reach /pbad, so a public Discord identity and the dashboard share
+     nothing.
   ------------------------------------------------------------------------- */
 
   const adminDiscordRedirectUri = () =>
@@ -356,19 +358,19 @@ function buildAdminRouter() {
   router.get('/api/admin/auth/discord', (req, res) => {
     const clientId = process.env.DISCORD_CLIENT_ID;
     if (!clientId) {
-      return res.redirect('/pbad/login?discord=error&reason=not_configured');
+      return res.redirect('/pbad/integrations?discord=error&reason=not_configured');
     }
     const redirectUri = adminDiscordRedirectUri();
     if (!isAbsoluteRedirect(redirectUri)) {
-      return res.redirect('/pbad/login?discord=error&reason=redirect_not_configured');
+      return res.redirect('/pbad/integrations?discord=error&reason=redirect_not_configured');
     }
 
-    // `mode=link` starts the same handshake from the signed-in settings page.
-    // The admin id is baked into the signed state so the callback attaches the
-    // Discord identity to the account that initiated it.
-    const linking = req.query?.mode === 'link';
-    if (linking && !req.session?.isAdminLoggedIn) {
-      return res.redirect('/pbad/login?discord=error&reason=link_not_authenticated');
+    // Linking is only ever started from the signed-in Integrations page. The
+    // admin id is baked into the signed state so the callback attaches the
+    // Discord identity to the account that initiated it, and a Discord account
+    // can never use this route to obtain a dashboard session.
+    if (!req.session?.isAdminLoggedIn) {
+      return res.redirect('/pbad/login?unauthorized=1');
     }
 
     const verifier = crypto.randomBytes(32).toString('base64url');
@@ -376,7 +378,8 @@ function buildAdminRouter() {
     const state = signAdminState(JSON.stringify({
       t: Date.now(),
       exp: Date.now() + 600000,
-      ...(linking ? { mode: 'link', adminId: req.session.adminId } : {}),
+      mode: 'link',
+      adminId: req.session.adminId,
     }));
 
     res.cookie('admin_discord_verifier', verifier, {
@@ -407,7 +410,7 @@ function buildAdminRouter() {
   });
 
   router.get('/api/admin/auth/discord/callback', async (req, res) => {
-    const fail = (reason) => res.redirect(`/pbad/login?discord=error&reason=${encodeURIComponent(reason)}`);
+    const fail = (reason) => res.redirect(`/pbad/integrations?discord=error&reason=${encodeURIComponent(reason)}`);
 
     const cookies = parseCookies(req.headers.cookie || '');
     const { code, state: queryState } = req.query;
@@ -417,6 +420,7 @@ function buildAdminRouter() {
 
     if (!code) return fail('missing_code');
     if (!stateData) return fail('invalid_state');
+    if (stateData.mode !== 'link') return fail('invalid_state');
     if (!verifier) return fail('missing_verifier');
 
     const clientId = process.env.DISCORD_CLIENT_ID;
@@ -448,47 +452,26 @@ function buildAdminRouter() {
       res.clearCookie('admin_discord_verifier', { path: '/' });
       res.clearCookie('admin_discord_state', { path: '/' });
 
-      if (stateData.mode === 'link') {
-        // The signed state names the initiating admin; the caller must still be
-        // that admin, proved by their dashboard session.
-        if (!req.session?.isAdminLoggedIn || req.session.adminId !== stateData.adminId) {
-          return fail('link_not_authenticated');
-        }
-        const owner = await getAdminByDiscordId(profile.id);
-        if (owner && owner.id !== stateData.adminId) {
-          return fail('discord_already_linked');
-        }
-        await sql`UPDATE admin_credentials SET discord_id = ${profile.id}, updated_at = now() WHERE id = ${stateData.adminId}::uuid`;
-        return res.redirect('/pbad/settings?discord=linked');
+      // The signed state names the initiating admin; the caller must still be
+      // that admin, proved by their dashboard session. The Discord profile only
+      // ever contributes the id that gets stored — no session is created here.
+      if (!req.session?.isAdminLoggedIn || req.session.adminId !== stateData.adminId) {
+        return fail('link_not_authenticated');
       }
-
-      const admin = await getAdminByDiscordId(profile.id);
-      if (!admin) {
-        // Only an administrator who has previously linked their Discord id may
-        // sign in this way. An unknown Discord account is refused rather than
-        // being allowed to claim an admin row by email.
-        return fail('admin_not_linked');
+      const owner = await getAdminByDiscordId(profile.id);
+      if (owner && owner.id !== stateData.adminId) {
+        return fail('discord_already_linked');
       }
-
-      req.session.regenerate((regenerateError) => {
-        if (regenerateError) return fail('session');
-        req.session.isAdminLoggedIn = true;
-        req.session.adminId = admin.id;
-        req.session.adminRole = admin.role;
-        req.session.save((saveError) => {
-          if (saveError) return fail('session');
-          res.redirect('/pbad');
-        });
-      });
+      await sql`UPDATE admin_credentials SET discord_id = ${profile.id}, updated_at = now() WHERE id = ${stateData.adminId}::uuid`;
+      return res.redirect('/pbad/integrations?discord=linked');
     } catch (error) {
       console.error('Admin Discord callback error:', error.message);
       return fail('unexpected');
     }
   });
 
-  // Unlink Discord from the signed-in administrator's own row. Linking is only
-  // ever done through the OAuth callback, which proves ownership of the Discord
-  // identity rather than trusting an id the client supplies.
+  // Unlink Discord from the signed-in administrator's own row. The request
+  // carries no id at all; the session names the row to clear.
   router.delete('/api/admin/auth/discord/link', requireAuth, async (req, res) => {
     try {
       await sql`UPDATE admin_credentials SET discord_id = NULL, updated_at = now() WHERE id = ${req.session.adminId}::uuid`;

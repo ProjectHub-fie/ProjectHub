@@ -110,40 +110,50 @@ test('the settings page reports the Discord round trip and scrubs the parameter'
   assert.match(settings, /replaceState\(null, "", "\/settings"\)/, 'the parameter is removed after reporting it');
 });
 
-test('the admin portal exposes its own Discord settings page', () => {
+test('the admin portal exposes its own Discord integrations page', () => {
   const app = source('client/src/AdminApp.tsx');
   const sidebar = source('client/src/components/admin/admin-sidebar.tsx');
-  const page = source('client/src/pages/admin-settings.tsx');
+  const page = source('client/src/pages/admin-integrations.tsx');
 
-  assert.match(app, /<Route path="\/settings">/, 'the dashboard routes to settings');
-  assert.match(sidebar, /href="\/settings"/, 'the admin sidebar links to it');
-  assert.match(sidebar, /Settings/, 'the link is labelled');
+  assert.match(app, /<Route path="\/integrations">/, 'the dashboard routes to integrations');
+  assert.match(sidebar, /href="\/integrations"/, 'the admin sidebar links to it');
+  assert.match(sidebar, /Integrations/, 'the link is labelled');
 
   assert.match(page, /\/api\/admin\/me/, 'the page reads the admin account');
-  assert.match(page, /\/api\/admin\/auth\/discord\?mode=link/, 'linking starts the OAuth handshake');
+  assert.match(page, /\/api\/admin\/auth\/discord"/, 'linking starts the OAuth handshake');
   assert.match(page, /method: "DELETE"/, 'unlinking calls the guarded endpoint');
 });
 
-test('the admin login page offers Discord and reports a refused sign-in', () => {
+test('the admin login page is PIN and password only — Discord is not a sign-in', () => {
   const page = source('client/src/pages/admin-login-page.tsx');
 
-  assert.match(page, /window\.location\.href = "\/api\/admin\/auth\/discord"/, 'a Discord button starts the handshake');
-  assert.match(page, /admin-button-discord-login/, 'the button is identifiable');
-  // An unknown Discord account is refused rather than silently claiming an
-  // admin row, and the page must say so.
-  assert.match(page, /admin_not_linked/, 'the refusal reason has a message');
-  assert.match(page, /window\.history\.replaceState/, 'the reason parameter is scrubbed after reporting');
+  // There must be no Discord entry point on the sign-in screen at all.
+  assert.ok(!/admin-button-discord-login/.test(page), 'no Discord login button');
+  assert.ok(!/\/api\/admin\/auth\/discord/.test(page), 'the login page never starts a Discord handshake');
+  assert.ok(!/FaDiscord/.test(page), 'the Discord icon is gone from the login page');
+  assert.ok(!/admin_not_linked/.test(page), 'the removed Discord sign-in reason is gone');
+  assert.match(page, /\/api\/admin\/login/, 'the PIN/password form is the only way in');
 });
 
-test('both backends enforce the same Discord rules for clients and admins', () => {
+test('both backends treat the admin Discord handshake as a link, never a sign-in', () => {
   const serverless = source('api/admin/index.js');
   const express = source('server/admin-routes.ts');
 
   for (const [label, body] of [['serverless', serverless], ['express', express]]) {
     assert.match(body, /api\/admin\/auth\/discord/, `${label} exposes the admin Discord handshake`);
-    assert.match(body, /admin_not_linked/, `${label} refuses an unknown Discord account`);
-    assert.match(body, /isAdminLoggedIn/, `${label} checks the dashboard session before linking`);
+    assert.ok(!/admin_not_linked/.test(body), `${label} no longer signs an admin in via Discord`);
+    assert.match(body, /mode: 'link'/, `${label} signs the state as a link`);
     assert.match(body, /api\/admin\/auth\/discord\/link/, `${label} can unlink`);
+
+    // The callback may only attach an id. Slice it out so the PIN/password
+    // login's own session establishment cannot satisfy this.
+    const callback = body.slice(
+      body.indexOf('/api/admin/auth/discord/callback'),
+      body.indexOf('/api/admin/auth/discord/link'),
+    );
+    assert.ok(callback.length > 0, `${label} has the Discord callback`);
+    assert.ok(!/isAdminLoggedIn = true/.test(callback), `${label} creates no session in the Discord callback`);
+    assert.ok(!/adminRole = /.test(callback), `${label} sets no dashboard role in the Discord callback`);
   }
 
   // The two backends store the link differently — raw SQL vs the drizzle

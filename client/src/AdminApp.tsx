@@ -1,5 +1,5 @@
 import React, { lazy, Suspense } from "react";
-import { Link, Router, Switch, Route, useLocation } from "wouter";
+import { Link, Redirect, Router, Switch, Route, useLocation } from "wouter";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { queryClient } from "@/lib/queryClient";
 import { Toaster } from "@/components/ui/toaster";
@@ -21,7 +21,7 @@ const AdminManagement = lazy(() => import("@/pages/admin-info"));
 const AdminCreate = lazy(() => import("@/pages/create-admin"));
 const AdminLogin = lazy(() => import("@/pages/admin-login-page"));
 const AdminMail = lazy(() => import("@/pages/mail-page"));
-const AdminSettings = lazy(() => import("@/pages/admin-settings"));
+const AdminIntegrations = lazy(() => import("@/pages/admin-integrations"));
 const AdminBot = lazy(() => import("@/pages/admin-bot"));
 const AdminTests = lazy(() => import("@/pages/admin-tests"));
 
@@ -215,8 +215,13 @@ export default function AdminApp() {
                   <Route path="/tests">
                     <AdminPage permission="tests"><AdminTests /></AdminPage>
                   </Route>
+                  <Route path="/integrations">
+                    <AdminPage><AdminIntegrations /></AdminPage>
+                  </Route>
+                  {/* The settings page moved to /integrations. Keep the old
+                      links working rather than showing a 404. */}
                   <Route path="/settings">
-                    <AdminPage><AdminSettings /></AdminPage>
+                    <Redirect to="/integrations" />
                   </Route>
                   <Route>
                     <AdminPage><AdminNotFound /></AdminPage>

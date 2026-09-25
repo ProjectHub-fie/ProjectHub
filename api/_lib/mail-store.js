@@ -18,12 +18,12 @@
  * fresh database working without a separate migration step.
  */
 import postgres from 'postgres';
-import { normalizeDatabaseUrl } from './db-url.js';
+import { normalizeDatabaseUrl, sslOptionForUrl } from './db-url.js';
 import { sanitizeEmailHtml, toSnippet } from './mail-sanitize.js';
 
 let _sql = null;
 function db() {
-  _sql ||= postgres(normalizeDatabaseUrl(mailDatabaseUrl()), { ssl: 'require', max: 5 });
+  _sql ||= postgres(normalizeDatabaseUrl(mailDatabaseUrl()), { ssl: sslOptionForUrl(mailDatabaseUrl()), max: 5 });
   return _sql;
 }
 
@@ -63,7 +63,7 @@ export function isMailDatabaseSeparate() {
 let _mainSql = null;
 function mainDb() {
   if (!isMailDatabaseSeparate()) return db();
-  _mainSql ||= postgres(normalizeDatabaseUrl(process.env.DATABASE_URL), { ssl: 'require', max: 3 });
+  _mainSql ||= postgres(normalizeDatabaseUrl(process.env.DATABASE_URL), { ssl: sslOptionForUrl(process.env.DATABASE_URL), max: 3 });
   return _mainSql;
 }
 
@@ -240,6 +240,22 @@ export function ensureMailSchema() {
           details jsonb,
           created_at timestamp DEFAULT now() NOT NULL
         )
+      `;
+      // A database bootstrapped before `drizzle/schema.ts` named this column
+      // `message_references` has the old `references` name from `db-bootstrap`'s
+      // generated DDL. Rename it in place so the mailbox's queries work without
+      // an operator step.
+      await sql`
+        DO $$
+        BEGIN
+          IF EXISTS (SELECT 1 FROM information_schema.columns
+                     WHERE table_name = 'mail_messages' AND column_name = 'references')
+             AND NOT EXISTS (SELECT 1 FROM information_schema.columns
+                     WHERE table_name = 'mail_messages' AND column_name = 'message_references')
+          THEN
+            ALTER TABLE mail_messages RENAME COLUMN "references" TO message_references;
+          END IF;
+        END $$
       `;
       // Indexes the mailbox queries rely on. IF NOT EXISTS keeps this re-runnable.
       await sql`CREATE INDEX IF NOT EXISTS mail_threads_last_message_idx ON mail_threads (last_message_at)`;

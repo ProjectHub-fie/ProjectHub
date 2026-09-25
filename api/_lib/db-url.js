@@ -46,3 +46,43 @@ export function normalizeDatabaseUrl(rawUrl) {
     return rawUrl;
   }
 }
+
+/**
+ * The `ssl` option postgres.js should be given for a connection string.
+ *
+ * Every managed database this app talks to (Neon, and any Postgres that
+ * terminates TLS) needs `'require'`, and that is the default. A local database
+ * — the one `docker compose` starts — has no TLS listener at all, so
+ * `sslmode=disable` has to turn the handshake off rather than have the driver
+ * open a socket that is immediately reset.
+ *
+ * Only `disable` is honoured. The other modes deliberately are not passed
+ * through: postgres.js maps `verify-full` to `rejectUnauthorized: true`, which
+ * would start verifying a CA chain that the current `'require'` behaviour does
+ * not, so a production URL keeps the TLS behaviour it has today.
+ */
+export function sslOptionForUrl(rawUrl) {
+  if (typeof rawUrl !== 'string' || rawUrl.length === 0) return 'require';
+  try {
+    if (new URL(rawUrl).searchParams.get('sslmode') === 'disable') return false;
+  } catch {
+    // Unparseable: keep the secure default and let the driver report the error.
+  }
+  return 'require';
+}
+
+/**
+ * The same choice for the `pg` driver, which is used for the admin session
+ * store. `pg` takes an object rather than postgres.js's `'require'` shorthand,
+ * and `rejectUnauthorized: false` matches the postgres.js behaviour above: TLS
+ * on, certificate chain not enforced.
+ */
+export function pgSslOptionForUrl(rawUrl) {
+  if (typeof rawUrl !== 'string' || rawUrl.length === 0) return { rejectUnauthorized: false };
+  try {
+    if (new URL(rawUrl).searchParams.get('sslmode') === 'disable') return false;
+  } catch {
+    // Unparseable: keep the secure default and let the driver report the error.
+  }
+  return { rejectUnauthorized: false };
+}

@@ -43,10 +43,10 @@ before(async () => {
   const { default: postgres } = await import('postgres');
 
   const { ensureMailSchema, mailDatabaseUrl } = await import('../api/_lib/mail-store.js');
-  const { normalizeDatabaseUrl } = await import('../api/_lib/db.js');
+  const { normalizeDatabaseUrl, sslOptionForUrl } = await import('../api/_lib/db.js');
 
-  sql = postgres(normalizeDatabaseUrl(mailDatabaseUrl()), { ssl: 'require', max: 3 });
-  appSql = postgres(normalizeDatabaseUrl(process.env.DATABASE_URL), { ssl: 'require', max: 3 });
+  sql = postgres(normalizeDatabaseUrl(mailDatabaseUrl()), { ssl: sslOptionForUrl(mailDatabaseUrl()), max: 3 });
+  appSql = postgres(normalizeDatabaseUrl(process.env.DATABASE_URL), { ssl: sslOptionForUrl(process.env.DATABASE_URL), max: 3 });
 
   // The mail tables reference admin_credentials, so it has to exist first. On a
   // split deployment that table lives on the application database.
