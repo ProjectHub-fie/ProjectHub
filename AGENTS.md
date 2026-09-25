@@ -34,6 +34,15 @@ rows when it logs in; they expire on their own but can be cleared with
 Always use `--test-force-exit`. `api/_lib/db.js` holds a postgres pool open, which
 keeps the event loop alive and otherwise hangs the runner.
 
+`tests/deployment-limits.test.mjs` reads the real `.vercelignore` and matches its
+patterns against the real `api/` tree. `.vercelignore` uses gitignore semantics,
+where a pattern with no slash matches at *any* depth: a bare `test*` therefore
+deleted `api/_lib/test-routes.js` from the deployed bundle while `api/admin/index.js`
+still imported it, and the function died at load with `ERR_MODULE_NOT_FOUND`.
+Nothing local could see it, because the file is present on disk. Keep every entry
+anchored (`/tests/`, `/test*.js`) unless it is genuinely meant to recurse, and note
+that a helper under `api/` must not be named `test*` whatever the ignore file says.
+
 ### What the suite covers
 
 - `session-token.test.mjs` — token signature, tampering, forged secrets, expiry,
@@ -57,7 +66,7 @@ keeps the event loop alive and otherwise hangs the runner.
 ### The test-runner console
 
 `/pbad/tests` (owner only) runs the repository's `tests/` folder and shows the
-TAP summary. It is the only route that starts a process, so `api/_lib/test-routes.js`
+TAP summary. It is the only route that starts a process, so `api/_lib/suite-runner.js`
 builds one fixed argument list and reads no request field at all; the spawn uses
 `shell: false`. One run at a time is enforced with a module-level promise, and a
 missing `tests/` folder is a `503` rather than a spawn error. `tests/` is in

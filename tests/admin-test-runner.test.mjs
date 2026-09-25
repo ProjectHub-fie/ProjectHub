@@ -20,7 +20,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, '..');
 const source = (relative) => readFileSync(resolve(root, relative), 'utf8');
 
-const { parseTap, capOutput, runTestSuite, buildTestRouter } = await import('../api/_lib/test-routes.js');
+const { parseTap, capOutput, runTestSuite, buildTestRouter } = await import('../api/_lib/suite-runner.js');
 
 /* ------------------------------------------------------------------ TAP parse */
 
@@ -81,7 +81,7 @@ test('the suite runs for real and reports a TAP summary', async () => {
 /* ------------------------------------------------------------- the guardrails */
 
 test('the command is a fixed argument list built from a literal', () => {
-  const routes = source('api/_lib/test-routes.js');
+  const routes = source('api/_lib/suite-runner.js');
   // The args are a literal, and the only variable part defaults to the tests dir.
   assert.match(routes, /function testArgs\(target = TESTS_DIR\)/);
   assert.match(routes, /return \['--test', '--test-force-exit', '--test-reporter=tap', target\]/);
@@ -92,42 +92,42 @@ test('the command is a fixed argument list built from a literal', () => {
 });
 
 test('the child process is spawned without a shell', () => {
-  const routes = source('api/_lib/test-routes.js');
+  const routes = source('api/_lib/suite-runner.js');
   assert.match(routes, /shell: false/);
   // Spawning through process.execPath avoids PATH resolution for the binary.
   assert.match(routes, /spawn\(process\.execPath, testArgs\(target\)/);
 });
 
 test('the executable is the running node binary, not a path from input', () => {
-  const routes = source('api/_lib/test-routes.js');
+  const routes = source('api/_lib/suite-runner.js');
   assert.doesNotMatch(routes, /spawn\([^)]*req\./);
   assert.doesNotMatch(routes, /exec\(|execSync|spawnSync/);
 });
 
 test('the routes are owner-only', () => {
-  const routes = source('api/_lib/test-routes.js');
+  const routes = source('api/_lib/suite-runner.js');
   const guards = routes.match(/requireRole\('owner'\)/g) || [];
   assert.equal(guards.length, 2, 'both routes are owner-only');
 });
 
 test('a second concurrent run is refused rather than spawned', () => {
-  const routes = source('api/_lib/test-routes.js');
+  const routes = source('api/_lib/suite-runner.js');
   assert.match(routes, /if \(inFlight\)/);
   assert.match(routes, /409/);
 });
 
 test('a missing tests/ folder is reported as unavailable, not a crash', () => {
-  const routes = source('api/_lib/test-routes.js');
+  const routes = source('api/_lib/suite-runner.js');
   assert.match(routes, /tests_not_deployed/);
   assert.match(routes, /503/);
-  const status = source('api/_lib/test-routes.js');
+  const status = source('api/_lib/suite-runner.js');
   assert.match(status, /available: existsSync\(TESTS_DIR\)/);
 });
 
 test('the child does not inherit the parent test runner context', () => {
   // Inheriting NODE_TEST_CONTEXT makes a nested runner attach to the parent's
   // protocol instead of emitting TAP; the spawned suite must be independent.
-  const routes = source('api/_lib/test-routes.js');
+  const routes = source('api/_lib/suite-runner.js');
   assert.match(routes, /delete env\.NODE_TEST_CONTEXT/);
   assert.match(routes, /delete env\.NODE_TEST_WORKER_ID/);
   assert.match(routes, /env: childEnv\(\)/);

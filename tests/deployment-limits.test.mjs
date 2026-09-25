@@ -18,6 +18,10 @@ import assert from 'node:assert/strict';
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve, join } from 'node:path';
+import { createRequire } from 'node:module';
+
+const require = createRequire(import.meta.url);
+const { minimatch } = require('minimatch');
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, '..');
@@ -90,10 +94,113 @@ test('the helpers still exist, just under _lib', () => {
     'bot-routes.js',
     'bot-store.js',
     'neon-usage.js',
+    'suite-runner.js',
   ]) {
     assert.ok(lib.includes(`api/_lib/${name}`), `api/_lib/${name} is missing`);
   }
 });
+
+/* --------------------------------------------------- .vercelignore stripping */
+
+/**
+ * `.vercelignore` uses gitignore semantics, which is what makes it dangerous: a
+ * pattern with no slash in it matches at *any* depth, not just the root. A bare
+ * `test*` therefore deleted `api/_lib/test-routes.js` from the deployed bundle
+ * while `api/admin/index.js` still imported it, and the function died at load
+ * with ERR_MODULE_NOT_FOUND. Nothing in the local test run could see it, because
+ * the file is present on disk.
+ *
+ * These tests read the real file and match the real patterns against the real
+ * tree, so the same mistake fails here instead of in a deploy.
+ */
+const vercelIgnore = readFileSync(resolve(root, '.vercelignore'), 'utf8')
+  .split('\n')
+  .map((line) => line.trim())
+  .filter((line) => line && !line.startsWith('#'));
+
+/** gitignore-ish match, using minimatch for the glob itself. */
+function isIgnored(relPath, patterns = vercelIgnore) {
+  
+  for (const raw of patterns) {
+    const negated = raw.startsWith('!');
+    const pattern = negated ? raw.slice(1) : raw;
+    // A slash anywhere but the very end anchors the pattern to the root.
+    const anchored = pattern.replace(/\/+$/, '').includes('/') || pattern.startsWith('/');
+    const dirOnly = pattern.endsWith('/');
+    const body = pattern.replace(/^\//, '').replace(/\/+$/, '');
+
+    let hit;
+    if (anchored) {
+      hit = minimatch(relPath, body) || (dirOnly && relPath.startsWith(`${body}/`));
+    } else {
+      // Unanchored: matches a segment at any depth. This is the footgun.
+      hit = minimatch(relPath, body, { matchBase: true }) ||
+        relPath.split('/').some((seg) => minimatch(seg, body));
+    }
+    if (hit) return !negated;
+  }
+  return false;
+}
+
+test('no unanchored glob can strip a file under api/', () => {
+  // An unanchored pattern matches at any depth, so it is only a problem when it
+  // can match something that actually ships. Cosmetic patterns like `*.log` are
+  // harmless; a `test*` is not, because api/_lib/test-routes.js was a module.
+  const dangerous = vercelIgnore.filter((p) => {
+    const raw = p.replace(/^!/, '');
+    const anchored = raw.startsWith('/') || raw.replace(/\/+$/, '').includes('/');
+    if (anchored) return false;
+    const body = raw.replace(/\/+$/, '');
+    return apiFiles.some((f) => f.split('/').some((seg) => minimatch(seg, body, { matchBase: true })));
+  });
+  assert.deepEqual(
+    dangerous,
+    [],
+    'these unanchored patterns match a segment under api/ and would strip a shipped module:\n' +
+      dangerous.join('\n'),
+  );
+});
+
+test('every shipped api/ file survives .vercelignore', () => {
+  const stripped = apiFiles.filter((f) => isIgnored(f));
+  assert.deepEqual(
+    stripped,
+    [],
+    'these files are imported by the deployed functions but .vercelignore drops them:\n' +
+      stripped.join('\n'),
+  );
+});
+
+test('every helper the functions import is actually present after ignoring', () => {
+  // Walk each entry point's relative imports and prove the target is not ignored.
+  for (const entry of ['api/index.js', 'api/admin/index.js']) {
+    const src = readFileSync(resolve(root, entry), 'utf8');
+    const dir = dirname(entry);
+    for (const match of src.matchAll(/from\s+'(\.[^']+)'/g)) {
+      const target = resolve(root, dir, match[1]).slice(root.length + 1).split('\\').join('/');
+      assert.ok(!isIgnored(target), `${entry} imports ${target}, which .vercelignore drops`);
+    }
+  }
+});
+
+test('the old footgun patterns are gone', () => {
+  assert.ok(!vercelIgnore.includes('test*'), 'the bare `test*` pattern is back');
+  assert.ok(!vercelIgnore.includes('*-test.js'), 'the bare `*-test.js` pattern is back');
+  assert.ok(!vercelIgnore.includes('*.test.*'), 'the bare `*.test.*` pattern is back');
+  // And the anchoring that replaced them is present.
+  assert.ok(vercelIgnore.includes('/tests/'), '/tests/ should be root-anchored');
+  assert.ok(vercelIgnore.includes('/test*.js'), '/test*.js should be root-anchored');
+});
+
+test('the ignore matcher reproduces the bug it guards against', () => {
+  // If this ever stops failing on the old pattern, the guard above is worthless.
+  assert.equal(isIgnored('api/_lib/test-routes.js', ['test*']), true, 'bare test* must match at depth');
+  assert.equal(isIgnored('api/_lib/test-routes.js', ['/test*.js']), false, 'anchored must not match at depth');
+  assert.equal(isIgnored('api/_lib/suite-runner.js', vercelIgnore), false, 'the renamed module ships');
+  assert.equal(isIgnored('tests/foo.test.mjs', vercelIgnore), true, 'the suite itself stays out');
+  assert.equal(isIgnored('test-api.js', vercelIgnore), true, 'root test scripts stay out');
+});
+
 
 test('no stale api/lib directory is left behind', () => {
   assert.ok(!apiFiles.some((f) => f.startsWith('api/lib/')), 'api/lib still contains files');
