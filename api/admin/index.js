@@ -22,7 +22,7 @@ import { describeDbError, normalizeDatabaseUrl } from '../_lib/db.js';
 import { parseCookies } from '../_lib/session-token.js';
 import { buildMailRouter, handleInboundMessage } from '../_lib/mail-routes.js';
 import { buildBotRouter } from '../_lib/bot-routes.js';
-import { buildTestRouter } from '../_lib/test-routes.js';
+import { buildTestRouter } from '../_lib/suite-runner.js';
 import { ingestMessage, createMailNotifications, ensureMailSchema, purgeAdminMailData } from '../_lib/mail-store.js';
 
 const sql = postgres(normalizeDatabaseUrl(process.env.DATABASE_URL), { ssl: 'require', max: 5 });

@@ -39,6 +39,21 @@ npm install
 npm run bot        # or: npm run bot:dev, to load .env
 ```
 
+On a host that restarts the process on every boot, the panel usually runs
+`npm install` itself before starting `node bot/index.js`. A full install pulls
+the whole frontend toolchain plus the `vercel` and `gh` CLIs, which is well past
+the memory a small container gets, and the kernel kills it — the log shows `Killed
+npm install`, and the bot then dies with `Cannot find package 'discord.js'` even
+though `discord.js` is declared. Install production dependencies only:
+
+```bash
+npm run bot:prod-install   # npm install --omit=dev
+```
+
+That is ~700 packages instead of ~1100, with `discord.js` present and no build
+tools. Use Node 20 or newer: `package.json` declares `engines.node >= 20`, and
+`discord.js` uses `node:`-prefixed built-ins that Node 18 and older reject.
+
 Run it under a supervisor (`systemd`, `pm2`, or the platform's restart policy) so
 it comes back after a crash or a host reboot.
 

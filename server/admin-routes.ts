@@ -6,7 +6,7 @@ import multer from "multer";
 import { adminStorage } from "./admin-storage.js";
 import { buildMailRouter, handleInboundMessage } from "../api/_lib/mail-routes.js";
 import { buildBotRouter } from "../api/_lib/bot-routes.js";
-import { buildTestRouter } from "../api/_lib/test-routes.js";
+import { buildTestRouter } from "../api/_lib/suite-runner.js";
 import { createMailNotifications } from "../api/_lib/mail-store.js";
 
 declare module "express-session" {
