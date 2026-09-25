@@ -184,8 +184,13 @@ export function runTestSuite({ timeoutMs = TIMEOUT_MS, target = TESTS_DIR } = {}
 export function buildTestRouter({ requireAuth, requireRole }) {
   const router = express.Router();
 
+  // requireAuth is a single middleware function and requireRole a factory, the
+  // same shape the mail and bot routers consume. Building the role guard once
+  // keeps both routes reading like the rest of the dashboard.
+  const requireOwner = requireRole('owner');
+
   /** What the page shows before a run: is the suite even present? */
-  router.get('/api/admin/tests/status', ...requireAuth, requireRole('owner'), (_req, res) => {
+  router.get('/api/admin/tests/status', requireAuth, requireOwner, (_req, res) => {
     res.json({
       available: existsSync(TESTS_DIR),
       running: Boolean(inFlight),
@@ -194,7 +199,7 @@ export function buildTestRouter({ requireAuth, requireRole }) {
     });
   });
 
-  router.post('/api/admin/tests/run', ...requireAuth, requireRole('owner'), async (_req, res) => {
+  router.post('/api/admin/tests/run', requireAuth, requireOwner, async (_req, res) => {
     if (inFlight) {
       return res.status(409).json({ message: 'A test run is already in progress.' });
     }
