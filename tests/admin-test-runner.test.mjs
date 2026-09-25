@@ -106,8 +106,13 @@ test('the executable is the running node binary, not a path from input', () => {
 
 test('the routes are owner-only', () => {
   const routes = source('api/_lib/suite-runner.js');
-  const guards = routes.match(/requireRole\('owner'\)/g) || [];
-  assert.equal(guards.length, 2, 'both routes are owner-only');
+  // The owner guard is built once and applied to both routes. Counting the
+  // factory call would only prove it was written down, so this checks the guard
+  // is on every route and that no weaker role is used.
+  assert.match(routes, /const requireOwner = requireRole\('owner'\)/);
+  const uses = routes.match(/requireAuth, requireOwner/g) || [];
+  assert.equal(uses.length, 2, 'both routes are owner-only');
+  assert.doesNotMatch(routes, /requireRole\('(admin|moderator)'\)/);
 });
 
 test('a second concurrent run is refused rather than spawned', () => {
@@ -133,16 +138,77 @@ test('the child does not inherit the parent test runner context', () => {
   assert.match(routes, /env: childEnv\(\)/);
 });
 
-test('the router exposes exactly a status read and a run', () => {
-  const router = buildTestRouter({
-    requireAuth: [],
-    requireRole: () => [],
-  });
+test('the router builds with the middleware shapes the app really passes', () => {
+  // These are the shapes api/admin/index.js defines: requireAuth is a single
+  // function, requireRole returns one. An earlier version of this test passed
+  // `requireAuth: []`, an array, so `...requireAuth` looked fine here while the
+  // real function threw "function is not iterable" at load in production.
+  const requireAuth = (_req, _res, next) => next();
+  const calls = [];
+  const requireRole = (role) => {
+    calls.push(role);
+    return (_req, _res, next) => next();
+  };
+
+  const router = buildTestRouter({ requireAuth, requireRole });
+
+  assert.equal(typeof requireRole('owner'), 'function', 'requireRole must be a factory');
   const paths = router.stack.filter((layer) => layer.route).map((layer) => layer.route.path);
   assert.deepEqual(paths.sort(), ['/api/admin/tests/run', '/api/admin/tests/status']);
 });
 
+test('each route is guarded by requireAuth and the owner role', () => {
+  const requireAuth = (_req, _res, next) => next();
+  const requireRole = () => (_req, _res, next) => next();
+
+  const router = buildTestRouter({ requireAuth, requireRole });
+
+  for (const layer of router.stack.filter((l) => l.route)) {
+    const handlers = layer.route.stack.map((s) => s.handle);
+    assert.ok(handlers.length >= 3, `${layer.route.path} should have guards plus a handler`);
+    // The first two are the auth and role guards, in that order.
+    assert.equal(handlers[0], requireAuth, `${layer.route.path} is missing requireAuth`);
+    assert.notEqual(typeof handlers[1], 'undefined', `${layer.route.path} is missing a role guard`);
+  }
+});
+
+test('the guards are passed as values, never spread', () => {
+  // A spread of a middleware function is the exact bug this guards against.
+  const routes = source('api/_lib/suite-runner.js');
+  assert.doesNotMatch(routes, /\.\.\.requireAuth/);
+  assert.doesNotMatch(routes, /\.\.\.requireRole/);
+  // The owner guard is built once from the factory.
+  assert.match(routes, /const requireOwner = requireRole\('owner'\)/);
+});
+
+
 /* --------------------------------------------------------------- the wiring */
+
+test('the real admin function loads without throwing', async () => {
+  // The strongest check available: import the deployed entry point exactly as
+  // Vercel does. Source-level assertions missed the spread-of-a-function bug
+  // because they only proved the text existed; this fails on the real TypeError.
+  // Postgres is lazy, so a placeholder connection string is enough to load the
+  // module without a database.
+  const { spawnSync } = await import('node:child_process');
+  const result = spawnSync(
+    process.execPath,
+    ['-e', "import('./api/admin/index.js').then(()=>console.log('LOADED')).catch(e=>{console.error(e.message);process.exit(1)})"],
+    {
+      cwd: root,
+      encoding: 'utf8',
+      env: {
+        ...process.env,
+        SESSION_SECRET: 'test-secret-not-a-real-one',
+        DATABASE_URL: 'postgres://u:p@127.0.0.1:5432/placeholder',
+      },
+      timeout: 60_000,
+    },
+  );
+  assert.equal(result.status, 0, `api/admin/index.js failed to load:\n${result.stderr}`);
+  assert.match(result.stdout, /LOADED/);
+});
+
 
 test('the serverless and dev backends both mount the test router', () => {
   assert.match(source('api/admin/index.js'), /buildTestRouter/);
