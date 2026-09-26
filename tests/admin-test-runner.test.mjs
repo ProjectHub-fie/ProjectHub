@@ -20,7 +20,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, '..');
 const source = (relative) => readFileSync(resolve(root, relative), 'utf8');
 
-const { parseTap, capOutput, runTestSuite, buildTestRouter } = await import('../api/_lib/suite-runner.js');
+const { parseTap, capOutput, runTestSuite, buildTestRouter, dockerRunArgs, dockerAvailable } = await import('../api/_lib/suite-runner.js');
 
 /* ------------------------------------------------------------------ TAP parse */
 
@@ -84,7 +84,7 @@ test('the command is a fixed argument list built from a literal', () => {
   const routes = source('api/_lib/suite-runner.js');
   // The args are a literal, and the only variable part defaults to the tests dir.
   assert.match(routes, /function testArgs\(target = TESTS_DIR\)/);
-  assert.match(routes, /return \['--test', '--test-force-exit', '--test-reporter=tap', target\]/);
+  assert.match(routes, /return \['--test', '--test-force-exit', '--test-reporter=tap', spec\]/);
   // No request field is read in the run handler.
   assert.doesNotMatch(routes, /req\.body/);
   assert.doesNotMatch(routes, /req\.query/);
@@ -94,14 +94,19 @@ test('the command is a fixed argument list built from a literal', () => {
 test('the child process is spawned without a shell', () => {
   const routes = source('api/_lib/suite-runner.js');
   assert.match(routes, /shell: false/);
-  // Spawning through process.execPath avoids PATH resolution for the binary.
-  assert.match(routes, /spawn\(process\.execPath, testArgs\(target\)/);
+  // The local child runs the same node binary as the server, and the docker
+  // child runs the literal `node` inside the image; neither is chosen from input.
+  assert.match(routes, /runChild\(process\.execPath, testArgs\(target\)/);
+  assert.match(routes, /runChild\('docker', dockerRunArgs\(image\)/);
 });
 
 test('the executable is the running node binary, not a path from input', () => {
   const routes = source('api/_lib/suite-runner.js');
   assert.doesNotMatch(routes, /spawn\([^)]*req\./);
-  assert.doesNotMatch(routes, /exec\(|execSync|spawnSync/);
+  // `spawnSync` is used only to probe docker, never to run the suite.
+  assert.doesNotMatch(routes, /exec\(|execSync/);
+  const probes = routes.match(/spawnSync\('docker'/g) || [];
+  assert.equal(probes.length, 2, 'spawnSync is only the docker availability/image probes');
 });
 
 test('the routes are owner-only', () => {
@@ -126,7 +131,96 @@ test('a missing tests/ folder is reported as unavailable, not a crash', () => {
   assert.match(routes, /tests_not_deployed/);
   assert.match(routes, /503/);
   const status = source('api/_lib/suite-runner.js');
-  assert.match(status, /available: existsSync\(TESTS_DIR\)/);
+  assert.match(status, /const local = existsSync\(TESTS_DIR\)/);
+});
+
+/* ------------------------------------------------------------- docker path */
+
+test('the docker argument list is fixed and built from a literal', () => {
+  const args = dockerRunArgs('projecthub:local');
+  // The command inside the container is a literal glob, never a request field.
+  assert.deepEqual(args.slice(-5), [
+    'node',
+    '--test',
+    '--test-force-exit',
+    '--test-reporter=tap',
+    'tests/*.test.mjs',
+  ]);
+  // The image is the first non-flag argument, before the command.
+  assert.equal(args[args.length - 6], 'projecthub:local');
+  // No request data, and no shell metacharacter handling anywhere.
+  const routes = source('api/_lib/suite-runner.js');
+  assert.doesNotMatch(routes, /dockerRunArgs\([^)]*req\./);
+});
+
+test('the suite target is a glob, because node 24 rejects a bare directory', () => {
+  // `node --test tests/` dies with "Cannot find module /app/tests" on Node 24.
+  // The console and the container both run the `npm test` glob instead.
+  const args = dockerRunArgs('projecthub:local');
+  assert.equal(args[args.length - 1], 'tests/*.test.mjs');
+  const routes = source('api/_lib/suite-runner.js');
+  assert.match(routes, /const spec = isTestsDir\(target\) \? 'tests\/\*\.test\.mjs' : target/);
+});
+
+test('the docker runner uses the image it is given, never one from input', () => {
+  const args = dockerRunArgs('custom:tag');
+  assert.ok(args.includes('custom:tag'));
+  // The only source of the image is the module's own config.
+  const routes = source('api/_lib/suite-runner.js');
+  assert.match(routes, /const DEFAULT_IMAGE = process\.env\.TEST_RUNNER_IMAGE \|\| 'projecthub:local'/);
+});
+
+test('secrets are passed to the container by name, not by value', () => {
+  // `-e NAME` copies from the daemon's environment, so a connection string or a
+  // token never lands in the argument list that `ps` can read.
+  const previous = process.env.SESSION_SECRET;
+  process.env.SESSION_SECRET = 'super-secret-value';
+  try {
+    const args = dockerRunArgs('projecthub:local');
+    const joined = args.join(' ');
+    assert.match(joined, /-e SESSION_SECRET/);
+    assert.doesNotMatch(joined, /super-secret-value/);
+  } finally {
+    if (previous === undefined) delete process.env.SESSION_SECRET;
+    else process.env.SESSION_SECRET = previous;
+  }
+});
+
+test('docker mode falls back to unavailable when docker cannot be reached', () => {
+  // The selection logic: with no tests/ folder, no docker and no override, the
+  // run reports tests_not_deployed rather than attempting a spawn.
+  const routes = source('api/_lib/suite-runner.js');
+  assert.match(routes, /TEST_RUNNER_DOCKER === '0'/);
+  assert.match(routes, /mode \|\| \(dockerAvailable\(\) \? 'docker' : 'unavailable'\)/);
+  assert.match(routes, /dockerAvailable\(\)/);
+});
+
+test('the status route reports how the suite will run', () => {
+  const routes = source('api/_lib/suite-runner.js');
+  assert.match(routes, /mode: local \? 'local' : docker \? 'docker' : 'unavailable'/);
+  assert.match(routes, /available: local \|\| docker/);
+  assert.match(routes, /image: local \? null/);
+});
+
+test('the docker run joins the configured network when one is set', () => {
+  const previous = process.env.TEST_RUNNER_NETWORK;
+  process.env.TEST_RUNNER_NETWORK = 'projecthub_default';
+  try {
+    assert.ok(dockerRunArgs('projecthub:local').join(' ').includes('--network projecthub_default'));
+  } finally {
+    if (previous === undefined) delete process.env.TEST_RUNNER_NETWORK;
+    else process.env.TEST_RUNNER_NETWORK = previous;
+  }
+});
+
+test('the suite runs somewhere, locally or in docker', async () => {
+  // The real process path is exercised for the local branch: a small sibling
+  // suite is run and its TAP summary read. Docker is not required for the test
+  // to pass; `dockerAvailable` only gates the cloud path.
+  const target = resolve(here, 'deployment-limits.test.mjs');
+  const result = await runTestSuite({ timeoutMs: 60_000, target });
+  assert.equal(result.ok, true, `expected a clean run, got exit ${result.exitCode}`);
+  assert.equal(typeof dockerAvailable(), 'boolean');
 });
 
 test('the child does not inherit the parent test runner context', () => {

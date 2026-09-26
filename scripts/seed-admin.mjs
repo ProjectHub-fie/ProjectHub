@@ -14,6 +14,7 @@
 import 'dotenv/config';
 import bcrypt from 'bcryptjs';
 import postgres from 'postgres';
+import { sslOptionForUrl } from '../api/_lib/db-url.js';
 
 const { DATABASE_URL, ADMIN_PIN, ADMIN_PASSWORD, ADMIN_EMAIL } = process.env;
 const role = process.env.ADMIN_ROLE || 'moderator';
@@ -31,7 +32,7 @@ if (!['moderator', 'admin', 'owner'].includes(role)) {
   process.exit(1);
 }
 
-const sql = postgres(DATABASE_URL, { ssl: 'require', max: 1 });
+const sql = postgres(DATABASE_URL, { ssl: sslOptionForUrl(DATABASE_URL), max: 1 });
 
 try {
   await sql`

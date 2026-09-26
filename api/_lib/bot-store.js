@@ -13,12 +13,12 @@
  * `ensureMailSchema`, so a fresh database works without a migration step.
  */
 import postgres from 'postgres';
-import { normalizeDatabaseUrl } from './db-url.js';
+import { normalizeDatabaseUrl, sslOptionForUrl } from './db-url.js';
 import { maskWebhook } from './bot-logic.js';
 
 let _sql = null;
 function db() {
-  _sql ||= postgres(normalizeDatabaseUrl(process.env.DATABASE_URL), { ssl: 'require', max: 5 });
+  _sql ||= postgres(normalizeDatabaseUrl(process.env.DATABASE_URL), { ssl: sslOptionForUrl(process.env.DATABASE_URL), max: 5 });
   return _sql;
 }
 

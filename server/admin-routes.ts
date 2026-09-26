@@ -245,10 +245,12 @@ export async function registerAdminRoutes(app: Express): Promise<Server> {
   });
 
   /* -------------------------------------------------------------------------
-     Discord sign-in for administrators (mirrors api/admin/index.js).
+     Discord linking for administrators (mirrors api/admin/index.js).
 
-     It authenticates an `admin_credentials` row, never a public `users` row,
-     and then establishes the same dashboard session a PIN/password login does.
+     A link, not a sign-in: the administrator is already authenticated with a
+     PIN and password, and connecting Discord only attaches a `discord_id` to
+     that row so the bot can report their role in `&dev`. A Discord account can
+     never obtain a dashboard session through this handshake.
   ------------------------------------------------------------------------- */
   const adminDiscordRedirectUri = () =>
     process.env.DISCORD_ADMIN_CALLBACK_URL ||
@@ -287,16 +289,17 @@ export async function registerAdminRoutes(app: Express): Promise<Server> {
 
   app.get('/api/admin/auth/discord', (req: Request, res: any) => {
     const clientId = process.env.DISCORD_CLIENT_ID;
-    if (!clientId) return res.redirect('/pbad/login?discord=error&reason=not_configured');
+    if (!clientId) return res.redirect('/pbad/integrations?discord=error&reason=not_configured');
 
     const redirectUri = adminDiscordRedirectUri();
     if (!isAbsoluteRedirect(redirectUri)) {
-      return res.redirect('/pbad/login?discord=error&reason=redirect_not_configured');
+      return res.redirect('/pbad/integrations?discord=error&reason=redirect_not_configured');
     }
 
-    const linking = req.query?.mode === 'link';
-    if (linking && !req.session?.isAdminLoggedIn) {
-      return res.redirect('/pbad/login?discord=error&reason=link_not_authenticated');
+    // Linking is only ever started from the signed-in Integrations page; this
+    // route never signs anyone in.
+    if (!req.session?.isAdminLoggedIn) {
+      return res.redirect('/pbad/login?unauthorized=1');
     }
 
     const verifier = crypto.randomBytes(32).toString('base64url');
@@ -304,7 +307,8 @@ export async function registerAdminRoutes(app: Express): Promise<Server> {
     const state = signAdminState(JSON.stringify({
       t: Date.now(),
       exp: Date.now() + 600000,
-      ...(linking ? { mode: 'link', adminId: req.session!.adminId } : {}),
+      mode: 'link',
+      adminId: req.session!.adminId,
     }));
 
     res.cookie('admin_discord_verifier', verifier, {
@@ -327,7 +331,7 @@ export async function registerAdminRoutes(app: Express): Promise<Server> {
   });
 
   app.get('/api/admin/auth/discord/callback', async (req: Request, res: any) => {
-    const fail = (reason: string) => res.redirect(`/pbad/login?discord=error&reason=${encodeURIComponent(reason)}`);
+    const fail = (reason: string) => res.redirect(`/pbad/integrations?discord=error&reason=${encodeURIComponent(reason)}`);
 
     const { code, state: queryState } = req.query;
     const state = queryState || req.cookies?.admin_discord_state;
@@ -336,6 +340,7 @@ export async function registerAdminRoutes(app: Express): Promise<Server> {
 
     if (!code) return fail('missing_code');
     if (!stateData) return fail('invalid_state');
+    if (stateData.mode !== 'link') return fail('invalid_state');
     if (!verifier) return fail('missing_verifier');
 
     const clientId = process.env.DISCORD_CLIENT_ID;
@@ -367,37 +372,24 @@ export async function registerAdminRoutes(app: Express): Promise<Server> {
       res.clearCookie('admin_discord_verifier', { path: '/' });
       res.clearCookie('admin_discord_state', { path: '/' });
 
-      if (stateData.mode === 'link') {
-        if (!req.session?.isAdminLoggedIn || req.session.adminId !== stateData.adminId) {
-          return fail('link_not_authenticated');
-        }
-        const owner = await adminStorage.getAdminByDiscordId(profile.id);
-        if (owner && owner.id !== stateData.adminId) return fail('discord_already_linked');
-        await adminStorage.setAdminDiscordId(stateData.adminId, profile.id);
-        return res.redirect('/pbad/settings?discord=linked');
+      // The signed state names the initiating admin; the caller must still be
+      // that admin, proved by their dashboard session. The Discord profile only
+      // ever contributes the id that gets stored — no session is created here.
+      if (!req.session?.isAdminLoggedIn || req.session.adminId !== stateData.adminId) {
+        return fail('link_not_authenticated');
       }
-
-      const admin = await adminStorage.getAdminByDiscordId(profile.id);
-      // An administrator must have linked Discord first; an unknown Discord
-      // account cannot claim an admin row by email.
-      if (!admin) return fail('admin_not_linked');
-
-      req.session!.regenerate((regenerateError: any) => {
-        if (regenerateError) return fail('session');
-        req.session!.isAdminLoggedIn = true;
-        req.session!.adminId = admin.id;
-        req.session!.adminRole = admin.role;
-        req.session!.save((saveError: any) => {
-          if (saveError) return fail('session');
-          res.redirect('/pbad');
-        });
-      });
+      const owner = await adminStorage.getAdminByDiscordId(profile.id);
+      if (owner && owner.id !== stateData.adminId) return fail('discord_already_linked');
+      await adminStorage.setAdminDiscordId(stateData.adminId, profile.id);
+      return res.redirect('/pbad/integrations?discord=linked');
     } catch (error: any) {
       console.error('Admin Discord callback error:', error.message);
       return fail('unexpected');
     }
   });
 
+  // Unlink Discord from the signed-in administrator's own row. The request
+  // carries no id; the session names the row to clear.
   app.delete('/api/admin/auth/discord/link', requireAuth, async (req: Request, res: any) => {
     try {
       await adminStorage.setAdminDiscordId(req.session!.adminId, null);

@@ -13,14 +13,14 @@ if (!databaseUrl) {
  * makes the SSL mode explicit. The implementation lives in `db-url.js` so
  * modules that must not open a pool can share it.
  */
-import { normalizeDatabaseUrl } from './db-url.js';
-export { normalizeDatabaseUrl };
+import { normalizeDatabaseUrl, sslOptionForUrl } from './db-url.js';
+export { normalizeDatabaseUrl, sslOptionForUrl };
 
 const connectionUrl = normalizeDatabaseUrl(databaseUrl);
 
 // Create the connection
 const client = postgres(connectionUrl, {
-  ssl: 'require', // Standard for Vercel/Neon/Replit managed DBs
+  ssl: sslOptionForUrl(databaseUrl), // required for Vercel/Neon, off for a local db
   max: 10,
 });
 

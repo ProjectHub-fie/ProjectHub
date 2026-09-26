@@ -8,13 +8,14 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 
 /**
- * Administrator account settings.
+ * Administrator integrations.
  *
- * Only one thing lives here: the Discord link. An administrator signs in with a
- * PIN and password, and linking Discord lets them use the one-click Discord
- * sign-in afterwards. Linking always goes through the OAuth handshake — the
- * client never posts a Discord id — so a forged id cannot attach itself to an
- * admin row.
+ * Discord is an integration, not a second way to sign in: an administrator
+ * always enters the dashboard with a PIN and password. Linking Discord attaches
+ * the Discord account to this admin row, which is what the bot reads to report
+ * the administrator's role for `&dev`. Linking always goes through the OAuth
+ * handshake — the client never posts a Discord id — so a forged id cannot
+ * attach itself to an admin row.
  */
 type AdminMe = {
   id: string;
@@ -24,7 +25,7 @@ type AdminMe = {
   discordId: string | null;
 };
 
-export default function AdminSettings() {
+export default function AdminIntegrations() {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [unlinking, setUnlinking] = useState(false);
@@ -46,17 +47,22 @@ export default function AdminSettings() {
     if (!result) return;
 
     if (result === "linked") {
-      toast({ title: "Discord linked", description: "You can now sign in with Discord.", variant: "success" });
+      toast({
+        title: "Discord linked",
+        description: "The bot will now report your administrator role for &dev.",
+        variant: "success",
+      });
       void queryClient.invalidateQueries({ queryKey: ["admin-me"] });
     } else {
       const reasons: Record<string, string> = {
-        not_configured: "Discord sign-in is not configured on the server.",
+        not_configured: "Discord linking is not configured on the server.",
         redirect_not_configured: "The Discord callback URL is not configured.",
         link_not_authenticated: "Please sign in again before linking Discord.",
         discord_already_linked: "That Discord account is already linked to another administrator.",
-        admin_not_linked: "That Discord account is not linked to any administrator.",
         invalid_state: "The Discord request expired. Please try again.",
         missing_verifier: "The Discord request could not be verified. Please try again.",
+        token_exchange: "Discord rejected the request. Check the client secret and callback URL.",
+        profile: "Discord did not return your profile. Please try again.",
       };
       toast({
         title: "Discord link failed",
@@ -65,13 +71,13 @@ export default function AdminSettings() {
       });
     }
 
-    window.history.replaceState(null, "", "/pbad/settings");
+    window.history.replaceState(null, "", "/pbad/integrations");
   }, [toast, queryClient]);
 
   const linkDiscord = () => {
     // A full-page navigation: Discord's authorize screen is cross-origin, and
     // the signed state cookie proves which admin initiated the link on return.
-    window.location.href = "/api/admin/auth/discord?mode=link";
+    window.location.href = "/api/admin/auth/discord";
   };
 
   const unlinkDiscord = async () => {
@@ -109,8 +115,10 @@ export default function AdminSettings() {
   return (
     <div className="mx-auto max-w-3xl space-y-6 p-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Settings</h1>
-        <p className="text-muted-foreground">Manage how you sign in to the admin dashboard.</p>
+        <h1 className="text-2xl font-bold tracking-tight">Integrations</h1>
+        <p className="text-muted-foreground">
+          Connect external services to this administrator account.
+        </p>
       </div>
 
       <Card>
@@ -140,7 +148,10 @@ export default function AdminSettings() {
             <FaDiscord className="h-5 w-5 text-[#5865F2]" />
             Discord
           </CardTitle>
-          <CardDescription>Connect Discord to sign in to the dashboard with one click.</CardDescription>
+          <CardDescription>
+            Link the Discord account you use in the server so the bot can report your
+            administrator role for <code>&amp;dev</code>.
+          </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex items-center justify-between gap-4 rounded-lg border border-border p-4">
@@ -192,7 +203,8 @@ export default function AdminSettings() {
 
           <p className="text-xs text-muted-foreground">
             Linking is done through Discord's own authorization screen, so a Discord
-            account can only be attached by the administrator who controls it.
+            account can only be attached by the administrator who controls it. Discord
+            is never a way into the dashboard; sign-in stays PIN and password.
           </p>
         </CardContent>
       </Card>

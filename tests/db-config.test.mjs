@@ -11,7 +11,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
-import { normalizeDatabaseUrl, findDbErrorCode, describeDbError } from '../api/_lib/db.js';
+import { normalizeDatabaseUrl, findDbErrorCode, describeDbError, sslOptionForUrl } from '../api/_lib/db.js';
+import { pgSslOptionForUrl } from '../api/_lib/db-url.js';
 
 const repoRoot = fileURLToPath(new URL('..', import.meta.url));
 
@@ -59,6 +60,41 @@ test('normalizeDatabaseUrl passes non-URL input through untouched', () => {
   assert.equal(normalizeDatabaseUrl(undefined), undefined);
 });
 
+test('sslOptionForUrl turns TLS off only for sslmode=disable', () => {
+  // A local Postgres (the compose `db`) has no TLS listener, so `disable` has
+  // to stop the handshake rather than open a socket that is immediately reset.
+  assert.equal(sslOptionForUrl('postgres://u:p@127.0.0.1:5432/db?sslmode=disable'), false);
+  // A managed database keeps the secure default it has always had.
+  assert.equal(sslOptionForUrl('postgres://u:p@host/db?sslmode=require'), 'require');
+  assert.equal(sslOptionForUrl('postgres://u:p@host/db?sslmode=verify-full'), 'require');
+  assert.equal(sslOptionForUrl('postgres://u:p@host/db'), 'require');
+  // Unparseable or absent input keeps the secure default, not TLS off.
+  assert.equal(sslOptionForUrl('not a url'), 'require');
+  assert.equal(sslOptionForUrl(''), 'require');
+  assert.equal(sslOptionForUrl(undefined), 'require');
+});
+
+test('pgSslOptionForUrl mirrors the flag for the pg driver', () => {
+  assert.equal(pgSslOptionForUrl('postgres://u:p@127.0.0.1:5432/db?sslmode=disable'), false);
+  assert.deepEqual(pgSslOptionForUrl('postgres://u:p@host/db?sslmode=require'), { rejectUnauthorized: false });
+  assert.deepEqual(pgSslOptionForUrl(undefined), { rejectUnauthorized: false });
+});
+
+test('every connection point derives its SSL option from the URL', async () => {
+  const { readFileSync } = await import('node:fs');
+  const read = (rel) => readFileSync(new URL(`../${rel}`, import.meta.url), 'utf8');
+
+  // The local `sslmode=disable` fix is applied everywhere a pool is opened, or
+  // a Docker deployment connects to its own database for some paths and not
+  // others. A hardcoded `ssl: 'require'` is the thing being guarded against.
+  for (const file of ['api/_lib/db.js', 'api/_lib/mail-store.js', 'api/_lib/bot-store.js', 'api/admin/index.js']) {
+    const body = read(file);
+    assert.doesNotMatch(body, /ssl: 'require'/, `${file} must not hardcode ssl: 'require'`);
+    assert.match(body, /sslOptionForUrl/, `${file} must derive its ssl option from the URL`);
+  }
+  assert.match(read('server/routes.ts'), /pgSslOptionForUrl/, 'the session store derives its ssl option too');
+});
+
 test('findDbErrorCode follows the cause chain Drizzle wraps driver errors in', () => {
   const driverError = Object.assign(new Error('password authentication failed'), { code: '28P01' });
   const wrapped = Object.assign(new Error('Failed query'), { cause: driverError });
@@ -91,6 +127,9 @@ test('no credential file is tracked in git', () => {
 
   const leaked = tracked.filter((path) => {
     const name = path.split('/').pop();
+    // A committed `.env.example`-style template is not a credential: it holds
+    // placeholder text, never a value. The real files it is copied to are.
+    if (name.endsWith('.example')) return false;
     return name === '.env' || name.startsWith('.env.') || name === '.env.local';
   });
 

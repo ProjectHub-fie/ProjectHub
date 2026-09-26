@@ -1,7 +1,7 @@
 import { drizzle } from 'drizzle-orm/postgres-js';
 import postgres from 'postgres';
 import * as schema from '../drizzle/schema.js';
-import { normalizeDatabaseUrl } from '../api/_lib/db-url.js';
+import { normalizeDatabaseUrl, sslOptionForUrl } from '../api/_lib/db-url.js';
 
 const databaseUrl = process.env.DATABASE_URL;
 
@@ -11,7 +11,7 @@ if (!databaseUrl) {
 
 // Create the connection
 const client = postgres(normalizeDatabaseUrl(databaseUrl), {
-  ssl: { rejectUnauthorized: false }, // Improved for Vercel
+  ssl: sslOptionForUrl(databaseUrl), // required for Vercel/Neon, off for a local db
   max: 10,
 });
 

@@ -7,8 +7,8 @@ import {
   LayoutDashboard,
   Mail,
   PenLine,
+  Plug,
   Send,
-  Settings,
   ShieldCheck,
   Star,
   Trash2,
@@ -72,6 +72,7 @@ export function AdminSidebar() {
   const { canManageBot, canRunTests } = useAdminAuth();
   const onBot = location === "/bot" || location.startsWith("/bot/");
   const onTests = location === "/tests" || location.startsWith("/tests/");
+  const onIntegrations = location === "/integrations" || location === "/settings";
 
   const onMail = location === "/mail" || location.startsWith("/mail/");
   const activeView = new URLSearchParams(searchString).get("view") || "inbox";
@@ -204,13 +205,13 @@ export function AdminSidebar() {
           <SidebarMenuItem>
             <SidebarMenuButton
               asChild
-              isActive={location === "/settings"}
-              className={`rounded-lg px-3 py-2 cursor-pointer ${location === "/settings" ? "sidebar-nav-active" : ""}`}
+              isActive={onIntegrations}
+              className={`rounded-lg px-3 py-2 cursor-pointer ${onIntegrations ? "sidebar-nav-active" : ""}`}
             >
-              <Link href="/settings" onClick={closeMobileSidebar}>
+              <Link href="/integrations" onClick={closeMobileSidebar}>
                 <span className="group-data-[collapsible=icon]:!hidden md:group-data-[collapsible=icon]:hidden truncate flex items-center gap-2">
-                  <Settings className="h-4 w-4" />
-                  Settings
+                  <Plug className="h-4 w-4" />
+                  Integrations
                 </span>
               </Link>
             </SidebarMenuButton>

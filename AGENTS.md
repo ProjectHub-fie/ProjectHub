@@ -68,18 +68,39 @@ that a helper under `api/` must not be named `test*` whatever the ignore file sa
 `/pbad/tests` (owner only) runs the repository's `tests/` folder and shows the
 TAP summary. It is the only route that starts a process, so `api/_lib/suite-runner.js`
 builds one fixed argument list and reads no request field at all; the spawn uses
-`shell: false`. One run at a time is enforced with a module-level promise, and a
-missing `tests/` folder is a `503` rather than a spawn error. `tests/` is in
-`.vercelignore`, so this only works where the folder is deployed — a long-lived
-host or local development.
+`shell: false`. One run at a time is enforced with a module-level promise.
+
+`tests/` is in `.vercelignore`, so it is not deployed to the serverless function.
+The runner therefore has two ways to reach the suite, and reports which one it
+used as `mode`:
+
+- **local** — the folder is on disk (a long-lived host, a Docker deployment, local
+  development) and the child is this process's own Node.
+- **docker** — the folder is absent but a Docker daemon is reachable, so the suite
+  runs with `docker run` against an image built from this repository. The image is
+  `TEST_RUNNER_IMAGE`, else the compose image `projecthub:local`, else a build of
+  `projecthub-tests:local` from the checked-out `Dockerfile`.
+- **unavailable** — neither, so `status` says so and a run is a `503` rather than a
+  spawn error.
+
+The compose file carries the app, the bot and a `db`, plus a `tests` service behind
+the `tests` profile that runs the suite on demand:
+
+```bash
+docker compose build
+docker compose run --rm tests        # the suite, against the compose db
+```
+
+Node 24 rejects a bare directory as a test target — it tries to import it and dies
+with `Cannot find module /app/tests` — so the target is the glob `tests/*.test.mjs`,
+the same set `npm test` runs. `runTestSuite` takes an optional `target` that only
+the tests pass; the HTTP route never does, so a request cannot choose what runs,
+and Docker always runs the whole folder.
 
 The spawned child deletes `NODE_TEST_CONTEXT`/`NODE_TEST_WORKER_ID` from its
 environment. A nested runner that inherits them attaches to the parent's test
 protocol instead of emitting TAP, which is what a naive spawn does when the
 endpoint is exercised from the suite.
-
-`runTestSuite` takes an optional `target` that only the tests pass; the HTTP
-route never does, so a request cannot choose what runs.
 
 ### Client modules are loadable from node:test
 
@@ -202,13 +223,13 @@ It rotates the PIN and password to fresh random values and prints them once.
 
 ### Discord sign-in and linking
 
-Discord is an optional second way in, for both portals. It is enabled only when
-`DISCORD_CLIENT_ID` and `DISCORD_CLIENT_SECRET` are set; without them the
-handshake redirects back with `not_configured` and the PIN/password form is the
-only way in. The callback URL must be absolute, which is why it is derived from
-`APP_ORIGIN` and why the start route refuses to build a handshake without one.
-Override it with `DISCORD_CALLBACK_URL` (public client) or
-`DISCORD_ADMIN_CALLBACK_URL` (admin dashboard) if the two are registered
+Discord is an optional second way in for the **public client only**. It is
+enabled only when `DISCORD_CLIENT_ID` and `DISCORD_CLIENT_SECRET` are set;
+without them the handshake redirects back with `not_configured` and the
+PIN/password form is the only way in. The callback URL must be absolute, which
+is why it is derived from `APP_ORIGIN` and why the start route refuses to build
+a handshake without one. Override it with `DISCORD_CALLBACK_URL` (public client)
+or `DISCORD_ADMIN_CALLBACK_URL` (admin dashboard) if the two are registered
 separately in the Discord application.
 
 A password account and a Discord login that only share an email are two
@@ -216,19 +237,27 @@ different identities. Signing in with Discord when the email already belongs to
 a password account is refused as `account_exists_requires_link`: silently
 matching on the address would let whoever controls that Discord account take
 over the ProjectHub account. The account must initiate the link itself, from
-`/settings` (client) or `/pbad/settings` (admin), which runs the OAuth handshake
-with `mode=link`. Only Discord's own profile response supplies the id that gets
-stored — the browser never posts an id — so a forged id cannot attach itself to
-a row.
+`/settings`, which runs the OAuth handshake with `mode=link`. Only Discord's own
+profile response supplies the id that gets stored — the browser never posts an
+id — so a forged id cannot attach itself to a row.
 
 The two rules that keep an account reachable are:
 
 - An account may not unlink its only sign-in method. A Discord-only account is
   offered "set a password" and the unlink button stays disabled until one
   exists; the server enforces the same rule, not just the UI.
-- An administrator may only sign in with Discord if their `admin_credentials`
-  row already carries that `discord_id`; an unknown Discord account gets
-  `admin_not_linked` rather than claiming a row by email.
+- The client link is the only link that establishes a session.
+
+**Discord is not an admin sign-in.** The dashboard is PIN and password only; the
+Discord button that used to sit under the form, and the `mode=link` branch of
+the callback that used to mint a dashboard session, are both gone. What remains
+is a link: an already-signed-in administrator connects a Discord account from
+`/pbad/integrations` so the bot can resolve their `discord_id` and report their
+role in `&dev`. The start route requires the dashboard session, the callback
+refuses a state that is not `mode: 'link'` and refuses a Discord account already
+attached to another administrator, and it only ever writes `discord_id` — it
+sets no `isAdminLoggedIn` and no `adminRole`. `/pbad/settings` redirects to
+`/pbad/integrations` so old links keep working.
 
 `discord_id` on `admin_credentials` is added by `ensureAdminSchema` for
 deployments that predate it, along with a unique index on the non-null values so
