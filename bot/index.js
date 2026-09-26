@@ -47,9 +47,9 @@ import {
   formatQuantity,
   formatPercent,
   isValidWebhookUrl,
-} from '../api/_lib/bot-logic.js';
-import { getBotSettings, getAlertState, recordAlertTimes, resolveDiscordIdentity, recordBotHeartbeat } from '../api/_lib/bot-store.js';
-import { fetchUsage, fetchProjectNames, projectScopeFromEnv, orgIdFromEnv, isNeonConfigured } from '../api/_lib/neon-usage.js';
+} from './lib/bot-logic.js';
+import { getBotSettings, getAlertState, recordAlertTimes, resolveDiscordIdentity, recordBotHeartbeat } from './lib/bot-store.js';
+import { fetchUsage, fetchProjectNames, projectScopeFromEnv, orgIdFromEnv, isNeonConfigured } from './lib/neon-usage.js';
 import { attachBotEvents, attachGatewayLogging as attachEventGatewayLogging } from './events/index.js';
 
 /* ---------------------------------------------------------------- logging */

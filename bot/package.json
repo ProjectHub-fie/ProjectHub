@@ -1,0 +1,21 @@
+{
+  "name": "projecthub-discord-bot",
+  "version": "1.0.0",
+  "private": true,
+  "description": "The ProjectHub Discord bot: prefix commands, mention replies, &dev role lookup and Neon usage alerts. A standalone long-running process, deployed on its own host (WispByte, VPS, Docker).",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node index.js",
+    "bot": "node index.js"
+  },
+  "dependencies": {
+    "debug": "^4.4.3",
+    "discord.js": "^14.27.0",
+    "dotenv": "^17.2.3",
+    "postgres": "^3.4.8"
+  }
+}
