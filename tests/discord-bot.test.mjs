@@ -654,6 +654,77 @@ test('the gateway lifecycle is logged, not left silent', () => {
   assert.match(bot, /guardConsole\(\)/);
 });
 
+/* --------------------------------------------------------------- login retry */
+
+const { isFatalLoginError, loginWithRetry } = await import('../bot/index.js');
+
+test('a bad token fails fast but a transient network error is retried', () => {
+  // A host that starts the process before its network is up fails the first
+  // handshake; a bad token fails every one. Only the first is worth retrying, and
+  // retrying a bad token just hides the real reason.
+  assert.equal(isFatalLoginError({ code: 'TokenInvalid' }), true);
+  assert.equal(isFatalLoginError({ code: 'DisallowedIntents' }), true);
+  assert.equal(isFatalLoginError(new Error('An invalid token was provided.')), true);
+  assert.equal(isFatalLoginError(new Error('Used disallowed intents')), true);
+  assert.equal(isFatalLoginError({ code: 'ENOTFOUND' }), false);
+  assert.equal(isFatalLoginError({ code: 'ECONNREFUSED' }), false);
+  assert.equal(isFatalLoginError(new Error('getaddrinfo EAI_AGAIN discord.com')), false);
+});
+
+test('loginWithRetry backs off and gives up, and does not retry a fatal error', async () => {
+  // Real attempts with a stubbed sleep: the retry count and the backoff are what
+  // is under test, not the waiting.
+  const transient = { calls: 0, delays: [] };
+  const flaky = {
+    login: async () => {
+      transient.calls += 1;
+      if (transient.calls < 3) throw Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' });
+      return 'signed-in';
+    },
+  };
+  const result = await loginWithRetry(flaky, 'tok', {
+    attempts: 5,
+    baseDelayMs: 100,
+    sleep: async (ms) => transient.delays.push(ms),
+  });
+  assert.equal(result, 'signed-in');
+  assert.equal(transient.calls, 3, 'two failures then success');
+  assert.deepEqual(transient.delays, [100, 200], 'the delay doubles each attempt');
+
+  // Exhausting the attempts rethrows the last error rather than looping forever.
+  let exhausted = 0;
+  await assert.rejects(
+    loginWithRetry({ login: async () => { exhausted += 1; throw new Error('timeout'); } }, 'tok', {
+      attempts: 3,
+      baseDelayMs: 1,
+      sleep: async () => {},
+    }),
+    /timeout/,
+  );
+  assert.equal(exhausted, 3, 'it stops after the configured attempts');
+
+  // A fatal error is not retried at all: one call, thrown immediately.
+  let fatal = 0;
+  await assert.rejects(
+    loginWithRetry({ login: async () => { fatal += 1; throw Object.assign(new Error('bad'), { code: 'TokenInvalid' }); } }, 'tok', {
+      attempts: 5,
+      baseDelayMs: 1,
+      sleep: async () => {},
+    }),
+    /bad/,
+  );
+  assert.equal(fatal, 1, 'a rejected token is tried once');
+});
+
+test('main signs in through the retrying login', () => {
+  // The retry must be the path `main` actually takes, not a helper nothing calls.
+  // Scoped to main's body: loginWithRetry is the one place the bare login belongs.
+  const bot = source('bot/index.js');
+  const mainBody = bot.slice(bot.indexOf('export async function main'));
+  assert.match(mainBody, /await loginWithRetry\(client, token\)/);
+  assert.ok(!mainBody.includes('client.login(token)'), 'main does not call the bare login');
+});
+
 test('the org-wide embed counts projects and names the largest consumers', () => {
   const embed = buildAlertEmbed({
     projectName: 'All projects',

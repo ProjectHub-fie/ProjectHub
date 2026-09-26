@@ -482,6 +482,53 @@ export function missingBotEnvironment(env = process.env) {
   });
 }
 
+const LOGIN_ATTEMPTS = 5;
+const LOGIN_BACKOFF_MS = 5_000;
+
+/**
+ * Whether a login failure is permanent.
+ *
+ * A rejected token or an intent the application has not enabled will fail
+ * identically on every retry, so retrying only delays the operator seeing the
+ * real reason. Everything else — DNS not up yet, a refused connection, a
+ * timeout — is what a host that starts the process before its network does.
+ */
+export function isFatalLoginError(error) {
+  const code = String(error?.code || '');
+  if (/TokenInvalid|TokenMissing|InvalidIntents|DisallowedIntents/i.test(code)) return true;
+  return /invalid token|tokeninvalid|disallowed intents|used disallowed/i.test(String(error?.message || ''));
+}
+
+/**
+ * Signs in, retrying transient failures with exponential backoff.
+ *
+ * discord.js reconnects on its own once the session exists; this covers the
+ * first handshake, which is the one a host fails when the process comes up
+ * before networking. A permanent failure is rethrown immediately.
+ */
+export async function loginWithRetry(
+  client,
+  token,
+  { attempts = LOGIN_ATTEMPTS, baseDelayMs = LOGIN_BACKOFF_MS, sleep = (ms) => new Promise((r) => setTimeout(r, ms)) } = {},
+) {
+  let lastError;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await client.login(token);
+    } catch (error) {
+      lastError = error;
+      if (isFatalLoginError(error)) throw error;
+      if (attempt === attempts) break;
+      const delay = baseDelayMs * 2 ** (attempt - 1);
+      console.warn(
+        `[bot] login attempt ${attempt}/${attempts} failed (${error.message}); retrying in ${delay / 1000}s`,
+      );
+      await sleep(delay);
+    }
+  }
+  throw lastError;
+}
+
 export async function main() {
   const { token, source } = resolveDiscordToken();
   const missing = missingBotEnvironment();
@@ -525,7 +572,7 @@ export async function main() {
   });
 
   console.log('[bot] connecting to Discord...');
-  await client.login(token);
+  await loginWithRetry(client, token);
   console.log('[bot] login resolved, gateway handshake complete');
 
   const tick = async () => {

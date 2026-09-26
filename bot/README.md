@@ -80,6 +80,10 @@ What each line tells you when something is wrong:
   start command and whether it crashed before `main()`.
 - **`missing required environment variable: ...`** — exactly which one is named.
 - **`token source: (none)`** — no token under any of the five names.
+- **`login attempt N/5 failed ...; retrying`** — a transient failure, usually the
+  host starting the process before its network is up. Five attempts with
+  exponential backoff; a bad token or a disabled intent is not retried, because
+  it would fail identically every time.
 - **Startup prints, then nothing** — the process is running but the gateway
   handshake did not finish; the failure follows on the next line.
 - **`[bot] shard N disconnected (code 4004)`** — the token is wrong, or another
