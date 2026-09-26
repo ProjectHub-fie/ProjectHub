@@ -12,9 +12,9 @@
  * sidebar.
  */
 import express from 'express';
-import { getBotSettingsForDashboard, saveBotSettings, getAlertState, getBotLiveness } from './bot-store.js';
-import { isValidWebhookUrl, isSnowflake, evaluateUsage, formatQuantity } from './bot-logic.js';
-import { fetchUsage, fetchProjectNames, projectScopeFromEnv, orgIdFromEnv, isNeonConfigured } from './neon-usage.js';
+import { getBotSettingsForDashboard, saveBotSettings, getAlertState, getBotLiveness } from '../../bot/lib/bot-store.js';
+import { isValidWebhookUrl, isSnowflake, evaluateUsage, formatQuantity } from '../../bot/lib/bot-logic.js';
+import { fetchUsage, fetchProjectNames, projectScopeFromEnv, orgIdFromEnv, isNeonConfigured } from '../../bot/lib/neon-usage.js';
 
 /**
  * Builds the bot router.

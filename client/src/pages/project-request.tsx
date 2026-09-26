@@ -17,7 +17,6 @@ import { apiRequest } from "@/lib/queryClient";
 import { Plus, Clock, User, Settings, Camera } from "lucide-react";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { formatStatusWithEmoji, getStatusDisplay } from "@/lib/utils";
-import { EmojiTest } from "@/components/EmojiTest";
 
 const projectRequestSchema = z.object({
   title: z.string().min(1, "Project title is required"),
@@ -326,11 +325,6 @@ export default function ProjectRequestPage() {
         )}
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-          {/* Emoji Test - Temporary */}
-          <div className="lg:col-span-3 mb-6">
-            <EmojiTest />
-          </div>
-          
           {/* Project Request Form */}
           <Card className="lg:col-span-2 bg-slate-800 border-slate-700">
             <CardHeader>
@@ -463,13 +457,6 @@ export default function ProjectRequestPage() {
                 <div className="space-y-4">
                   {Array.isArray(userRequests) && userRequests.map((request: any) => {
                     const statusInfo = getStatusDisplay(request.status);
-                    console.log('Debug - Processing request:', {
-                      id: request.id,
-                      title: request.title,
-                      rawStatus: request.status,
-                      statusInfo: statusInfo,
-                      formattedStatus: formatStatusWithEmoji(request.status)
-                    });
                     return (
                       <div key={request.id} className="p-4 bg-slate-700 rounded-lg">
                         <h4 className="font-medium text-white mb-2" data-testid={`request-title-${request.id}`}>{request.title}</h4>
@@ -482,9 +469,7 @@ export default function ProjectRequestPage() {
                             className={`text-xs ${statusInfo.color}`}
                             data-testid={`request-status-${request.id}`}
                           >
-                            <span className="debug-status">
-                              Status: {request.status} | Formatted: {formatStatusWithEmoji(request.status)}
-                            </span>
+                            {formatStatusWithEmoji(request.status)}
                           </Badge>
                           <span className="text-xs text-slate-500">
                             {new Date(request.createdAt).toLocaleDateString()}
