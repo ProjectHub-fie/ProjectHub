@@ -39,6 +39,14 @@ npm install
 npm run bot        # or: npm run bot:dev, to load .env
 ```
 
+The process signs in and then stamps `bot_settings.last_seen_at` every minute.
+That heartbeat is what the dashboard's **Bot process** tile reads: it is the only
+way the web deployment can tell a running bot from a configured-but-dead one,
+because `DISCORD_BOT_TOKEN` lives in the web environment too. If the tile says
+the bot is not running while the token is set, the process on the bot host has
+stopped or never started — check that host's logs for the `[bot] signed in as ...`
+line.
+
 ## WispByte setup
 
 The web app stays on Vercel and the persistent Discord bot runs on WispByte.

@@ -161,3 +161,36 @@ test('both backends treat the admin Discord handshake as a link, never a sign-in
   assert.match(serverless, /discord_id = NULL/);
   assert.match(express, /setAdminDiscordId\(req\.session!\.adminId, null\)/);
 });
+
+test('both backends log why an admin Discord link failed, without logging a secret', () => {
+  const serverless = source('api/admin/index.js');
+  const express = source('server/admin-routes.ts');
+
+  for (const [label, body] of [['serverless', serverless], ['express', express]]) {
+    // The public flow has always logged every handshake outcome. The admin flow
+    // did not, so the only clue was the toast — this pins the diagnostic.
+    assert.match(body, /logAdminDiscord/, `${label} logs the admin Discord handshake`);
+    assert.match(body, /\[admin-discord\]/, `${label} uses a greppable prefix`);
+
+    const callback = body.slice(
+      body.indexOf('/api/admin/auth/discord/callback'),
+      body.indexOf('/api/admin/auth/discord/link'),
+    );
+    assert.ok(callback.length > 0, `${label} has the Discord callback`);
+
+    // Discord's own error body is what separates a bad secret from a mismatched
+    // redirect URI, so it has to reach the log.
+    assert.match(callback, /detail\.error_description/, `${label} logs Discord's error_description`);
+    assert.match(callback, /tokenRes\.status/, `${label} logs the token endpoint status`);
+
+    // A refused consent arrives as ?error=, not as a missing code, and would
+    // otherwise be reported as the much less useful `missing_code`.
+    assert.match(callback, /req\.query\.error/, `${label} surfaces Discord's own error parameter`);
+
+    // The token request carries client_secret; only the parsed error body and
+    // identifiers may be logged.
+    assert.ok(!/logAdminDiscord\([^)]*clientSecret/.test(body), `${label} never logs the client secret`);
+    assert.ok(!/logAdminDiscord\([^)]*verifier/.test(body), `${label} never logs the PKCE verifier`);
+    assert.ok(!/logAdminDiscord\([^)]*accessToken/.test(body), `${label} never logs the access token`);
+  }
+});

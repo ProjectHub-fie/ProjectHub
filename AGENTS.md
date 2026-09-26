@@ -232,6 +232,33 @@ a handshake without one. Override it with `DISCORD_CALLBACK_URL` (public client)
 or `DISCORD_ADMIN_CALLBACK_URL` (admin dashboard) if the two are registered
 separately in the Discord application.
 
+Admin linking needs exactly these four, and there is no default for any of them:
+
+| Variable | Why |
+| --- | --- |
+| `DISCORD_CLIENT_ID` | the Discord application, shared with the public flow |
+| `DISCORD_CLIENT_SECRET` | exchanged at the token endpoint; a mismatch is `invalid_client` |
+| `APP_ORIGIN` | the public origin; `localhost` is never allow-listed by Discord |
+| `DISCORD_ADMIN_CALLBACK_URL` | only to override the derived admin callback URL |
+
+`APP_ORIGIN` must be the origin the browser actually uses, because the derived
+callback is `${APP_ORIGIN}/api/admin/auth/discord/callback` and Discord compares
+that string against its allow-list twice — once on `/authorize`, and again on the
+token exchange, where a mismatch is `invalid_grant` even though the handshake
+started fine. Register both callbacks in the application:
+
+```
+${APP_ORIGIN}/api/auth/discord/callback        client sign-in
+${APP_ORIGIN}/api/admin/auth/discord/callback  admin linking
+```
+
+Both backends log every outcome as `[admin-discord] start ...` /
+`[admin-discord] callback ...` with a `reason` and, on a token failure, Discord's
+own `error` and `error_description`. That line is the diagnosis: `invalid_client`
+is the secret, `invalid_grant` is the redirect URI or a reused code, and
+`missing_verifier` is a handshake begun in another tab. No secret, token, code or
+cookie is ever logged.
+
 A password account and a Discord login that only share an email are two
 different identities. Signing in with Discord when the email already belongs to
 a password account is refused as `account_exists_requires_link`: silently
@@ -339,6 +366,17 @@ the alert cannot be aimed at a different set of projects by a dashboard write.
 first and `users.discord_id` second, because the same Discord account can be
 linked to either portal. An account linked to both is reported as both. A client
 whose account is blocked is reported as blocked, never as unlinked.
+
+The dashboard's "Bot process" tile is a heartbeat, not a token check. The web
+deployment's environment can carry `DISCORD_BOT_TOKEN` while the bot host is
+dead, so `botTokenConfigured` stays true in exactly the state where nothing
+answers `&dev`. The bot process stamps `bot_settings.last_seen_at` (added by
+`ensureBotSchema` for deployments that predate it) on its own one-minute
+interval — deliberately not the usage poll's, whose 15-minute default would look
+stale against the five-minute `BOT_STALE_AFTER_MS` threshold. `getBotLiveness`
+turns that into `running`, and a bot that has never started reports
+`lastSeenAt: null` rather than an arbitrary age. The bot host is separate, so
+this is the only way the web side can observe it.
 
 The usage alert reads Neon's `consumption_history/v2` endpoint. The scope is
 every project in the organization by default, because that is what an

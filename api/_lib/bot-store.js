@@ -59,6 +59,11 @@ export function ensureBotSchema() {
           updated_at timestamp DEFAULT now() NOT NULL
         )
       `;
+      // Written by the bot process on every poll. Without it the dashboard could
+      // only report that a token is configured in the web deployment's
+      // environment, which stays true even when the bot process is dead — the
+      // exact state where the dashboard looked healthy and the bot was silent.
+      await sql`ALTER TABLE bot_settings ADD COLUMN IF NOT EXISTS last_seen_at timestamp`;
     } catch (error) {
       schemaReady = null;
       throw error;
@@ -115,6 +120,7 @@ export async function getBotSettings() {
     transferLimitBytes: toNumber(row.transfer_limit_bytes),
     projectName: row.project_name || null,
     updatedAt: row.updated_at,
+    lastSeenAt: row.last_seen_at || null,
   };
 }
 
@@ -131,6 +137,7 @@ function defaults() {
     transferLimitBytes: 5368709120,
     projectName: null,
     updatedAt: null,
+    lastSeenAt: null,
   };
 }
 
@@ -193,6 +200,47 @@ export async function saveBotSettings(fields = {}, updatedBy = null) {
 }
 
 /* -------------------------------------------------------------- alert state */
+
+/**
+ * The bot process's heartbeat.
+ *
+ * The web deployment and the bot run in different environments, so the web side
+ * cannot observe the bot's process directly. The bot stamps this on every poll
+ * and the dashboard reads it back, which is what turns "the token is set" into
+ * "the bot actually reached the database recently".
+ */
+export async function recordBotHeartbeat() {
+  await ensureBotSchema();
+  const sql = db();
+  await sql`
+    INSERT INTO bot_settings (id, last_seen_at)
+    VALUES ('default', now())
+    ON CONFLICT (id) DO UPDATE SET last_seen_at = now()
+  `;
+}
+
+/** How long without a heartbeat before the bot is reported as not running. */
+export const BOT_STALE_AFTER_MS = 5 * 60 * 1000;
+
+/**
+ * Whether the bot process is alive, derived from its last heartbeat.
+ *
+ * Returns `null` when no heartbeat has ever been recorded, which is different
+ * from "stale": a bot that has never started has no last-seen time, and the
+ * dashboard should say so rather than showing an arbitrary age.
+ */
+export async function getBotLiveness() {
+  const settings = await getBotSettings();
+  const lastSeenAt = settings.lastSeenAt;
+  if (!lastSeenAt) return { running: false, lastSeenAt: null, staleAfterMs: BOT_STALE_AFTER_MS };
+  const ageMs = Date.now() - new Date(lastSeenAt).getTime();
+  return {
+    running: ageMs < BOT_STALE_AFTER_MS,
+    lastSeenAt,
+    ageMs,
+    staleAfterMs: BOT_STALE_AFTER_MS,
+  };
+}
 
 /** The last-alerted timestamps, keyed by metric. Empty when nothing has fired. */
 export async function getAlertState() {

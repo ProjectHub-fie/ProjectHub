@@ -38,10 +38,13 @@ import {
   formatPercent,
   isValidWebhookUrl,
 } from '../api/_lib/bot-logic.js';
-import { getBotSettings, getAlertState, recordAlertTimes, resolveDiscordIdentity } from '../api/_lib/bot-store.js';
+import { getBotSettings, getAlertState, recordAlertTimes, resolveDiscordIdentity, recordBotHeartbeat } from '../api/_lib/bot-store.js';
 import { fetchUsage, fetchProjectNames, projectScopeFromEnv, orgIdFromEnv, isNeonConfigured } from '../api/_lib/neon-usage.js';
 
 const POLL_INTERVAL_MS = Number(process.env.BOT_POLL_INTERVAL_MINUTES || 15) * 60 * 1000;
+// Well under BOT_STALE_AFTER_MS so a transient database blip does not flip the
+// dashboard to "not running".
+const HEARTBEAT_INTERVAL_MS = 60 * 1000;
 const SETTINGS_REFRESH_MS = 60 * 1000;
 
 let settings = null;
@@ -348,9 +351,23 @@ export async function main() {
     }
   };
 
+  // The heartbeat is on its own, faster interval: it answers "is the process
+  // alive", so it must not inherit the usage poll's cadence — a 15-minute poll
+  // would look stale against the 5-minute threshold even while running.
+  const beat = async () => {
+    try {
+      await recordBotHeartbeat();
+    } catch (error) {
+      console.error('[bot] heartbeat failed:', error.message);
+    }
+  };
+
   // Give the gateway a moment to be ready before the first poll.
   setTimeout(tick, 10_000);
   setInterval(tick, POLL_INTERVAL_MS);
+
+  await beat();
+  setInterval(beat, HEARTBEAT_INTERVAL_MS);
 
   const shutdown = async () => {
     console.log('[bot] shutting down');

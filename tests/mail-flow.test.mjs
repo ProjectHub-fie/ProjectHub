@@ -265,6 +265,55 @@ test('a reply joins the existing thread instead of starting a new one', { skip: 
   assert.ok(row.messageCount >= 2, 'the list row reports the thread message count');
 });
 
+test('thread order does not depend on the caller-supplied sent_at clock', { skip: !hasDatabase }, async () => {
+  const { ingestMessage, getThreadMessages } = await import('../api/_lib/mail-store.js');
+
+  const root = await ingestMessage({
+    providerMessageId: `${prefix}-clock-root`,
+    direction: 'inbound',
+    fromEmail: `${prefix}-clock-client@example.test`,
+    to: [`${prefix}-clock-owner@example.test`],
+    subject: `${prefix} Clock topic`,
+    bodyText: 'Arrived with no provider timestamp',
+    provider: 'resend',
+  });
+
+  // The reply carries a `sent_at` an hour in the past, which is what a skewed
+  // app-server clock produces. Ordering on COALESCE(sent_at, created_at) put
+  // this message *before* a root that was ingested later, so the thread read
+  // back to front. `created_at` is the only clock the database assigns itself.
+  await ingestMessage({
+    providerMessageId: `${prefix}-clock-reply`,
+    threadId: root.threadId,
+    direction: 'outbound',
+    status: 'sent',
+    fromEmail: `${prefix}-clock-owner@example.test`,
+    to: [`${prefix}-clock-client@example.test`],
+    subject: `Re: ${prefix} Clock topic`,
+    bodyText: 'Sent an hour ago by the caller clock',
+    provider: 'mailjet',
+    sentAt: new Date(Date.now() - 3600_000),
+  });
+
+  const thread = await getThreadMessages(root.threadId);
+  assert.equal(thread.messages.length, 2);
+  assert.equal(
+    thread.messages[0].direction,
+    'inbound',
+    'the later-ingested message is last even when its sent_at is older',
+  );
+  assert.equal(thread.messages[1].direction, 'outbound');
+
+  // The flat list must agree with the thread view.
+  const { listMessages } = await import('../api/_lib/mail-store.js');
+  const list = await listMessages({ view: 'inbox', page: 1, pageSize: 100 });
+  const outboundIndex = list.rows.findIndex((row) => row.providerMessageId === `${prefix}-clock-reply`);
+  const rootIndex = list.rows.findIndex((row) => row.providerMessageId === `${prefix}-clock-root`);
+  if (outboundIndex !== -1 && rootIndex !== -1) {
+    assert.ok(rootIndex < outboundIndex, 'the newer row sorts first in the list');
+  }
+});
+
 /* --------------------------------------------------------- flags and views */
 
 test('read, star and trash flags survive a round trip', { skip: !hasDatabase }, async () => {

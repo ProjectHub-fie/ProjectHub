@@ -328,6 +328,17 @@ function buildAdminRouter() {
 
   const isAbsoluteRedirect = (uri) => /^https?:\/\/[^/]+/i.test(uri || '');
 
+  // The public flow logs every handshake outcome; the admin flow used to
+  // redirect in silence, so the only clue to a rotated secret or an
+  // unlisted callback URL was the toast text. Only non-secret identifiers
+  // are emitted — never a token, secret, code or cookie.
+  const logAdminDiscord = (event, fields = {}) => {
+    const parts = Object.entries(fields)
+      .filter(([, value]) => value !== undefined)
+      .map(([key, value]) => `${key}=${typeof value === 'string' ? value : JSON.stringify(value)}`);
+    console.log(`[admin-discord] ${event}${parts.length ? ` ${parts.join(' ')}` : ''}`);
+  };
+
   /** Signs the OAuth state with SESSION_SECRET so the callback can trust it. */
   const signAdminState = (value) =>
     `${Buffer.from(value).toString('base64url')}.${crypto
@@ -358,10 +369,12 @@ function buildAdminRouter() {
   router.get('/api/admin/auth/discord', (req, res) => {
     const clientId = process.env.DISCORD_CLIENT_ID;
     if (!clientId) {
+      logAdminDiscord('start', { outcome: 'not_configured' });
       return res.redirect('/pbad/integrations?discord=error&reason=not_configured');
     }
     const redirectUri = adminDiscordRedirectUri();
     if (!isAbsoluteRedirect(redirectUri)) {
+      logAdminDiscord('start', { outcome: 'redirect_not_configured', redirectUri: redirectUri || '(empty)' });
       return res.redirect('/pbad/integrations?discord=error&reason=redirect_not_configured');
     }
 
@@ -370,6 +383,7 @@ function buildAdminRouter() {
     // Discord identity to the account that initiated it, and a Discord account
     // can never use this route to obtain a dashboard session.
     if (!req.session?.isAdminLoggedIn) {
+      logAdminDiscord('start', { outcome: 'not_authenticated' });
       return res.redirect('/pbad/login?unauthorized=1');
     }
 
@@ -410,7 +424,10 @@ function buildAdminRouter() {
   });
 
   router.get('/api/admin/auth/discord/callback', async (req, res) => {
-    const fail = (reason) => res.redirect(`/pbad/integrations?discord=error&reason=${encodeURIComponent(reason)}`);
+    const fail = (reason, detail) => {
+      logAdminDiscord('callback', { outcome: 'failed', reason, detail });
+      return res.redirect(`/pbad/integrations?discord=error&reason=${encodeURIComponent(reason)}`);
+    };
 
     const cookies = parseCookies(req.headers.cookie || '');
     const { code, state: queryState } = req.query;
@@ -418,14 +435,32 @@ function buildAdminRouter() {
     const verifier = cookies.admin_discord_verifier;
     const stateData = readAdminState(state);
 
+    logAdminDiscord('callback', { outcome: 'reached', code: Boolean(code) });
+
+    // Discord reports a refused consent (or a bad client) here rather than by
+    // withholding the code, so surface its own error before anything else.
+    if (req.query.error) {
+      return fail(String(req.query.error), String(req.query.error_description || ''));
+    }
+
     if (!code) return fail('missing_code');
-    if (!stateData) return fail('invalid_state');
-    if (stateData.mode !== 'link') return fail('invalid_state');
-    if (!verifier) return fail('missing_verifier');
+    if (!stateData) return fail('invalid_state', 'state missing, unsigned, or expired');
+    if (stateData.mode !== 'link') return fail('invalid_state', `mode=${stateData.mode || 'absent'}`);
+    if (!verifier) return fail('missing_verifier', 'PKCE cookie absent: linking began in another browser or tab');
 
     const clientId = process.env.DISCORD_CLIENT_ID;
     const clientSecret = process.env.DISCORD_CLIENT_SECRET;
-    if (!clientId || !clientSecret) return fail('not_configured');
+    if (!clientId || !clientSecret) {
+      return fail('not_configured', `clientId=${Boolean(clientId)} clientSecret=${Boolean(clientSecret)}`);
+    }
+
+    // The token exchange repeats redirect_uri and Discord compares it to the
+    // one sent to /authorize, so an unset or mismatched value fails here even
+    // though the handshake itself started fine.
+    const redirectUri = adminDiscordRedirectUri();
+    if (!isAbsoluteRedirect(redirectUri)) {
+      return fail('redirect_not_configured', `resolved redirect_uri=${redirectUri || '(empty)'}`);
+    }
 
     try {
       const tokenRes = await fetch('https://discord.com/api/v10/oauth2/token', {
@@ -436,11 +471,20 @@ function buildAdminRouter() {
           client_secret: clientSecret,
           grant_type: 'authorization_code',
           code: String(code),
-          redirect_uri: adminDiscordRedirectUri(),
+          redirect_uri: redirectUri,
           code_verifier: verifier,
         }),
       });
-      if (!tokenRes.ok) return fail('token_exchange');
+      if (!tokenRes.ok) {
+        // Discord's error body separates a bad secret (`invalid_client`) from a
+        // mismatched redirect URI (`invalid_grant`) and a bad verifier. The
+        // request body is never logged: it carries client_secret.
+        const detail = await tokenRes.json().catch(() => ({}));
+        return fail(
+          'token_exchange',
+          `status=${tokenRes.status} error=${detail.error || 'n/a'} description=${detail.error_description || 'n/a'}`,
+        );
+      }
       const { access_token: accessToken } = await tokenRes.json();
 
       const profileRes = await fetch('https://discord.com/api/v10/users/@me', {

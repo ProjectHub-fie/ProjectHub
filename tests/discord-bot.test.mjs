@@ -504,6 +504,52 @@ test('the bot alerts on the organization scope, not a single project', () => {
   assert.match(bot, /projectCount/);
 });
 
+/* -------------------------------------------------------- bot liveness */
+
+test('the bot process writes a heartbeat and the dashboard reads it back', () => {
+  const store = source('api/_lib/bot-store.js');
+  const bot = source('bot/index.js');
+
+  // The heartbeat column is added by the same lazy schema step as the tables,
+  // so a deployment that predates it picks it up without a manual migration.
+  assert.match(store, /ALTER TABLE bot_settings ADD COLUMN IF NOT EXISTS last_seen_at/);
+  assert.match(store, /export async function recordBotHeartbeat/);
+  assert.match(store, /export async function getBotLiveness/);
+  // The writer stamps the database clock, not the caller's.
+  assert.match(store, /VALUES \('default', now\(\)\)/);
+  assert.match(store, /ON CONFLICT \(id\) DO UPDATE SET last_seen_at = now\(\)/);
+
+  // The bot process must actually call it, on its own interval.
+  assert.match(bot, /recordBotHeartbeat\(\)/);
+  assert.match(bot, /setInterval\(beat, HEARTBEAT_INTERVAL_MS\)/);
+});
+
+test('a configured token is not treated as a running bot', () => {
+  // `botTokenConfigured` is read from the web deployment's environment, so it
+  // stays true while the bot host is down. Liveness has to be separate or the
+  // dashboard reports a healthy bot that answers nothing.
+  const routes = source('api/_lib/bot-routes.js');
+  assert.match(routes, /const liveness = await getBotLiveness\(\)/);
+  assert.match(routes, /running: liveness\.running/);
+  assert.match(routes, /lastSeenAt: liveness\.lastSeenAt/);
+
+  const page = source('client/src/pages/admin-bot.tsx');
+  assert.match(page, /ok=\{Boolean\(status\?\.running\)\}/);
+  assert.match(page, /Bot process/);
+  // And the page must say what to do about a dead process.
+  assert.match(page, /npm run bot/);
+});
+
+test('the heartbeat threshold is well above the heartbeat interval', () => {
+  // A 15-minute usage poll must not make a live bot look stale, so the heartbeat
+  // is on its own interval rather than sharing the poll's cadence.
+  const store = source('api/_lib/bot-store.js');
+  const bot = source('bot/index.js');
+  const staleMs = Number(/BOT_STALE_AFTER_MS = ([\d\s*]+);/.exec(store)[1].replace(/\s|\*/g, ''));
+  const beatMs = Number(/HEARTBEAT_INTERVAL_MS = ([\d\s*]+);/.exec(bot)[1].replace(/\s|\*/g, ''));
+  assert.ok(staleMs >= beatMs * 3, `stale ${staleMs}ms should allow at least 3 missed beats of ${beatMs}ms`);
+});
+
 test('the org-wide embed counts projects and names the largest consumers', () => {
   const embed = buildAlertEmbed({
     projectName: 'All projects',

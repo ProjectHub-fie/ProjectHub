@@ -12,7 +12,7 @@
  * sidebar.
  */
 import express from 'express';
-import { getBotSettingsForDashboard, saveBotSettings, getAlertState } from './bot-store.js';
+import { getBotSettingsForDashboard, saveBotSettings, getAlertState, getBotLiveness } from './bot-store.js';
 import { isValidWebhookUrl, isSnowflake, evaluateUsage, formatQuantity } from './bot-logic.js';
 import { fetchUsage, fetchProjectNames, projectScopeFromEnv, orgIdFromEnv, isNeonConfigured } from './neon-usage.js';
 
@@ -91,11 +91,19 @@ export function buildBotRouter({ requireAuth, requireRole }) {
   router.get('/api/admin/bot/status', ...botGuard, async (_req, res) => {
     try {
       const settings = await getBotSettingsForDashboard();
+      // Whether the process is actually alive, not merely configured. The token
+      // presence below is read from the *web* deployment's environment, so it
+      // stays true when the bot host is down; the heartbeat is written by the
+      // bot process itself and is what tells the two apart.
+      const liveness = await getBotLiveness();
       res.json({
         enabled: settings.enabled,
         prefix: settings.prefix,
         botTokenConfigured: settings.botTokenConfigured,
         neonKeyConfigured: settings.neonKeyConfigured,
+        running: liveness.running,
+        lastSeenAt: liveness.lastSeenAt,
+        staleAfterMs: liveness.staleAfterMs,
         // The scope is every project unless the environment narrows it, so this
         // reports which mode is active rather than demanding a single id.
         scope: projectScopeFromEnv() ? 'projects' : 'org',
