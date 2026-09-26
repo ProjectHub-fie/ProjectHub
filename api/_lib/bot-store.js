@@ -91,7 +91,7 @@ export async function getBotSettingsForDashboard() {
     updatedAt: settings.updatedAt,
     // The bot token and Neon API key are never stored here; they are environment
     // configuration, so the dashboard can only report whether they are present.
-    botTokenConfigured: Boolean(process.env.DISCORD_BOT_TOKEN),
+    botTokenConfigured: Boolean(process.env.DISCORD_BOT_TOKEN || process.env.BOT_TOKEN),
     neonKeyConfigured: Boolean(process.env.NEON_API_KEY),
   };
 }

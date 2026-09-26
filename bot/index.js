@@ -24,6 +24,8 @@
  * loaded from the database or written to it.
  */
 import 'dotenv/config';
+import { fileURLToPath } from 'node:url';
+import { resolve } from 'node:path';
 import { Client, GatewayIntentBits, Partials, EmbedBuilder, Events } from 'discord.js';
 import {
   BOT_PREFIX,
@@ -307,11 +309,24 @@ export function summarizeUsage(evaluation) {
 
 /* ------------------------------------------------------------------- start */
 
-async function main() {
-  const token = process.env.DISCORD_BOT_TOKEN;
-  if (!token) {
-    console.error('[bot] DISCORD_BOT_TOKEN is not set; refusing to start.');
-    process.exit(1);
+export function botTokenFromEnv(env = process.env) {
+  return String(env.DISCORD_BOT_TOKEN || env.BOT_TOKEN || '').trim();
+}
+
+export function missingBotEnvironment(env = process.env) {
+  return ['DISCORD_BOT_TOKEN', 'DATABASE_URL'].filter((name) => {
+    if (name === 'DISCORD_BOT_TOKEN') return !botTokenFromEnv(env);
+    return !String(env[name] || '').trim();
+  });
+}
+
+export async function main() {
+  const token = botTokenFromEnv();
+  const missing = missingBotEnvironment();
+  if (missing.length) {
+    throw new Error(
+      `missing required environment variable${missing.length === 1 ? '' : 's'}: ${missing.join(', ')}`,
+    );
   }
 
   const client = createClient();
@@ -346,9 +361,10 @@ async function main() {
   process.on('SIGTERM', shutdown);
 }
 
-// Only start when executed directly, so importing this module in a test does not
-// open a gateway connection.
-if (process.argv[1] && process.argv[1].endsWith('bot/index.js')) {
+// Only start when executed directly, so importing this module in a test or
+// through the WispByte root launcher does not open two gateway connections.
+const invokedFile = process.argv[1] ? resolve(process.argv[1]) : '';
+if (invokedFile === fileURLToPath(import.meta.url)) {
   main().catch((error) => {
     console.error('[bot] fatal:', error);
     process.exit(1);
