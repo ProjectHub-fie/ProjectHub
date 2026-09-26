@@ -362,6 +362,27 @@ project scope (`NEON_PROJECT_IDS`, or the single `NEON_PROJECT_ID`, plus an
 optional `NEON_ORG_ID`) is read from the environment rather than the database so
 the alert cannot be aimed at a different set of projects by a dashboard write.
 
+The bot token is read from the first of `DISCORD_BOT_TOKEN`, `BOT_TOKEN`,
+`DISCORD_TOKEN`, `TOKEN`, `CLIENT_TOKEN` that is set, and the boot banner names
+which one won. Five names looks like more than it is: hosts label their secret
+fields differently, and a bot that refuses to boot over a naming difference is a
+needless outage. `DISCORD_BOT_TOKEN` is still the documented name because it
+matches the dashboard's status check. `resolveDiscordToken` returns the source
+alongside the value for exactly this reason — with five candidates, "the token is
+set" does not identify a host that injected the wrong variable.
+
+`bot/index.js` prints its startup sequence and every gateway transition
+(`ShardReady`, `ShardReconnecting`, `ShardResume`, `ShardDisconnect`,
+`ShardError`), because "the bot is silent" is otherwise indistinguishable from
+"the process never started". Verbose per-event detail goes through `debug` under
+`bot:*`, enabled with `BOT_DEBUG` or the standard `DEBUG`. The token is stripped
+from that output by `redactToken`, which matches the token shape as well as the
+configured value, so a token arriving under a name this process never read cannot
+leak; `guardConsole` wraps the console methods so discord.js's own warnings and
+stack traces are covered too. discord.js already censors the signature in the
+`Provided token:` line it emits, so this is a second layer rather than the only
+one.
+
 `&dev` resolves the caller's Discord id against `admin_credentials.discord_id`
 first and `users.discord_id` second, because the same Discord account can be
 linked to either portal. An account linked to both is reported as both. A client
