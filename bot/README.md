@@ -26,7 +26,15 @@ halves is in `api/_lib`, so there is one definition of the alert rules.
 | `NEON_PROJECT_ID` | no | A single project id, for when `NEON_PROJECT_IDS` is not set. Both unset means every project. |
 | `NEON_ORG_ID` | no | Restricts an organization-wide read to one organization. |
 | `BOT_POLL_INTERVAL_MINUTES` | no | How often to check usage. Default `15`. |
+| `BOT_DEBUG` | no | Debug namespaces to enable, e.g. `bot:*`. `DEBUG` works the same way. |
 | `MAIL_DATABASE_URL` | no | Only if the mailbox was split onto its own database. |
+
+The token is read from the first of these that is set, in this order:
+`DISCORD_BOT_TOKEN`, `BOT_TOKEN`, `DISCORD_TOKEN`, `TOKEN`, `CLIENT_TOKEN`. The
+aliases exist because hosts label their secret fields differently, and a bot that
+refuses to boot over a naming difference is a needless outage. `DISCORD_BOT_TOKEN`
+is still the recommended name — it matches the dashboard's status check and the
+rest of this project. The boot banner names which variable won.
 
 The bot token and the Neon key are never stored in the database and never
 returned by an API endpoint. The Discord webhook URL is different: it is a
@@ -38,6 +46,70 @@ credential too, so it is stored but masked when the dashboard reads it back.
 npm install
 npm run bot        # or: npm run bot:dev, to load .env
 ```
+
+The process signs in and then stamps `bot_settings.last_seen_at` every minute.
+That heartbeat is what the dashboard's **Bot process** tile reads: it is the only
+way the web deployment can tell a running bot from a configured-but-dead one,
+because `DISCORD_BOT_TOKEN` lives in the web environment too. If the tile says
+the bot is not running while the token is set, the process on the bot host has
+stopped or never started — check that host's logs for the `[bot] signed in as ...`
+line.
+
+## Reading the logs
+
+The startup sequence and every gateway transition print to the console, because
+"the bot is silent" is otherwise indistinguishable from "the process never
+started". A healthy start looks like this:
+
+```text
+[bot] ---- startup ----
+[bot] token source: DISCORD_BOT_TOKEN
+[bot] intents: Guilds, GuildMembers, GuildMessages, DirectMessages, MessageContent
+[bot] usage poll every 15m, heartbeat every 60s
+[bot] connecting to Discord...
+[bot] login resolved, gateway handshake complete
+[bot] shard 0 ready
+[bot] signed in as ProjectHub#4913 (id ...)
+[bot] in 2 guild(s): Testing server (...), ProjectHub.inc (...)
+[bot] gateway ready, ws ping 42ms
+```
+
+What each line tells you when something is wrong:
+
+- **No `[bot] ---- startup ----`** — the process never ran. Check the host's
+  start command and whether it crashed before `main()`.
+- **`missing required environment variable: ...`** — exactly which one is named.
+- **`token source: (none)`** — no token under any of the five names.
+- **`login attempt N/5 failed ...; retrying`** — a transient failure, usually the
+  host starting the process before its network is up. Five attempts with
+  exponential backoff; a bad token or a disabled intent is not retried, because
+  it would fail identically every time.
+- **Startup prints, then nothing** — the process is running but the gateway
+  handshake did not finish; the failure follows on the next line.
+- **`[bot] shard N disconnected (code 4004)`** — the token is wrong, or another
+  process signed in with the same token and displaced this session. Discord
+  allows only one gateway session per token.
+- **`[bot] gateway warning: ...`** — discord.js rejected something about the
+  connection, usually a privileged intent that is not enabled for the
+  application. See below.
+
+Set `BOT_DEBUG=bot:*` (or `DEBUG=bot:*`) for the full gateway handshake, every
+message and every `&dev` resolution. Tokens are stripped from all log output,
+including the `Provided token:` line discord.js prints itself.
+
+## Privileged intents
+
+Three intents are *privileged*: they must be switched on for the application in
+the Discord Developer Portal, or `login()` fails outright. This bot requests
+`MessageContent` and `GuildMembers`:
+
+- **Message Content** is required for prefix commands. Without it `message.content`
+  arrives empty, every `&`-command is ignored, and nothing is logged — the
+  silent failure the boot banner is meant to catch.
+- **Server Members** makes `guild.memberCount` and member-scoped events
+  trustworthy.
+
+Both are on the **Bot** tab of the application in the developer portal.
 
 ## WispByte setup
 
@@ -71,21 +143,25 @@ helper.
    | `NEON_ORG_ID` | no | Optional Neon organization id |
    | `BOT_POLL_INTERVAL_MINUTES` | no | Optional interval, default `15` |
 
-   `BOT_TOKEN` is also accepted as an alias for `DISCORD_BOT_TOKEN`, but
-   `DISCORD_BOT_TOKEN` is recommended because it matches the dashboard status
-   check and the rest of this project.
+   `BOT_TOKEN`, `DISCORD_TOKEN`, `TOKEN` and `CLIENT_TOKEN` are also accepted,
+   in that order after `DISCORD_BOT_TOKEN`, but `DISCORD_BOT_TOKEN` is
+   recommended because it matches the dashboard status check and the rest of
+   this project. The boot banner names the variable that supplied the token.
 
-6. In the Discord Developer Portal, enable **Message Content Intent** for the
-   bot. Give it permission to view channels, read message history, send
-   messages, and embed links.
+6. In the Discord Developer Portal, enable **Message Content Intent** and
+   **Server Members Intent** for the bot. Give it permission to view channels,
+   read message history, send messages, and embed links.
 7. Start the server and check the console for:
 
    ```text
+   [bot] token source: DISCORD_BOT_TOKEN
    [bot] signed in as ...
+   [bot] in N guild(s): ...
    ```
 
    If the console says a required environment variable is missing, fix that
-   variable in WispByte's Startup settings and restart the server.
+   variable in WispByte's Startup settings and restart the server. Set
+   `BOT_DEBUG=bot:*` to see the full gateway handshake.
 
 Do not put the Discord token or database URL in a committed `.env` file. Use
 WispByte's environment-variable fields.

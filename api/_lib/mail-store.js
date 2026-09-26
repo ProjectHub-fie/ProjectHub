@@ -548,12 +548,18 @@ export async function listMessages({ view = 'inbox', filters = {}, page = 1, pag
     where = index === 0 ? sql`WHERE ${condition}` : sql`${where} AND ${condition}`;
   });
 
+  // Order by `created_at`, the one timestamp the database assigns itself.
+  // `sent_at` is supplied by the caller (the app server or the provider) and so
+  // comes from a different clock: ordering on `COALESCE(sent_at, created_at)`
+  // let a message with no provider timestamp sort after a later one that had
+  // one, whenever the app server's clock ran behind the database's. `id` breaks
+  // ties so the order is total.
   const rows = await sql`
     SELECT ${sql.unsafe(LIST_COLUMNS)}
     FROM mail_messages m
     JOIN mail_threads t ON t.id = m.thread_id
     ${where}
-    ORDER BY COALESCE(m.sent_at, m.created_at) DESC
+    ORDER BY m.created_at DESC, m.id DESC
     LIMIT ${limit} OFFSET ${offset}
   `;
 
@@ -682,7 +688,7 @@ export async function getThreadMessages(threadId) {
     FROM mail_messages m
     JOIN mail_threads t ON t.id = m.thread_id
     WHERE m.thread_id = ${threadId}::uuid AND m.is_trashed = false
-    ORDER BY COALESCE(m.sent_at, m.created_at) ASC
+    ORDER BY m.created_at ASC, m.id ASC
   `;
   const threadRows = await sql`
     SELECT id, subject, participants, is_starred, message_count FROM mail_threads WHERE id = ${threadId}::uuid LIMIT 1

@@ -258,6 +258,16 @@ export async function registerAdminRoutes(app: Express): Promise<Server> {
 
   const isAbsoluteRedirect = (uri: string) => /^https?:\/\/[^/]+/i.test(uri || '');
 
+  // Mirrors the log line in api/admin/index.js so the reason a handshake failed
+  // is visible in the dev server's console too, not only in the toast. Only
+  // non-secret identifiers are emitted.
+  const logAdminDiscord = (event: string, fields: Record<string, unknown> = {}) => {
+    const parts = Object.entries(fields)
+      .filter(([, value]) => value !== undefined)
+      .map(([key, value]) => `${key}=${typeof value === 'string' ? value : JSON.stringify(value)}`);
+    console.log(`[admin-discord] ${event}${parts.length ? ` ${parts.join(' ')}` : ''}`);
+  };
+
   const signAdminState = (value: string) => {
     const payload = Buffer.from(value).toString('base64url');
     const signature = crypto
@@ -289,16 +299,21 @@ export async function registerAdminRoutes(app: Express): Promise<Server> {
 
   app.get('/api/admin/auth/discord', (req: Request, res: any) => {
     const clientId = process.env.DISCORD_CLIENT_ID;
-    if (!clientId) return res.redirect('/pbad/integrations?discord=error&reason=not_configured');
+    if (!clientId) {
+      logAdminDiscord('start', { outcome: 'not_configured' });
+      return res.redirect('/pbad/integrations?discord=error&reason=not_configured');
+    }
 
     const redirectUri = adminDiscordRedirectUri();
     if (!isAbsoluteRedirect(redirectUri)) {
+      logAdminDiscord('start', { outcome: 'redirect_not_configured', redirectUri: redirectUri || '(empty)' });
       return res.redirect('/pbad/integrations?discord=error&reason=redirect_not_configured');
     }
 
     // Linking is only ever started from the signed-in Integrations page; this
     // route never signs anyone in.
     if (!req.session?.isAdminLoggedIn) {
+      logAdminDiscord('start', { outcome: 'not_authenticated' });
       return res.redirect('/pbad/login?unauthorized=1');
     }
 
@@ -331,21 +346,37 @@ export async function registerAdminRoutes(app: Express): Promise<Server> {
   });
 
   app.get('/api/admin/auth/discord/callback', async (req: Request, res: any) => {
-    const fail = (reason: string) => res.redirect(`/pbad/integrations?discord=error&reason=${encodeURIComponent(reason)}`);
+    const fail = (reason: string, detail?: string) => {
+      logAdminDiscord('callback', { outcome: 'failed', reason, detail });
+      return res.redirect(`/pbad/integrations?discord=error&reason=${encodeURIComponent(reason)}`);
+    };
 
     const { code, state: queryState } = req.query;
     const state = queryState || req.cookies?.admin_discord_state;
     const verifier = req.cookies?.admin_discord_verifier;
     const stateData = readAdminState(String(state || ''));
 
+    logAdminDiscord('callback', { outcome: 'reached', code: Boolean(code) });
+
+    if (req.query.error) {
+      return fail(String(req.query.error), String(req.query.error_description || ''));
+    }
+
     if (!code) return fail('missing_code');
-    if (!stateData) return fail('invalid_state');
-    if (stateData.mode !== 'link') return fail('invalid_state');
-    if (!verifier) return fail('missing_verifier');
+    if (!stateData) return fail('invalid_state', 'state missing, unsigned, or expired');
+    if (stateData.mode !== 'link') return fail('invalid_state', `mode=${stateData.mode || 'absent'}`);
+    if (!verifier) return fail('missing_verifier', 'PKCE cookie absent: linking began in another browser or tab');
 
     const clientId = process.env.DISCORD_CLIENT_ID;
     const clientSecret = process.env.DISCORD_CLIENT_SECRET;
-    if (!clientId || !clientSecret) return fail('not_configured');
+    if (!clientId || !clientSecret) {
+      return fail('not_configured', `clientId=${Boolean(clientId)} clientSecret=${Boolean(clientSecret)}`);
+    }
+
+    const redirectUri = adminDiscordRedirectUri();
+    if (!isAbsoluteRedirect(redirectUri)) {
+      return fail('redirect_not_configured', `resolved redirect_uri=${redirectUri || '(empty)'}`);
+    }
 
     try {
       const tokenRes = await fetch('https://discord.com/api/v10/oauth2/token', {
@@ -356,11 +387,17 @@ export async function registerAdminRoutes(app: Express): Promise<Server> {
           client_secret: clientSecret,
           grant_type: 'authorization_code',
           code: String(code),
-          redirect_uri: adminDiscordRedirectUri(),
+          redirect_uri: redirectUri,
           code_verifier: String(verifier),
         }),
       });
-      if (!tokenRes.ok) return fail('token_exchange');
+      if (!tokenRes.ok) {
+        const detail = await tokenRes.json().catch(() => ({}));
+        return fail(
+          'token_exchange',
+          `status=${tokenRes.status} error=${detail.error || 'n/a'} description=${detail.error_description || 'n/a'}`,
+        );
+      }
       const { access_token: accessToken } = await tokenRes.json();
 
       const profileRes = await fetch('https://discord.com/api/v10/users/@me', {

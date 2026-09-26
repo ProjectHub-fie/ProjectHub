@@ -4,9 +4,10 @@
  * This is a long-running process, not a serverless function. A prefix bot with
  * mention replies needs a persistent gateway WebSocket, and a Vercel function is
  * request-scoped and cannot hold one, so the bot has to run somewhere that keeps
- * a process alive (a VPS, Railway, Fly, Render, or Docker). The dashboard half of
- * this feature — configuration and status — still works on Vercel, because it is
- * ordinary request/response; only this file needs a persistent host.
+ * a process alive (a VPS, Railway, Fly, Render, WispByte, or Docker). The
+ * dashboard half of this feature — configuration and status — still works on
+ * Vercel, because it is ordinary request/response; only this file needs a
+ * persistent host.
  *
  * What it does:
  *
@@ -17,16 +18,25 @@
  *     expect to just @ it.
  *   - Polls Neon consumption and posts a usage embed to the configured channel
  *     and webhook when a metric crosses the tier threshold.
+ *   - Stamps a heartbeat so the dashboard can tell a running process from a
+ *     configured-but-dead one.
  *
  * Configuration is read from the database on a short interval, so changing the
  * channel or the threshold in the dashboard takes effect without restarting the
  * bot. The bot token and Neon API key come from the environment; they are never
  * loaded from the database or written to it.
+ *
+ * Logging. The startup sequence and every gateway transition are printed to the
+ * console, because "the bot is silent" is otherwise indistinguishable from "the
+ * process never started". Verbose per-event detail goes through `debug` under
+ * the `bot:*` namespaces, enabled with either the standard `DEBUG=bot:*` or
+ * `BOT_DEBUG=bot:*`.
  */
+import debug from 'debug';
 import 'dotenv/config';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
-import { Client, GatewayIntentBits, Partials, EmbedBuilder, Events } from 'discord.js';
+import { Client, GatewayIntentBits, Partials, EmbedBuilder, Events, Options, ActivityType } from 'discord.js';
 import {
   BOT_PREFIX,
   parseCommand,
@@ -38,10 +48,56 @@ import {
   formatPercent,
   isValidWebhookUrl,
 } from '../api/_lib/bot-logic.js';
-import { getBotSettings, getAlertState, recordAlertTimes, resolveDiscordIdentity } from '../api/_lib/bot-store.js';
+import { getBotSettings, getAlertState, recordAlertTimes, resolveDiscordIdentity, recordBotHeartbeat } from '../api/_lib/bot-store.js';
 import { fetchUsage, fetchProjectNames, projectScopeFromEnv, orgIdFromEnv, isNeonConfigured } from '../api/_lib/neon-usage.js';
 
+/* ---------------------------------------------------------------- logging */
+
+// `debug` reads DEBUG at import time; BOT_DEBUG is an explicit override so the
+// namespaces can be turned on without also enabling every other library's.
+if (process.env.BOT_DEBUG) debug.enable(process.env.BOT_DEBUG);
+
+const logBoot = debug('bot:boot');
+const logGateway = debug('bot:gateway');
+const logMessage = debug('bot:message');
+const logCommand = debug('bot:command');
+const logAlert = debug('bot:alert');
+
+// A Discord token is three base64url parts joined by dots. The third character
+// class includes `*` so this also matches the form discord.js prints itself:
+// `_censoredToken` keeps the application id and timestamp and replaces the
+// signature with asterisks, so the secret never leaves the process through its
+// Debug event — but the result is still token-shaped, and a token-shaped string
+// in a log is worth removing outright.
+const TOKEN_SHAPE = /[A-Za-z0-9_-]{20,}\.[A-Za-z0-9_-]{5,}\.[A-Za-z0-9_*-]{10,}/g;
+
+/**
+ * Removes a token from a log line.
+ *
+ * discord.js already censors the signature part, so this is a second layer: it
+ * also covers a token that arrives under a name this process never read, and any
+ * error or stack trace that quotes a request header. Matching the shape rather
+ * than only the configured value is what makes that possible.
+ */
+export function redactToken(text, token = '') {
+  let out = String(text ?? '');
+  if (token) out = out.split(token).join('[token redacted]');
+  return out.replace(TOKEN_SHAPE, '[token redacted]');
+}
+
+/** Prints the startup banner: what was resolved, and what is being requested. */
+function logStartup({ tokenSource, intents, pollMinutes, heartbeatSeconds }) {
+  console.log('[bot] ---- startup ----');
+  console.log(`[bot] token source: ${tokenSource}`);
+  console.log(`[bot] intents: ${intents.join(', ')}`);
+  console.log(`[bot] usage poll every ${pollMinutes}m, heartbeat every ${heartbeatSeconds}s`);
+  logBoot('token source %s, intents %o', tokenSource, intents);
+}
+
 const POLL_INTERVAL_MS = Number(process.env.BOT_POLL_INTERVAL_MINUTES || 15) * 60 * 1000;
+// Well under BOT_STALE_AFTER_MS so a transient database blip does not flip the
+// dashboard to "not running".
+const HEARTBEAT_INTERVAL_MS = 60 * 1000;
 const SETTINGS_REFRESH_MS = 60 * 1000;
 
 let settings = null;
@@ -69,17 +125,84 @@ export async function currentSettings() {
 
 /* ------------------------------------------------------------------- client */
 
+/**
+ * The intents this bot requests.
+ *
+ * GuildMembers is privileged and the application has it enabled; it is what
+ * makes `guild.memberCount` and member-scoped events trustworthy. MessageContent
+ * is required for prefix commands — without it `message.content` arrives empty
+ * and every command is silently ignored, which is the failure this list exists
+ * to make obvious at boot.
+ */
+export function botIntents() {
+  return [
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.DirectMessages,
+  ];
+}
+
+/** The intent names, for the boot log. */
+function intentNames(intents) {
+  return Object.entries(GatewayIntentBits)
+    .filter(([, value]) => intents.includes(value))
+    .map(([name]) => name);
+}
+
 export function createClient() {
   return new Client({
-    intents: [
-      GatewayIntentBits.Guilds,
-      GatewayIntentBits.GuildMessages,
-      GatewayIntentBits.MessageContent,
-      GatewayIntentBits.DirectMessages,
-    ],
+    intents: botIntents(),
     // A DM needs the channel partial to arrive at all.
     partials: [Partials.Channel],
+    // Bound the caches: a long-lived process should not grow with every message
+    // it has ever seen. Reactions are fetched on demand, so they are not cached.
+    makeCache: Options.cacheWithLimits({
+      ...Options.DefaultMakeCacheSettings,
+      MessageManager: { maxSize: 50 },
+      GuildMemberManager: { maxSize: 200 },
+      UserManager: { maxSize: 200 },
+      ReactionManager: { maxSize: 0 },
+      GuildInviteManager: { maxSize: 0 },
+      StageInstanceManager: { maxSize: 0 },
+      VoiceStateManager: { maxSize: 0 },
+    }),
   });
+}
+
+/**
+ * Wires the gateway lifecycle to the console.
+ *
+ * discord.js emits these on every reconnect, so a network drop that Discord
+ * recovers from is visible instead of looking like a bot that stopped working.
+ */
+export function attachGatewayLogging(client) {
+  client.on(Events.Debug, (message) => logGateway('%s', redactToken(message)));
+  client.on(Events.Warn, (message) => console.warn('[bot] gateway warning:', redactToken(message)));
+  client.on(Events.Error, (error) => console.error('[bot] client error:', redactToken(error.message)));
+  client.on(Events.ShardReady, (id) => console.log(`[bot] shard ${id} ready`));
+  client.on(Events.ShardReconnecting, (id) => console.warn(`[bot] shard ${id} reconnecting`));
+  client.on(Events.ShardResume, (id, replayed) => console.log(`[bot] shard ${id} resumed (${replayed} events replayed)`));
+  client.on(Events.ShardDisconnect, (event, id) =>
+    console.warn(`[bot] shard ${id} disconnected (code ${event?.code ?? 'unknown'})`),
+  );
+  client.on(Events.ShardError, (error, id) => console.error(`[bot] shard ${id} error:`, redactToken(error.message)));
+}
+
+/**
+ * Keeps a token out of anything discord.js prints to the console directly.
+ *
+ * The gateway logger covers the Debug event, but the library also writes its own
+ * warnings and stack traces. Wrapping the console methods covers both paths, and
+ * `redactToken` is a no-op on text with no token in it.
+ */
+export function guardConsole() {
+  for (const method of ['log', 'warn', 'error', 'info', 'debug']) {
+    const original = console[method].bind(console);
+    console[method] = (...args) =>
+      original(...args.map((arg) => (typeof arg === 'string' ? redactToken(arg) : arg)));
+  }
 }
 
 /**
@@ -96,6 +219,14 @@ export async function handleMessage(message) {
   const config = await currentSettings();
   const mentioned = message.mentions?.has?.(message.client?.user?.id);
 
+  logMessage(
+    '%s from %s in %s: %s',
+    mentioned ? 'mention' : 'message',
+    message.author?.tag || message.author?.id,
+    message.guild ? message.guild.name : 'DM',
+    message.content,
+  );
+
   if (mentioned) {
     // Strip the mention so the remainder parses like a prefixed command.
     const stripped = message.content.replace(/<@!?\d+>/g, '').trim();
@@ -109,6 +240,7 @@ export async function handleMessage(message) {
 }
 
 async function runCommand(parsed, message, config, { via }) {
+  logCommand('%s via %s from %s', parsed.command, via, message.author?.tag || message.author?.id);
   switch (parsed.command) {
     case 'dev':
       return handleDev(message, { via });
@@ -147,6 +279,14 @@ export async function handleDev(message, { via } = {}) {
   }
 
   const resolved = resolveRoles(identity);
+  logCommand(
+    '&dev for %s resolved: linked=%s admin=%s roles=%o',
+    discordId,
+    resolved.isLinked,
+    resolved.isAdmin,
+    resolved.roles,
+  );
+
   const embed = new EmbedBuilder()
     .setColor(resolved.isBlocked ? 0xef4444 : resolved.isAdmin ? 0x6366f1 : 0x22c55e)
     .setAuthor({ name: message.author.username, iconURL: message.author.displayAvatarURL?.() })
@@ -254,6 +394,8 @@ export async function runUsageCheck({ client = null, now = Date.now(), fetchImpl
     console.warn('[bot] metrics unavailable this poll:', usage.unavailable.map((u) => u.key).join(', '));
   }
 
+  logAlert('alert level %s delivered channel=%s webhook=%s', evaluation.level, delivery.channel, delivery.webhook);
+
   return { evaluation, decision, embed, delivery, sent: Boolean(delivery.channel || delivery.webhook) };
 }
 
@@ -307,10 +449,30 @@ export function summarizeUsage(evaluation) {
     .join(' · ');
 }
 
-/* ------------------------------------------------------------------- start */
+/* -------------------------------------------------------------------- start */
+
+// The names a token may arrive under. DISCORD_BOT_TOKEN is the documented one;
+// the rest are accepted because hosts label their secret fields differently and
+// a bot that will not boot over a naming difference is a needless outage.
+export const TOKEN_VARIABLES = ['DISCORD_BOT_TOKEN', 'BOT_TOKEN', 'DISCORD_TOKEN', 'TOKEN', 'CLIENT_TOKEN'];
+
+/**
+ * Finds the token and reports which variable supplied it.
+ *
+ * The source is returned rather than just the value so the boot log can say
+ * which name won — with five candidates, "the token is set" is not enough to
+ * debug a host that injected the wrong one.
+ */
+export function resolveDiscordToken(env = process.env) {
+  for (const name of TOKEN_VARIABLES) {
+    const value = String(env[name] || '').trim();
+    if (value) return { token: value, source: name };
+  }
+  return { token: '', source: null };
+}
 
 export function botTokenFromEnv(env = process.env) {
-  return String(env.DISCORD_BOT_TOKEN || env.BOT_TOKEN || '').trim();
+  return resolveDiscordToken(env).token;
 }
 
 export function missingBotEnvironment(env = process.env) {
@@ -320,8 +482,55 @@ export function missingBotEnvironment(env = process.env) {
   });
 }
 
+const LOGIN_ATTEMPTS = 5;
+const LOGIN_BACKOFF_MS = 5_000;
+
+/**
+ * Whether a login failure is permanent.
+ *
+ * A rejected token or an intent the application has not enabled will fail
+ * identically on every retry, so retrying only delays the operator seeing the
+ * real reason. Everything else — DNS not up yet, a refused connection, a
+ * timeout — is what a host that starts the process before its network does.
+ */
+export function isFatalLoginError(error) {
+  const code = String(error?.code || '');
+  if (/TokenInvalid|TokenMissing|InvalidIntents|DisallowedIntents/i.test(code)) return true;
+  return /invalid token|tokeninvalid|disallowed intents|used disallowed/i.test(String(error?.message || ''));
+}
+
+/**
+ * Signs in, retrying transient failures with exponential backoff.
+ *
+ * discord.js reconnects on its own once the session exists; this covers the
+ * first handshake, which is the one a host fails when the process comes up
+ * before networking. A permanent failure is rethrown immediately.
+ */
+export async function loginWithRetry(
+  client,
+  token,
+  { attempts = LOGIN_ATTEMPTS, baseDelayMs = LOGIN_BACKOFF_MS, sleep = (ms) => new Promise((r) => setTimeout(r, ms)) } = {},
+) {
+  let lastError;
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      return await client.login(token);
+    } catch (error) {
+      lastError = error;
+      if (isFatalLoginError(error)) throw error;
+      if (attempt === attempts) break;
+      const delay = baseDelayMs * 2 ** (attempt - 1);
+      console.warn(
+        `[bot] login attempt ${attempt}/${attempts} failed (${error.message}); retrying in ${delay / 1000}s`,
+      );
+      await sleep(delay);
+    }
+  }
+  throw lastError;
+}
+
 export async function main() {
-  const token = botTokenFromEnv();
+  const { token, source } = resolveDiscordToken();
   const missing = missingBotEnvironment();
   if (missing.length) {
     throw new Error(
@@ -329,15 +538,42 @@ export async function main() {
     );
   }
 
+  const intents = botIntents();
+  logStartup({
+    tokenSource: source,
+    intents: intentNames(intents),
+    pollMinutes: POLL_INTERVAL_MS / 60_000,
+    heartbeatSeconds: HEARTBEAT_INTERVAL_MS / 1000,
+  });
+
+  // Before anything touches Discord: the token is in this process now, so no
+  // later log line should be able to print it.
+  guardConsole();
+
   const client = createClient();
+  attachGatewayLogging(client);
 
   client.on(Events.MessageCreate, (message) => {
     handleMessage(message).catch((error) => console.error('[bot] message handling failed:', error));
   });
-  client.on(Events.Error, (error) => console.error('[bot] client error:', error.message));
-  client.once(Events.ClientReady, (ready) => console.log(`[bot] signed in as ${ready.user.tag}`));
 
-  await client.login(token);
+  client.once(Events.ClientReady, (ready) => {
+    const guilds = ready.guilds.cache.map((guild) => `${guild.name} (${guild.id})`);
+    console.log(`[bot] signed in as ${ready.user.tag} (id ${ready.user.id})`);
+    console.log(`[bot] in ${guilds.length} guild(s): ${guilds.join(', ') || 'none'}`);
+    // The first heartbeat has not been acked yet, so ping is -1 until one is.
+    const ping = ready.ws.ping >= 0 ? `${ready.ws.ping}ms` : 'not yet measured';
+    console.log(`[bot] gateway ready, ws ping ${ping}`);
+    logBoot('ready: user=%s guilds=%o ping=%s', ready.user.tag, guilds, ping);
+    ready.user.setPresence({
+      activities: [{ name: `${ready.guilds.cache.size} servers | ${BOT_PREFIX}help`, type: ActivityType.Watching }],
+      status: 'online',
+    });
+  });
+
+  console.log('[bot] connecting to Discord...');
+  await loginWithRetry(client, token);
+  console.log('[bot] login resolved, gateway handshake complete');
 
   const tick = async () => {
     try {
@@ -348,9 +584,24 @@ export async function main() {
     }
   };
 
+  // The heartbeat is on its own, faster interval: it answers "is the process
+  // alive", so it must not inherit the usage poll's cadence — a 15-minute poll
+  // would look stale against the 5-minute threshold even while running.
+  const beat = async () => {
+    try {
+      await recordBotHeartbeat();
+      logBoot('heartbeat recorded');
+    } catch (error) {
+      console.error('[bot] heartbeat failed:', error.message);
+    }
+  };
+
   // Give the gateway a moment to be ready before the first poll.
   setTimeout(tick, 10_000);
   setInterval(tick, POLL_INTERVAL_MS);
+
+  await beat();
+  setInterval(beat, HEARTBEAT_INTERVAL_MS);
 
   const shutdown = async () => {
     console.log('[bot] shutting down');

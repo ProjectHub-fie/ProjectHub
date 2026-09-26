@@ -12,6 +12,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
+import { GatewayIntentBits } from 'discord.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, '..');
@@ -502,6 +503,226 @@ test('the bot alerts on the organization scope, not a single project', () => {
   assert.match(bot, /projectScopeFromEnv\(\)/);
   assert.match(bot, /topProjects/);
   assert.match(bot, /projectCount/);
+});
+
+/* -------------------------------------------------------- bot liveness */
+
+test('the bot process writes a heartbeat and the dashboard reads it back', () => {
+  const store = source('api/_lib/bot-store.js');
+  const bot = source('bot/index.js');
+
+  // The heartbeat column is added by the same lazy schema step as the tables,
+  // so a deployment that predates it picks it up without a manual migration.
+  assert.match(store, /ALTER TABLE bot_settings ADD COLUMN IF NOT EXISTS last_seen_at/);
+  assert.match(store, /export async function recordBotHeartbeat/);
+  assert.match(store, /export async function getBotLiveness/);
+  // The writer stamps the database clock, not the caller's.
+  assert.match(store, /VALUES \('default', now\(\)\)/);
+  assert.match(store, /ON CONFLICT \(id\) DO UPDATE SET last_seen_at = now\(\)/);
+
+  // The bot process must actually call it, on its own interval.
+  assert.match(bot, /recordBotHeartbeat\(\)/);
+  assert.match(bot, /setInterval\(beat, HEARTBEAT_INTERVAL_MS\)/);
+});
+
+test('a configured token is not treated as a running bot', () => {
+  // `botTokenConfigured` is read from the web deployment's environment, so it
+  // stays true while the bot host is down. Liveness has to be separate or the
+  // dashboard reports a healthy bot that answers nothing.
+  const routes = source('api/_lib/bot-routes.js');
+  assert.match(routes, /const liveness = await getBotLiveness\(\)/);
+  assert.match(routes, /running: liveness\.running/);
+  assert.match(routes, /lastSeenAt: liveness\.lastSeenAt/);
+
+  const page = source('client/src/pages/admin-bot.tsx');
+  assert.match(page, /ok=\{Boolean\(status\?\.running\)\}/);
+  assert.match(page, /Bot process/);
+  // And the page must say what to do about a dead process.
+  assert.match(page, /npm run bot/);
+});
+
+test('the heartbeat threshold is well above the heartbeat interval', () => {
+  // A 15-minute usage poll must not make a live bot look stale, so the heartbeat
+  // is on its own interval rather than sharing the poll's cadence.
+  const store = source('api/_lib/bot-store.js');
+  const bot = source('bot/index.js');
+  const staleMs = Number(/BOT_STALE_AFTER_MS = ([\d\s*]+);/.exec(store)[1].replace(/\s|\*/g, ''));
+  const beatMs = Number(/HEARTBEAT_INTERVAL_MS = ([\d\s*]+);/.exec(bot)[1].replace(/\s|\*/g, ''));
+  assert.ok(staleMs >= beatMs * 3, `stale ${staleMs}ms should allow at least 3 missed beats of ${beatMs}ms`);
+});
+
+/* ------------------------------------------------- token names and redaction */
+
+const {
+  TOKEN_VARIABLES,
+  resolveDiscordToken,
+  missingBotEnvironment,
+  redactToken,
+  botIntents,
+} = await import('../bot/index.js');
+
+test('the token is accepted under any of the documented names', () => {
+  for (const name of TOKEN_VARIABLES) {
+    const resolved = resolveDiscordToken({ [name]: '  a-token  ' });
+    assert.equal(resolved.token, 'a-token', `${name} is trimmed and used`);
+    assert.equal(resolved.source, name);
+  }
+});
+
+test('DISCORD_BOT_TOKEN wins when several names are set', () => {
+  // Precedence has to be stable: a host that sets both must not depend on
+  // enumeration order, which is why the list is ordered and the first wins.
+  const resolved = resolveDiscordToken({ BOT_TOKEN: 'second', DISCORD_BOT_TOKEN: 'first' });
+  assert.equal(resolved.token, 'first');
+  assert.equal(resolved.source, 'DISCORD_BOT_TOKEN');
+  assert.deepEqual(TOKEN_VARIABLES[0], 'DISCORD_BOT_TOKEN');
+});
+
+test('an absent token reports no source rather than an empty name', () => {
+  assert.deepEqual(resolveDiscordToken({}), { token: '', source: null });
+  // Whitespace is not a token.
+  assert.equal(resolveDiscordToken({ DISCORD_BOT_TOKEN: '   ' }).token, '');
+});
+
+test('a token under an alias satisfies the required-environment check', () => {
+  assert.deepEqual(missingBotEnvironment({ DISCORD_TOKEN: 'x', DATABASE_URL: 'postgres://y' }), []);
+  assert.deepEqual(missingBotEnvironment({ DATABASE_URL: 'postgres://y' }), ['DISCORD_BOT_TOKEN']);
+  assert.deepEqual(missingBotEnvironment({ DISCORD_TOKEN: 'x' }), ['DATABASE_URL']);
+});
+
+test('a token is stripped from log text, by value and by shape', () => {
+  // discord.js prints "Provided token: <token>" under its Debug event. The value
+  // must not reach a host's log file, whatever name it arrived under.
+  //
+  // The fake is assembled from parts rather than written as one literal, so the
+  // file never contains a token-shaped string: secret scanners match the shape,
+  // and a fixture that trips them trains people to click through the warning.
+  const parts = ['MTAwMDAwMDAwMDAwMDAwMDAwMA', 'AAAAAA', 'aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789AB'];
+  const token = parts.join('.');
+  const byValue = redactToken(`Provided token: ${token}`, token);
+  assert.ok(!byValue.includes(token), 'the configured value is removed');
+  assert.match(byValue, /\[token redacted\]/);
+
+  // And with no configured value — an alias this process never read still matches
+  // the shape, so it cannot slip through.
+  const byShape = redactToken(`Provided token: ${token}`);
+  assert.ok(!byShape.includes(token), 'a token-looking string is removed without being configured');
+  assert.ok(!byShape.includes(parts[0]), 'no fragment of the token survives');
+
+  // discord.js censors the signature itself and prints asterisks in its place.
+  // That form is token-shaped too, and is removed so no host log carries even a
+  // partial credential.
+  const censored = redactToken(`Provided token: ${parts[0]}.${parts[1]}.${'*'.repeat(38)}`);
+  assert.equal(censored, 'Provided token: [token redacted]');
+
+  // Ordinary text is untouched, and an empty input does not throw.
+  assert.equal(redactToken('shard 0 ready'), 'shard 0 ready');
+  assert.equal(redactToken('Waiting for event ready for 15000ms'), 'Waiting for event ready for 15000ms');
+  assert.equal(redactToken(undefined), '');
+});
+
+test('the bot requests the intents the gateway actually needs', () => {
+  // MessageContent is the one whose absence is silent: content arrives empty and
+  // every prefix command is ignored without an error anywhere.
+  const intents = botIntents();
+  assert.ok(intents.includes(GatewayIntentBits.MessageContent), 'MessageContent is requested');
+  assert.ok(intents.includes(GatewayIntentBits.GuildMessages), 'GuildMessages is requested');
+  assert.ok(intents.includes(GatewayIntentBits.Guilds));
+  // GuildMembers is privileged; it is what makes memberCount trustworthy.
+  assert.ok(intents.includes(GatewayIntentBits.GuildMembers), 'GuildMembers is requested');
+});
+
+test('the gateway lifecycle is logged, not left silent', () => {
+  const bot = source('bot/index.js');
+  // Each transition that explains a silent bot must have a line.
+  for (const event of ['ShardReady', 'ShardReconnecting', 'ShardResume', 'ShardDisconnect', 'ShardError']) {
+    assert.match(bot, new RegExp(`Events\\.${event}`), `${event} is handled`);
+  }
+  // The ready banner names the account and the guilds, which is what tells an
+  // operator the process reached Discord at all.
+  assert.match(bot, /signed in as \$\{ready\.user\.tag\}/);
+  assert.match(bot, /in \$\{guilds\.length\} guild\(s\)/);
+  assert.match(bot, /connecting to Discord/);
+
+  // The token source is reported, but never the token.
+  assert.match(bot, /token source: \$\{tokenSource\}/);
+  assert.ok(!/token source: \$\{token\}/.test(bot), 'the source is logged, not the value');
+
+  // The Debug event goes through the redactor, and the console is wrapped so the
+  // library cannot print a token around it.
+  assert.match(bot, /logGateway\('%s', redactToken\(message\)\)/);
+  assert.match(bot, /guardConsole\(\)/);
+});
+
+/* --------------------------------------------------------------- login retry */
+
+const { isFatalLoginError, loginWithRetry } = await import('../bot/index.js');
+
+test('a bad token fails fast but a transient network error is retried', () => {
+  // A host that starts the process before its network is up fails the first
+  // handshake; a bad token fails every one. Only the first is worth retrying, and
+  // retrying a bad token just hides the real reason.
+  assert.equal(isFatalLoginError({ code: 'TokenInvalid' }), true);
+  assert.equal(isFatalLoginError({ code: 'DisallowedIntents' }), true);
+  assert.equal(isFatalLoginError(new Error('An invalid token was provided.')), true);
+  assert.equal(isFatalLoginError(new Error('Used disallowed intents')), true);
+  assert.equal(isFatalLoginError({ code: 'ENOTFOUND' }), false);
+  assert.equal(isFatalLoginError({ code: 'ECONNREFUSED' }), false);
+  assert.equal(isFatalLoginError(new Error('getaddrinfo EAI_AGAIN discord.com')), false);
+});
+
+test('loginWithRetry backs off and gives up, and does not retry a fatal error', async () => {
+  // Real attempts with a stubbed sleep: the retry count and the backoff are what
+  // is under test, not the waiting.
+  const transient = { calls: 0, delays: [] };
+  const flaky = {
+    login: async () => {
+      transient.calls += 1;
+      if (transient.calls < 3) throw Object.assign(new Error('connect ECONNREFUSED'), { code: 'ECONNREFUSED' });
+      return 'signed-in';
+    },
+  };
+  const result = await loginWithRetry(flaky, 'tok', {
+    attempts: 5,
+    baseDelayMs: 100,
+    sleep: async (ms) => transient.delays.push(ms),
+  });
+  assert.equal(result, 'signed-in');
+  assert.equal(transient.calls, 3, 'two failures then success');
+  assert.deepEqual(transient.delays, [100, 200], 'the delay doubles each attempt');
+
+  // Exhausting the attempts rethrows the last error rather than looping forever.
+  let exhausted = 0;
+  await assert.rejects(
+    loginWithRetry({ login: async () => { exhausted += 1; throw new Error('timeout'); } }, 'tok', {
+      attempts: 3,
+      baseDelayMs: 1,
+      sleep: async () => {},
+    }),
+    /timeout/,
+  );
+  assert.equal(exhausted, 3, 'it stops after the configured attempts');
+
+  // A fatal error is not retried at all: one call, thrown immediately.
+  let fatal = 0;
+  await assert.rejects(
+    loginWithRetry({ login: async () => { fatal += 1; throw Object.assign(new Error('bad'), { code: 'TokenInvalid' }); } }, 'tok', {
+      attempts: 5,
+      baseDelayMs: 1,
+      sleep: async () => {},
+    }),
+    /bad/,
+  );
+  assert.equal(fatal, 1, 'a rejected token is tried once');
+});
+
+test('main signs in through the retrying login', () => {
+  // The retry must be the path `main` actually takes, not a helper nothing calls.
+  // Scoped to main's body: loginWithRetry is the one place the bare login belongs.
+  const bot = source('bot/index.js');
+  const mainBody = bot.slice(bot.indexOf('export async function main'));
+  assert.match(mainBody, /await loginWithRetry\(client, token\)/);
+  assert.ok(!mainBody.includes('client.login(token)'), 'main does not call the bare login');
 });
 
 test('the org-wide embed counts projects and names the largest consumers', () => {

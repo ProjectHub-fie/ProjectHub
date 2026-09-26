@@ -45,6 +45,9 @@ type BotStatus = {
   prefix: string;
   botTokenConfigured: boolean;
   neonKeyConfigured: boolean;
+  running: boolean;
+  lastSeenAt: string | null;
+  staleAfterMs: number;
   scope: "org" | "projects";
   projectIds: string[];
   orgId: string | null;
@@ -222,7 +225,18 @@ export default function AdminBotPage() {
       </div>
 
       {/* Runtime readiness ------------------------------------------------ */}
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+        <StatusTile
+          ok={Boolean(status?.running)}
+          label="Bot process"
+          detail={
+            status?.running
+              ? `Heartbeat ${relativeAge(status?.lastSeenAt)}`
+              : status?.lastSeenAt
+                ? `No heartbeat for ${relativeAge(status?.lastSeenAt)} — the bot host is down`
+                : "Never started — no heartbeat recorded"
+          }
+        />
         <StatusTile
           ok={Boolean(status?.botTokenConfigured)}
           label="Bot token"
@@ -243,6 +257,22 @@ export default function AdminBotPage() {
           }
         />
       </div>
+
+      {/* A configured token is not a running bot: the web deployment's
+          environment can carry DISCORD_BOT_TOKEN while the bot host is down,
+          which is exactly the state where nothing responds to &dev. */}
+      {status && !status.running && (
+        <div className="flex items-start gap-2 rounded-md border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-700 dark:text-red-400">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+          <span>
+            The bot process is not running, so <code className="rounded bg-muted px-1">&amp;dev</code> and
+            the usage alert will not respond. {status.lastSeenAt ? `Last heartbeat ${relativeAge(status.lastSeenAt)}.` : "It has never reported a heartbeat."}{" "}
+            Start it with <code className="rounded bg-muted px-1">npm run bot</code> on a host that keeps a
+            process alive, using the same <code className="rounded bg-muted px-1">DATABASE_URL</code> and
+            <code className="rounded bg-muted px-1">DISCORD_BOT_TOKEN</code>.
+          </span>
+        </div>
+      )}
 
       {!ready && (
         <div className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-400">
@@ -555,6 +585,20 @@ export default function AdminBotPage() {
       </div>
     </div>
   );
+}
+
+/** A short "how long ago" string for the heartbeat readout. */
+function relativeAge(iso: string | null | undefined) {
+  if (!iso) return "never";
+  const ms = Date.now() - new Date(iso).getTime();
+  if (!Number.isFinite(ms) || ms < 0) return "just now";
+  const seconds = Math.floor(ms / 1000);
+  if (seconds < 60) return `${seconds}s ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
 }
 
 function StatusTile({ ok, label, detail }: { ok: boolean; label: string; detail: string }) {

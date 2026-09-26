@@ -55,18 +55,22 @@ export default function AdminIntegrations() {
       void queryClient.invalidateQueries({ queryKey: ["admin-me"] });
     } else {
       const reasons: Record<string, string> = {
-        not_configured: "Discord linking is not configured on the server.",
-        redirect_not_configured: "The Discord callback URL is not configured.",
+        not_configured: "Discord linking is not configured on the server. Set DISCORD_CLIENT_ID and DISCORD_CLIENT_SECRET.",
+        redirect_not_configured: "The Discord callback URL is not configured. Set APP_ORIGIN or DISCORD_ADMIN_CALLBACK_URL.",
         link_not_authenticated: "Please sign in again before linking Discord.",
         discord_already_linked: "That Discord account is already linked to another administrator.",
         invalid_state: "The Discord request expired. Please try again.",
-        missing_verifier: "The Discord request could not be verified. Please try again.",
-        token_exchange: "Discord rejected the request. Check the client secret and callback URL.",
+        missing_code: "Discord did not return an authorization code. Please try again.",
+        missing_verifier: "The Discord request could not be verified. Please try again in the same browser tab.",
+        token_exchange: "Discord rejected the request. Check the client secret and the callback URL allow-list.",
         profile: "Discord did not return your profile. Please try again.",
+        access_denied: "You declined the Discord authorization request.",
+        session: "Your dashboard session could not be saved. Please sign in again.",
+        unexpected: "Discord linking failed unexpectedly. Check the server logs.",
       };
       toast({
         title: "Discord link failed",
-        description: reasons[result] || "Discord did not complete the request.",
+        description: reasons[result] || `Discord did not complete the request (reason: ${result}).`,
         variant: "error",
       });
     }
