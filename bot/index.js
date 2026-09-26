@@ -36,7 +36,7 @@ import debug from 'debug';
 import 'dotenv/config';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
-import { Client, GatewayIntentBits, Partials, EmbedBuilder, Events, Options, ActivityType } from 'discord.js';
+import { Client, GatewayIntentBits, Partials, EmbedBuilder, Options } from 'discord.js';
 import {
   BOT_PREFIX,
   parseCommand,
@@ -50,6 +50,7 @@ import {
 } from '../api/_lib/bot-logic.js';
 import { getBotSettings, getAlertState, recordAlertTimes, resolveDiscordIdentity, recordBotHeartbeat } from '../api/_lib/bot-store.js';
 import { fetchUsage, fetchProjectNames, projectScopeFromEnv, orgIdFromEnv, isNeonConfigured } from '../api/_lib/neon-usage.js';
+import { attachBotEvents, attachGatewayLogging as attachEventGatewayLogging } from './events/index.js';
 
 /* ---------------------------------------------------------------- logging */
 
@@ -171,23 +172,9 @@ export function createClient() {
   });
 }
 
-/**
- * Wires the gateway lifecycle to the console.
- *
- * discord.js emits these on every reconnect, so a network drop that Discord
- * recovers from is visible instead of looking like a bot that stopped working.
- */
+/** Backwards-compatible export for callers that only need gateway logging. */
 export function attachGatewayLogging(client) {
-  client.on(Events.Debug, (message) => logGateway('%s', redactToken(message)));
-  client.on(Events.Warn, (message) => console.warn('[bot] gateway warning:', redactToken(message)));
-  client.on(Events.Error, (error) => console.error('[bot] client error:', redactToken(error.message)));
-  client.on(Events.ShardReady, (id) => console.log(`[bot] shard ${id} ready`));
-  client.on(Events.ShardReconnecting, (id) => console.warn(`[bot] shard ${id} reconnecting`));
-  client.on(Events.ShardResume, (id, replayed) => console.log(`[bot] shard ${id} resumed (${replayed} events replayed)`));
-  client.on(Events.ShardDisconnect, (event, id) =>
-    console.warn(`[bot] shard ${id} disconnected (code ${event?.code ?? 'unknown'})`),
-  );
-  client.on(Events.ShardError, (error, id) => console.error(`[bot] shard ${id} error:`, redactToken(error.message)));
+  return attachEventGatewayLogging(client, { logGateway, redactToken });
 }
 
 /**
@@ -551,24 +538,12 @@ export async function main() {
   guardConsole();
 
   const client = createClient();
-  attachGatewayLogging(client);
-
-  client.on(Events.MessageCreate, (message) => {
-    handleMessage(message).catch((error) => console.error('[bot] message handling failed:', error));
-  });
-
-  client.once(Events.ClientReady, (ready) => {
-    const guilds = ready.guilds.cache.map((guild) => `${guild.name} (${guild.id})`);
-    console.log(`[bot] signed in as ${ready.user.tag} (id ${ready.user.id})`);
-    console.log(`[bot] in ${guilds.length} guild(s): ${guilds.join(', ') || 'none'}`);
-    // The first heartbeat has not been acked yet, so ping is -1 until one is.
-    const ping = ready.ws.ping >= 0 ? `${ready.ws.ping}ms` : 'not yet measured';
-    console.log(`[bot] gateway ready, ws ping ${ping}`);
-    logBoot('ready: user=%s guilds=%o ping=%s', ready.user.tag, guilds, ping);
-    ready.user.setPresence({
-      activities: [{ name: `${ready.guilds.cache.size} servers | ${BOT_PREFIX}help`, type: ActivityType.Watching }],
-      status: 'online',
-    });
+  attachBotEvents(client, {
+    handleMessage,
+    prefix: BOT_PREFIX,
+    logBoot,
+    logGateway,
+    redactToken,
   });
 
   console.log('[bot] connecting to Discord...');

@@ -120,7 +120,11 @@ helper.
 
 1. Create a WispByte server with the **Node.js** image. Use Node 20 or newer.
 2. Upload the repository, including `package.json`, `package-lock.json`,
-   `bot/`, `api/`, and `dataconnect-generated/`.
+    `bot/`, `api/_lib/`, and `.wispignore`.
+   The repository also contains `.wispignore`, which excludes the frontend,
+   web-server, tests, migrations, build output, and other host-specific files
+   from WispByte file synchronization. It deliberately does not ignore `.git`,
+   because the startup command can pull `main` on restart.
 3. Upload `package.json` and `package-lock.json`, then install the bot's
    production dependencies:
 
@@ -128,8 +132,8 @@ helper.
    npm install --omit=dev --no-audit --no-fund
    ```
 
-   If WispByte's **Additional Node Packages** field is used instead, add
-   `discord.js dotenv postgres`.
+    If WispByte's **Additional Node Packages** field is used instead, add
+    `discord.js dotenv postgres debug`.
 4. Set the WispByte startup command to `node index.js` (or
    `node bot/index.js`).
 5. Add these environment variables in WispByte's Startup settings:
@@ -184,6 +188,14 @@ reads it from there every minute. After the web app is running:
 
 The dashboard/API continues to run on Vercel; no Discord gateway connection is
 placed in the Vercel function.
+
+`.wispignore` is a deployment/file-synchronization filter. It is not JavaScript
+and is not read by `bot/index.js`. That is intentional: the bot only loads its
+explicit imports (`bot/` and the required files under `api/_lib/`), so ignored
+web files cannot be loaded into the running process. If a custom startup command
+performs a raw `git clone`, Git itself does not apply `.wispignore`; use
+WispByte's Git/file-sync feature for the ignore rules, or use a sparse checkout
+for a clone-based setup.
 
 On a host that restarts the process on every boot, the panel usually runs
 `npm install` itself before starting `node bot/index.js`. A full install pulls

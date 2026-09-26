@@ -634,14 +634,17 @@ test('the bot requests the intents the gateway actually needs', () => {
 
 test('the gateway lifecycle is logged, not left silent', () => {
   const bot = source('bot/index.js');
+  const events = source('bot/events/index.js');
+  const ready = source('bot/events/ready.js');
+  const debugEvent = source('bot/events/debug.js');
   // Each transition that explains a silent bot must have a line.
   for (const event of ['ShardReady', 'ShardReconnecting', 'ShardResume', 'ShardDisconnect', 'ShardError']) {
-    assert.match(bot, new RegExp(`Events\\.${event}`), `${event} is handled`);
+    assert.match(events, new RegExp(`Events\\.${event}`), `${event} is handled`);
   }
   // The ready banner names the account and the guilds, which is what tells an
   // operator the process reached Discord at all.
-  assert.match(bot, /signed in as \$\{ready\.user\.tag\}/);
-  assert.match(bot, /in \$\{guilds\.length\} guild\(s\)/);
+  assert.match(ready, /signed in as \$\{ready\.user\.tag\}/);
+  assert.match(ready, /in \$\{guilds\.length\} guild\(s\)/);
   assert.match(bot, /connecting to Discord/);
 
   // The token source is reported, but never the token.
@@ -650,7 +653,7 @@ test('the gateway lifecycle is logged, not left silent', () => {
 
   // The Debug event goes through the redactor, and the console is wrapped so the
   // library cannot print a token around it.
-  assert.match(bot, /logGateway\('%s', redactToken\(message\)\)/);
+  assert.match(debugEvent, /logGateway\('%s', redactToken\(message\)\)/);
   assert.match(bot, /guardConsole\(\)/);
 });
 

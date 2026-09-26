@@ -1,0 +1,100 @@
+# ProjectHub WispByte bot deployment
+#
+# Keep .git because the WispByte startup command uses `git pull` when the
+# repository has already been checked out. Keep the root launcher, bot code,
+# shared bot libraries, and package manifests.
+
+# Frontend and web-server source
+/client/
+/server/
+/shared/
+/public/
+/dataconnect/
+/dataconnect-generated/
+/node_modules/
+
+# Development, migration, and test content
+/scripts/
+/tests/
+/test*.js
+/test*.html
+/debug-*.js
+/detailed-auth-test.js
+/verify-*.js
+/check-*.js
+/setup-testdb.js
+
+# Build, database, and local tooling
+/dist/
+/build/
+/coverage/
+/drizzle/
+/.cache/
+/.npm/
+/.upm/
+/.devcontainer/
+/.vscode/
+/.idea/
+/.github/
+/.vercel/
+/.netlify/
+
+# Deployment files for other hosts
+/.replit
+/Dockerfile
+/.dockerignore
+/docker-compose.yml
+/firebase.json
+/.firebaserc
+/netlify.toml
+/vercel.json
+/wrangler.jsonc
+/CNAME
+/components.json
+/drizzle.config.ts
+/postcss.config.js
+/tailwind.config.ts
+/tsconfig.json
+/vite.config.js
+/vite.config.ts
+/schema.ts(admin).txt
+/rest-express@1.0.0
+/NODE_ENV=development
+
+# The bot uses only these four files from api/_lib.
+/api/index.js
+/api/_lib/bot-routes.js
+/api/_lib/db.js
+/api/_lib/email.js
+/api/_lib/mail-routes.js
+/api/_lib/mail-sanitize.js
+/api/_lib/mail-store.js
+/api/_lib/push.js
+/api/_lib/session-token.js
+/api/_lib/storage.js
+/api/_lib/suite-runner.js
+
+# Documentation and project notes
+/*.md
+/bot/README.md
+/AGENTS.md
+/Readme.md
+
+# Local and generated files
+/.env
+/.env.*
+/*.log
+/npm-debug.log*
+/yarn-debug.log*
+/yarn-error.log*
+/.DS_Store
+/.tmp/
+/.temp/
+
+# Keep the files needed by the bot:
+#   /index.js
+#   /bot/
+#   /api/_lib/
+#   /package.json
+#   /package-lock.json
+#   /.wispignore
