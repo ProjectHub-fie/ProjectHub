@@ -39,6 +39,76 @@ npm install
 npm run bot        # or: npm run bot:dev, to load .env
 ```
 
+## WispByte setup
+
+The web app stays on Vercel and the persistent Discord bot runs on WispByte.
+Upload the **whole repository** to WispByte, not only `bot/index.js`: the bot
+imports `api/_lib/bot-store.js`, `api/_lib/bot-logic.js`, and the database URL
+helper.
+
+1. Create a WispByte server with the **Node.js** image. Use Node 20 or newer.
+2. Upload the repository, including `package.json`, `package-lock.json`,
+   `bot/`, `api/`, and `dataconnect-generated/`.
+3. Upload `package.json` and `package-lock.json`, then install the bot's
+   production dependencies:
+
+   ```bash
+   npm install --omit=dev --no-audit --no-fund
+   ```
+
+   If WispByte's **Additional Node Packages** field is used instead, add
+   `discord.js dotenv postgres`.
+4. Set the WispByte startup command to `node index.js` (or
+   `node bot/index.js`).
+5. Add these environment variables in WispByte's Startup settings:
+
+   | Name | Required | Value |
+   | --- | --- | --- |
+   | `DISCORD_BOT_TOKEN` | yes | The bot token from Discord Developer Portal |
+   | `DATABASE_URL` | yes | The same PostgreSQL/Neon URL used by the web app |
+   | `NEON_API_KEY` | no | Required only for Neon usage alerts |
+   | `NEON_PROJECT_IDS` | no | Optional comma-separated Neon project ids |
+   | `NEON_ORG_ID` | no | Optional Neon organization id |
+   | `BOT_POLL_INTERVAL_MINUTES` | no | Optional interval, default `15` |
+
+   `BOT_TOKEN` is also accepted as an alias for `DISCORD_BOT_TOKEN`, but
+   `DISCORD_BOT_TOKEN` is recommended because it matches the dashboard status
+   check and the rest of this project.
+
+6. In the Discord Developer Portal, enable **Message Content Intent** for the
+   bot. Give it permission to view channels, read message history, send
+   messages, and embed links.
+7. Start the server and check the console for:
+
+   ```text
+   [bot] signed in as ...
+   ```
+
+   If the console says a required environment variable is missing, fix that
+   variable in WispByte's Startup settings and restart the server.
+
+Do not put the Discord token or database URL in a committed `.env` file. Use
+WispByte's environment-variable fields.
+
+### Connecting WispByte to the Vercel web app
+
+The bot and Vercel must use the same `DATABASE_URL`. The Vercel web app's
+admin page stores the bot configuration in that database; the WispByte bot
+reads it from there every minute. After the web app is running:
+
+1. Open `/pbad/bot` in the web app.
+2. Enable the bot and set its prefix, alert channel/webhook, and Neon limits.
+3. For the Vercel dashboard's status card and usage-preview action to show
+   green, add `DISCORD_BOT_TOKEN` and `NEON_API_KEY` to the Vercel project's
+   server environment too. Store them as encrypted environment variables; do
+   not put them in the browser or database. The bot still reads the same
+   values from WispByte's Startup settings.
+4. Restart only if the bot process was stopped; configuration changes are
+   picked up automatically.
+
+The dashboard/API continues to run on Vercel; no Discord gateway connection is
+placed in the Vercel function.
+
 On a host that restarts the process on every boot, the panel usually runs
 `npm install` itself before starting `node bot/index.js`. A full install pulls
 the whole frontend toolchain plus the `vercel` and `gh` CLIs, which is well past
