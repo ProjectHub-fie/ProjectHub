@@ -87,7 +87,7 @@ test('every connection point derives its SSL option from the URL', async () => {
   // The local `sslmode=disable` fix is applied everywhere a pool is opened, or
   // a Docker deployment connects to its own database for some paths and not
   // others. A hardcoded `ssl: 'require'` is the thing being guarded against.
-  for (const file of ['api/_lib/db.js', 'api/_lib/mail-store.js', 'api/_lib/bot-store.js', 'api/admin/index.js']) {
+  for (const file of ['api/_lib/db.js', 'api/_lib/mail-store.js', 'bot/lib/bot-store.js', 'api/admin/index.js']) {
     const body = read(file);
     assert.doesNotMatch(body, /ssl: 'require'/, `${file} must not hardcode ssl: 'require'`);
     assert.match(body, /sslOptionForUrl/, `${file} must derive its ssl option from the URL`);

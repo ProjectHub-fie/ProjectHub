@@ -323,27 +323,45 @@ still says what it holds. Only two files are functions: `api/index.js` and
 Practical consequences:
 
 - Put a new helper in `api/_lib`, never in `api/` — a file at `api/foo.js` costs a
-  function slot and is served as a public endpoint.
+  function slot and is served as a public endpoint. A helper that only the bot
+  needs belongs under `bot/lib/` instead, so the bot's own `npm install` carries
+  it (see below).
 - `tests/deployment-limits.test.mjs` re-implements Vercel's rule and asserts the
   count and that imports resolve through `_lib`, so this is caught in CI.
 - Renaming the directory is safe across all three consumers: the two functions
-  import `./_lib` and `../_lib`, and the Express dev server and bot import
-  `api/_lib` by path. Scripts that copy `api/` (`scripts/build-vercel.mjs`) use a
-  recursive copy and carry `_lib` with it.
+  import `./_lib` and `../_lib`, and the Express dev server imports `api/_lib` by
+  path. Scripts that copy `api/` (`scripts/build-vercel.mjs`) use a recursive copy
+  and carry `_lib` with it.
 
-### The Discord bot is a separate process, not a function
+### The Discord bot is a separate process with its own package
 
 `bot/index.js` is the private server bot (`&` prefix, mention replies). It holds
 a persistent Discord gateway connection, which a Vercel function cannot do — the
 function is request-scoped and capped at 30s in `vercel.json` — so the bot runs
-on any host that keeps a process alive (VPS, Railway, Fly, Render, Docker) via
-`npm run bot`. It is deliberately absent from `vercel.json`; only the control
-plane is serverless. Nothing under `api/` imports `discord.js`, so it is not
-pulled into a function bundle.
+on any host that keeps a process alive (WispByte, VPS, Railway, Fly, Render,
+Docker). It is deliberately absent from `vercel.json`; only the control plane is
+serverless. Nothing under `api/` imports `discord.js`, so it is not pulled into a
+function bundle.
+
+`bot/` is its own package: `bot/package.json` declares only what the bot process
+imports (`discord.js`, `debug`, `dotenv`, `postgres`) and `bot/package-lock.json`
+is committed, so a bot host installs a few dozen packages instead of the whole
+website toolchain. Run it with `cd bot && npm install && node index.js`. The root
+`npm run bot` delegates to `npm --prefix bot start`; the root `index.js` launcher
+exists only for a host that starts from the repository root and calls the same
+`main()`.
+
+The bot's exclusive logic lives under `bot/lib/` — `bot-logic.js`, `bot-store.js`
+and `neon-usage.js` — because the bot's own install is the only one that has to
+resolve them. The dashboard reads them back (`api/_lib/bot-routes.js` imports
+`../../bot/lib/...`), and `bot/lib/bot-store.js` imports the one genuinely shared
+pure helper, `api/_lib/db-url.js`. The old layout kept all four under `api/_lib`,
+which forced a bot-only host to carry the website's `api/` tree and the website's
+function bundle to reach into `bot/`.
 
 The split matters when changing this feature: **the dashboard is serverless and
 must stay request/response, and only `bot/index.js` may assume a long-lived
-process.** Shared logic lives in `api/_lib` so both halves use the same rules.
+process.** Bot logic under `bot/lib` is shared so both halves use the same rules.
 
 Configuration is stored, not hardcoded, and is edited at `/pbad/bot` (owner and
 admin only, the same `requireRole('admin')` rule as mail):

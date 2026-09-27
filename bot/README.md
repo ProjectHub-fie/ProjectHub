@@ -43,9 +43,18 @@ credential too, so it is stored but masked when the dashboard reads it back.
 ## Running
 
 ```bash
+cd bot
 npm install
-npm run bot        # or: npm run bot:dev, to load .env
+node index.js      # or: npm start
 ```
+
+From the repository root you can also use `npm run bot` (which delegates to
+`npm --prefix bot start`) or `npm run bot:dev` to load the root `.env`.
+
+The bot is a self-contained package. Its dependencies are declared in
+`bot/package.json` (`discord.js`, `dotenv`, `debug`, `postgres`) with a matching
+`bot/package-lock.json`, so a host only installs the ~30 packages the bot needs —
+never the React/Express/Vite toolchain the website uses.
 
 The process signs in and then stamps `bot_settings.last_seen_at` every minute.
 That heartbeat is what the dashboard's **Bot process** tile reads: it is the only
@@ -113,29 +122,31 @@ Both are on the **Bot** tab of the application in the developer portal.
 
 ## WispByte setup
 
-The web app stays on Vercel and the persistent Discord bot runs on WispByte.
-Upload the **whole repository** to WispByte, not only `bot/index.js`: the bot
-imports `api/_lib/bot-store.js`, `api/_lib/bot-logic.js`, and the database URL
-helper.
+The web app stays on Vercel and the persistent Discord bot runs on WispByte. The
+bot is self-contained: everything it imports is under `bot/`, except one shared
+helper, `api/_lib/db-url.js`, which normalises `DATABASE_URL` before the
+`postgres` driver sees it. Nothing else from the website is loaded.
 
 1. Create a WispByte server with the **Node.js** image. Use Node 20 or newer.
-2. Upload the repository, including `package.json`, `package-lock.json`,
-    `bot/`, `api/_lib/`, and `.wispignore`.
-   The repository also contains `.wispignore`, which excludes the frontend,
-   web-server, tests, migrations, build output, and other host-specific files
-   from WispByte file synchronization. It deliberately does not ignore `.git`,
-   because the startup command can pull `main` on restart.
-3. Upload `package.json` and `package-lock.json`, then install the bot's
-   production dependencies:
+2. Upload the repository (or just the `bot/` directory plus `api/_lib/db-url.js`
+   and `.wispignore`). The `.wispignore` excludes the frontend, web-server, tests,
+   migrations and build output from WispByte file synchronization. It deliberately
+   does not ignore `.git`, because the startup command can pull `main` on restart.
+3. Install the bot's own dependencies from its directory:
 
    ```bash
-   npm install --omit=dev --no-audit --no-fund
+   cd bot
+   npm install
    ```
 
-    If WispByte's **Additional Node Packages** field is used instead, add
+    That installs only the bot's four direct dependencies and their transitive
+    tree. If WispByte's **Additional Node Packages** field is used instead, add
     `discord.js dotenv postgres debug`.
-4. Set the WispByte startup command to `node index.js` (or
-   `node bot/index.js`).
+4. Set the WispByte startup command to `node index.js` with the working directory
+   set to `bot/` (so it runs `bot/index.js`). If the panel starts from the
+   repository root, `node index.js` still works — the root launcher calls the same
+   `main()`. Do not run the root `npm install`; it pulls the whole website
+   toolchain and is what makes a small container run out of memory.
 5. Add these environment variables in WispByte's Startup settings:
 
    | Name | Required | Value |
@@ -191,26 +202,22 @@ placed in the Vercel function.
 
 `.wispignore` is a deployment/file-synchronization filter. It is not JavaScript
 and is not read by `bot/index.js`. That is intentional: the bot only loads its
-explicit imports (`bot/` and the required files under `api/_lib/`), so ignored
-web files cannot be loaded into the running process. If a custom startup command
+explicit imports (`bot/` and the one shared `api/_lib/db-url.js`), so ignored web
+files cannot be loaded into the running process. If a custom startup command
 performs a raw `git clone`, Git itself does not apply `.wispignore`; use
 WispByte's Git/file-sync feature for the ignore rules, or use a sparse checkout
 for a clone-based setup.
 
 On a host that restarts the process on every boot, the panel usually runs
-`npm install` itself before starting `node bot/index.js`. A full install pulls
-the whole frontend toolchain plus the `vercel` and `gh` CLIs, which is well past
-the memory a small container gets, and the kernel kills it — the log shows `Killed
-npm install`, and the bot then dies with `Cannot find package 'discord.js'` even
-though `discord.js` is declared. Install production dependencies only:
-
-```bash
-npm run bot:prod-install   # npm install --omit=dev
-```
-
-That is ~700 packages instead of ~1100, with `discord.js` present and no build
-tools. Use Node 20 or newer: `package.json` declares `engines.node >= 20`, and
-`discord.js` uses `node:`-prefixed built-ins that Node 18 and older reject.
+`npm install` itself before starting the bot. Run that install from `bot/` so it
+resolves `bot/package.json`: a root install pulls the whole frontend toolchain
+plus the `vercel` and `gh` CLIs, which is well past the memory a small container
+gets, and the kernel kills it — the log shows `Killed npm install`, and the bot
+then dies with `Cannot find package 'discord.js'` even though `discord.js` is
+declared. The bot's own install is a few dozen packages instead of over a
+thousand, with `discord.js` present and no build tools. Use Node 20 or newer:
+`bot/package.json` declares `engines.node >= 20`, and `discord.js` uses
+`node:`-prefixed built-ins that Node 18 and older reject.
 
 Run it under a supervisor (`systemd`, `pm2`, or the platform's restart policy) so
 it comes back after a crash or a host reboot.

@@ -1,8 +1,9 @@
 # ProjectHub WispByte bot deployment
 #
-# Keep .git because the WispByte startup command uses `git pull` when the
-# repository has already been checked out. Keep the root launcher, bot code,
-# shared bot libraries, and package manifests.
+# The bot is now a self-contained package: `cd bot && npm install && node
+# index.js` installs and runs it with nothing from the website. Keep `.git`
+# because the WispByte startup command uses `git pull` when the repository has
+# already been checked out. Keep the bot directory and its manifest.
 
 # Frontend and web-server source
 /client/
@@ -12,6 +13,7 @@
 /dataconnect/
 /dataconnect-generated/
 /node_modules/
+/bot/node_modules/
 
 # Development, migration, and test content
 /scripts/
@@ -61,8 +63,11 @@
 /rest-express@1.0.0
 /NODE_ENV=development
 
-# The bot uses only these four files from api/_lib.
+# The bot is a standalone package. Only `api/_lib/db-url.js` is shared with the
+# website, because `bot/lib/bot-store.js` imports it to normalise DATABASE_URL.
+# Everything else under api/ is the web app's, and is not needed on the bot host.
 /api/index.js
+/api/admin/
 /api/_lib/bot-routes.js
 /api/_lib/db.js
 /api/_lib/email.js
@@ -93,8 +98,9 @@
 
 # Keep the files needed by the bot:
 #   /index.js
-#   /bot/
-#   /api/_lib/
-#   /package.json
-#   /package-lock.json
+#   /bot/              (its own package.json, package-lock.json and node_modules)
+#   /api/_lib/db-url.js
 #   /.wispignore
+#
+# The bot is run from its own directory now:
+#   cd bot && npm install && node index.js

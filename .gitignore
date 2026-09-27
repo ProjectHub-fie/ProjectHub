@@ -7,6 +7,10 @@ vite.config.ts.*
 .vercel
 .env
 
+# The bot is a standalone package: its lockfile is committed even though the
+# root one is not, so `cd bot && npm install` is reproducible on the bot host.
+!bot/package-lock.json
+
 # Local Netlify folder
 .netlify
 .env*.local

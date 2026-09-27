@@ -80,42 +80,6 @@
   }
 }
 
-/* Define emoji font sources */
-@font-face {
-  font-family: 'Emoji Font';
-  src: local('Apple Color Emoji'), 
-       local('Segoe UI Emoji'), 
-       local('Noto Color Emoji'), 
-       local('Android Emoji'),
-       local('Twemoji Mozilla');
-  unicode-range: U+1F300-1F5FF, U+1F600-1F64F, U+1F680-1F6FF, U+1F700-1F77F, U+1F780-1F7FF, U+1F800-1F8FF, U+1F900-1F9FF, U+1FA00-1FA6F, U+1FA70-1FAFF, U+2600-26FF, U+2700-27BF;
-}
-
-/* Ensure proper emoji rendering across platforms */
-.debug-status {
-  font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Android Emoji", "Twemoji Mozilla", "Emoji Font", sans-serif;
-  font-size: 1em;
-  line-height: 1;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-  font-feature-settings: "liga" 1;
-  font-variant: normal;
-}
-
-/* Force emoji display in badges and status indicators */
-.badge .debug-status,
-[data-testid^="request-status"] .debug-status {
-  font-family: "Apple Color Emoji", "Segoe UI Emoji", "Noto Color Emoji", "Android Emoji", "Twemoji Mozilla", "Emoji Font", sans-serif;
-  font-feature-settings: "liga" 1;
-  font-variant: normal;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-/* Fallback for systems without color emoji support */
-.no-color-emoji .debug-status::before {
-  content: "● ";
-}
 
 @layer utilities {
   .animate-float {

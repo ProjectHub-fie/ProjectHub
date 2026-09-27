@@ -71,7 +71,7 @@ test('the underscore rule is what keeps helpers out of the count', () => {
   // Directly encode the rule so a future Vercel change is a visible failure.
   assert.equal(isFunction('api/lib/db.js'), true, 'api/lib would be a function');
   assert.equal(isFunction('api/_lib/db.js'), false, 'api/_lib is skipped');
-  assert.equal(isFunction('api/_lib/bot-logic.js'), false, 'api/_lib is skipped');
+  assert.equal(isFunction('api/_lib/db-url.js'), false, 'api/_lib is skipped');
   assert.equal(isFunction('api/.hidden.js'), false, 'a dotfile is skipped');
   assert.equal(isFunction('api/types.d.ts'), false, 'a .d.ts is skipped');
   assert.equal(isFunction('api/admin/index.js'), true);
@@ -79,7 +79,7 @@ test('the underscore rule is what keeps helpers out of the count', () => {
 
 test('the helpers still exist, just under _lib', () => {
   const lib = apiFiles.filter((f) => f.startsWith('api/_lib/'));
-  assert.ok(lib.length >= 13, `expected the shared helpers under api/_lib, found ${lib.length}`);
+  assert.ok(lib.length >= 11, `expected the shared helpers under api/_lib, found ${lib.length}`);
   for (const name of [
     'db.js',
     'db-url.js',
@@ -90,13 +90,23 @@ test('the helpers still exist, just under _lib', () => {
     'mail-store.js',
     'mail-sanitize.js',
     'push.js',
-    'bot-logic.js',
     'bot-routes.js',
-    'bot-store.js',
-    'neon-usage.js',
     'suite-runner.js',
   ]) {
     assert.ok(lib.includes(`api/_lib/${name}`), `api/_lib/${name} is missing`);
+  }
+});
+
+test('the bot-exclusive helpers live under bot/ so the bot install carries them', () => {
+  // The dashboard reads these back, but they are the bot's own logic: keeping
+  // them under api/_lib meant the deployed function imported modules from bot/,
+  // which Vercel does not bundle. They live with the bot now.
+  const botLib = walk(resolve(root, 'bot'))
+    .map((f) => f.slice(root.length + 1).split('\\').join('/'))
+    .sort();
+  for (const name of ['bot-logic.js', 'bot-store.js', 'neon-usage.js']) {
+    assert.ok(botLib.includes(`bot/lib/${name}`), `bot/lib/${name} is missing`);
+    assert.ok(!apiFiles.includes(`api/_lib/${name}`), `api/_lib/${name} must not exist`);
   }
 });
 
@@ -207,14 +217,14 @@ test('no stale api/lib directory is left behind', () => {
 });
 
 test('every import of the helpers points at _lib', () => {
-  // The two function entries plus the Express dev server and the bot process.
+  // The two function entries plus the Express dev server. The bot has its own
+  // `bot/lib` (asserted below), so it is not held to the `_lib` rule.
   for (const file of [
     'api/index.js',
     'api/admin/index.js',
     'server/routes.ts',
     'server/db.ts',
     'server/admin-routes.ts',
-    'bot/index.js',
   ]) {
     const src = readFileSync(resolve(root, file), 'utf8');
     assert.ok(!/['"][^'"]*\blib\/(?!_)/.test(src) || !/api\/lib\/|\.\/lib\/|\.\.\/lib\//.test(src),
@@ -224,11 +234,11 @@ test('every import of the helpers points at _lib', () => {
   // The function entries must resolve the helpers through _lib specifically.
   assert.match(readFileSync(resolve(root, 'api/index.js'), 'utf8'), /'\.\/_lib\/storage\.js'/);
   assert.match(readFileSync(resolve(root, 'api/admin/index.js'), 'utf8'), /'\.\.\/_lib\/bot-routes\.js'/);
-  assert.match(readFileSync(resolve(root, 'bot/index.js'), 'utf8'), /'\.\.\/api\/_lib\/bot-store\.js'/);
+  assert.match(readFileSync(resolve(root, 'bot/index.js'), 'utf8'), /'\.\/lib\/bot-store\.js'/);
 });
 
 test('the Node test runner can still load the helper modules', async () => {
   // Import resolution is the thing a rename breaks, so prove it works.
-  const { parseCommand } = await import('../api/_lib/bot-logic.js');
+  const { parseCommand } = await import('../bot/lib/bot-logic.js');
   assert.equal(parseCommand('&dev').command, 'dev');
 });

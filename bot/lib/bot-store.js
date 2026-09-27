@@ -4,16 +4,17 @@
  * The bot runs as a separate long-running process (a Discord gateway connection
  * cannot live inside a Vercel serverless function), but everything it needs to
  * know — which channel and webhook to alert, the tier limits, who is who on the
- * site — is configured from the admin portal and stored here. Keeping this in
- * `api/lib` means the serverless dashboard function and the Express dev server
- * read and write the same rows.
+ * site — is configured from the admin portal and stored here. This module lives
+ * under `bot/` so the bot's own `npm install` carries it, and the dashboard
+ * imports it back so the serverless function and the Express dev server read and
+ * write the same rows.
  *
  * One table, `bot_settings`, with a single row. It is created lazily by
  * `ensureBotSchema`, following the same convention as `ensureAdminSchema` and
  * `ensureMailSchema`, so a fresh database works without a migration step.
  */
 import postgres from 'postgres';
-import { normalizeDatabaseUrl, sslOptionForUrl } from './db-url.js';
+import { normalizeDatabaseUrl, sslOptionForUrl } from '../../api/_lib/db-url.js';
 import { maskWebhook } from './bot-logic.js';
 
 let _sql = null;

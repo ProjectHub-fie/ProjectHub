@@ -9,7 +9,7 @@
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import { GatewayIntentBits } from 'discord.js';
@@ -30,7 +30,7 @@ const {
   maskWebhook,
   isValidWebhookUrl,
   isSnowflake,
-} = await import('../api/_lib/bot-logic.js');
+} = await import('../bot/lib/bot-logic.js');
 
 /* ------------------------------------------------------------- the prefix */
 
@@ -77,7 +77,7 @@ test('the admin PIN is never carried into the reply', () => {
   assert.ok(!JSON.stringify(resolved).includes('9876'), 'the PIN must not appear in the resolved roles');
 
   // And the bot must not read it from the database at all.
-  const store = source('api/_lib/bot-store.js');
+  const store = source('bot/lib/bot-store.js');
   assert.match(store, /SELECT id, role, email FROM admin_credentials/);
   assert.ok(!/SELECT[^`]*\bpin\b[^`]*FROM admin_credentials/.test(store), 'the PIN is not selected');
 });
@@ -318,8 +318,75 @@ test('the bot process is a standalone entry point, not a serverless function', (
   assert.ok(!vercel.includes('bot/index.js'), 'the bot is not a vercel function');
 
   const pkg = JSON.parse(source('package.json'));
-  assert.match(pkg.scripts.bot, /node bot\/index\.js/);
+  // The bot runs from its own package now; the root script delegates to it.
+  assert.match(pkg.scripts.bot, /npm --prefix bot start/);
   assert.ok(pkg.dependencies['discord.js'], 'discord.js is a dependency');
+});
+
+test('the bot is a standalone package with only its own dependencies', () => {
+  const botPkg = JSON.parse(source('bot/package.json'));
+  assert.equal(botPkg.type, 'module', 'the bot package is ESM, like the rest of the tree');
+  assert.ok(botPkg.engines?.node, 'the bot declares its Node floor');
+  assert.match(botPkg.scripts.start, /node index\.js/);
+
+  // Exactly the packages the bot process imports at runtime.
+  assert.deepEqual(
+    Object.keys(botPkg.dependencies).sort(),
+    ['debug', 'discord.js', 'dotenv', 'postgres'],
+    'the bot package must declare only the bot dependencies',
+  );
+
+  // And the website-only heavyweights must not have leaked in.
+  for (const websiteOnly of ['react', 'express', 'vite', 'typescript', 'tailwindcss', 'vercel']) {
+    assert.ok(!botPkg.dependencies[websiteOnly], `${websiteOnly} is website-only and must not be in bot/package.json`);
+    assert.ok(!botPkg.devDependencies?.[websiteOnly], `${websiteOnly} is website-only and must not be in bot/package.json`);
+  }
+});
+
+test('every package the bot source imports is declared in bot/package.json', () => {
+  const botPkg = JSON.parse(source('bot/package.json'));
+  const declared = new Set([
+    ...Object.keys(botPkg.dependencies || {}),
+    ...Object.keys(botPkg.devDependencies || {}),
+  ]);
+
+  const files = [];
+  const walk = (dir) => {
+    for (const entry of readdirSync(resolve(root, dir), { withFileTypes: true })) {
+      if (entry.name === 'node_modules' || entry.name.startsWith('.')) continue;
+      const relative = `${dir}/${entry.name}`;
+      if (entry.isDirectory()) walk(relative);
+      else if (entry.name.endsWith('.js')) files.push(relative);
+    }
+  };
+  walk('bot');
+
+  const bare = new Set();
+  for (const file of files) {
+    // Strip block and line comments first: a doc comment can contain the word
+    // "from" followed by a quoted phrase, which is not an import.
+    const src = source(file)
+      .replace(/\/\*[\s\S]*?\*\//g, '')
+      .replace(/(^|[^:])\/\/[^\n]*/g, '$1');
+    for (const match of src.matchAll(/\bfrom\s+['"]([^'"]+)['"]/g)) {
+      const spec = match[1];
+      if (spec.startsWith('.') || spec.startsWith('/') || spec.startsWith('node:')) continue;
+      // Scoped packages keep their first two segments: @scope/name.
+      const parts = spec.split('/');
+      bare.add(spec.startsWith('@') ? `${parts[0]}/${parts[1]}` : parts[0]);
+    }
+    // Bare side-effect imports, e.g. `import 'dotenv/config'`.
+    for (const match of src.matchAll(/\bimport\s+['"]([^'"]+)['"]/g)) {
+      const spec = match[1];
+      if (spec.startsWith('.') || spec.startsWith('/') || spec.startsWith('node:')) continue;
+      const parts = spec.split('/');
+      bare.add(spec.startsWith('@') ? `${parts[0]}/${parts[1]}` : parts[0]);
+    }
+  }
+
+  for (const name of bare) {
+    assert.ok(declared.has(name), `${name} is imported by the bot but not declared in bot/package.json`);
+  }
 });
 
 test('the bot handles both prefix commands and mentions', () => {
@@ -338,14 +405,14 @@ test('the mention reply is pinned not to ping, and the alert posts to both desti
 });
 
 test('the Neon alert read never logs the API key', () => {
-  const neon = source('api/_lib/neon-usage.js');
+  const neon = source('bot/lib/neon-usage.js');
   assert.match(neon, /NEON_API_KEY/);
   assert.ok(!/console\.log\([^)]*process\.env\.NEON_API_KEY/.test(neon), 'the key is not logged');
   assert.match(neon, /Authorization: `Bearer \$\{process\.env\.NEON_API_KEY\}`/, 'it is only sent to Neon');
 });
 
 test('the alert tolerates one metric failing instead of losing the whole poll', () => {
-  const neon = source('api/_lib/neon-usage.js');
+  const neon = source('bot/lib/neon-usage.js');
   assert.match(neon, /unavailable/, 'unavailable metrics are reported, not thrown');
 });
 
@@ -355,7 +422,7 @@ const {
   fetchUsage,
   projectScopeFromEnv,
   fetchProjectNames,
-} = await import('../api/_lib/neon-usage.js');
+} = await import('../bot/lib/neon-usage.js');
 
 /** A fetch double that serves a canned consumption page, and records the URL. */
 function neonFetchDouble({ rows, cursor = null, onCall } = {}) {
@@ -508,7 +575,7 @@ test('the bot alerts on the organization scope, not a single project', () => {
 /* -------------------------------------------------------- bot liveness */
 
 test('the bot process writes a heartbeat and the dashboard reads it back', () => {
-  const store = source('api/_lib/bot-store.js');
+  const store = source('bot/lib/bot-store.js');
   const bot = source('bot/index.js');
 
   // The heartbeat column is added by the same lazy schema step as the tables,
@@ -544,7 +611,7 @@ test('a configured token is not treated as a running bot', () => {
 test('the heartbeat threshold is well above the heartbeat interval', () => {
   // A 15-minute usage poll must not make a live bot look stale, so the heartbeat
   // is on its own interval rather than sharing the poll's cadence.
-  const store = source('api/_lib/bot-store.js');
+  const store = source('bot/lib/bot-store.js');
   const bot = source('bot/index.js');
   const staleMs = Number(/BOT_STALE_AFTER_MS = ([\d\s*]+);/.exec(store)[1].replace(/\s|\*/g, ''));
   const beatMs = Number(/HEARTBEAT_INTERVAL_MS = ([\d\s*]+);/.exec(bot)[1].replace(/\s|\*/g, ''));
