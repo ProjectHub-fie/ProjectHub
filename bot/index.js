@@ -12,14 +12,19 @@
  * What it does:
  *
  *   - Reads the message stream, so `&`-prefixed commands and @-mentions work.
- *   - `&dev` reports the site role of whoever asks, resolved from the Discord id
- *     they linked in the admin portal (or the client portal).
- *   - Replies when the bot is mentioned, so it works in a server where members
- *     expect to just @ it.
+ *   - `&profile` (alias `&pr`) shows the ProjectHub profile of whoever asks,
+ *     resolved from the Discord id they linked in the admin portal (or the
+ *     client portal).
+ *   - Attributes each join to the invite used, so the profile can show who
+ *     invited a member.
  *   - Polls Neon consumption and posts a usage embed to the configured channel
  *     and webhook when a metric crosses the tier threshold.
  *   - Stamps a heartbeat so the dashboard can tell a running process from a
  *     configured-but-dead one.
+ *
+ * This file is now only the process shell: the gateway client, the usage poll,
+ * the heartbeat and the login lifecycle. Every message and command lives in
+ * `bot/events/messageCreate.js`, and the pure rules in `bot/lib/bot-logic.js`.
  *
  * Configuration is read from the database on a short interval, so changing the
  * channel or the threshold in the dashboard takes effect without restarting the
@@ -36,11 +41,9 @@ import debug from 'debug';
 import 'dotenv/config';
 import { fileURLToPath } from 'node:url';
 import { resolve } from 'node:path';
-import { Client, GatewayIntentBits, Partials, EmbedBuilder, Options } from 'discord.js';
+import { Client, GatewayIntentBits, Partials, Options } from 'discord.js';
 import {
   BOT_PREFIX,
-  parseCommand,
-  resolveRoles,
   evaluateUsage,
   shouldAlert,
   buildAlertEmbed,
@@ -48,7 +51,7 @@ import {
   formatPercent,
   isValidWebhookUrl,
 } from './lib/bot-logic.js';
-import { getBotSettings, getAlertState, recordAlertTimes, resolveDiscordIdentity, recordBotHeartbeat } from './lib/bot-store.js';
+import { getBotSettings, getAlertState, recordAlertTimes, recordBotHeartbeat } from './lib/bot-store.js';
 import { fetchUsage, fetchProjectNames, projectScopeFromEnv, orgIdFromEnv, isNeonConfigured } from './lib/neon-usage.js';
 import { attachBotEvents, attachGatewayLogging as attachEventGatewayLogging } from './events/index.js';
 
@@ -62,6 +65,7 @@ const logBoot = debug('bot:boot');
 const logGateway = debug('bot:gateway');
 const logMessage = debug('bot:message');
 const logCommand = debug('bot:command');
+const logInvite = debug('bot:invite');
 const logAlert = debug('bot:alert');
 
 // A Discord token is three base64url parts joined by dots. The third character
@@ -142,6 +146,9 @@ export function botIntents() {
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.DirectMessages,
+    // GuildInvites is not privileged, but it is required to read the invite list
+    // at join time; without it every profile would report the inviter Unknown.
+    GatewayIntentBits.GuildInvites,
   ];
 }
 
@@ -159,13 +166,15 @@ export function createClient() {
     partials: [Partials.Channel],
     // Bound the caches: a long-lived process should not grow with every message
     // it has ever seen. Reactions are fetched on demand, so they are not cached.
+    // InviteManager is kept at a small bound: the invite list is fetched live at
+    // join time, so the cache only needs to hold recent entries.
     makeCache: Options.cacheWithLimits({
       ...Options.DefaultMakeCacheSettings,
       MessageManager: { maxSize: 50 },
       GuildMemberManager: { maxSize: 200 },
       UserManager: { maxSize: 200 },
       ReactionManager: { maxSize: 0 },
-      GuildInviteManager: { maxSize: 0 },
+      GuildInviteManager: { maxSize: 100 },
       StageInstanceManager: { maxSize: 0 },
       VoiceStateManager: { maxSize: 0 },
     }),
@@ -190,130 +199,6 @@ export function guardConsole() {
     console[method] = (...args) =>
       original(...args.map((arg) => (typeof arg === 'string' ? redactToken(arg) : arg)));
   }
-}
-
-/**
- * Routes one message: a mention first, then a prefix command.
- *
- * The mention path exists because members treat an @ as "talk to the bot" and
- * should not have to remember the prefix. It answers the same `&dev` question
- * when the mention carries no command, so `@ProjectHub` and `@ProjectHub dev`
- * both work.
- */
-export async function handleMessage(message) {
-  if (!message || message.author?.bot) return undefined;
-
-  const config = await currentSettings();
-  const mentioned = message.mentions?.has?.(message.client?.user?.id);
-
-  logMessage(
-    '%s from %s in %s: %s',
-    mentioned ? 'mention' : 'message',
-    message.author?.tag || message.author?.id,
-    message.guild ? message.guild.name : 'DM',
-    message.content,
-  );
-
-  if (mentioned) {
-    // Strip the mention so the remainder parses like a prefixed command.
-    const stripped = message.content.replace(/<@!?\d+>/g, '').trim();
-    const parsed = parseCommand(stripped, '') || { command: 'dev', args: [], rest: '' };
-    return runCommand(parsed, message, config, { via: 'mention' });
-  }
-
-  const parsed = parseCommand(message.content, config.prefix || BOT_PREFIX);
-  if (!parsed) return undefined;
-  return runCommand(parsed, message, config, { via: 'prefix' });
-}
-
-async function runCommand(parsed, message, config, { via }) {
-  logCommand('%s via %s from %s', parsed.command, via, message.author?.tag || message.author?.id);
-  switch (parsed.command) {
-    case 'dev':
-      return handleDev(message, { via });
-    case 'help':
-      return message.reply(
-        `ProjectHub commands:\n\`${config.prefix || BOT_PREFIX}dev\` — your role on the ProjectHub site.\n` +
-          'You can also just @ me.',
-      );
-    default:
-      // An unknown command is answered only when the bot was addressed directly;
-      // otherwise ordinary chatter containing the prefix would get a reply.
-      if (via === 'mention') {
-        return message.reply(`I don't know \`${parsed.command}\`. Try \`${config.prefix || BOT_PREFIX}help\`.`);
-      }
-      return undefined;
-  }
-}
-
-/**
- * `&dev` — reports the site role of the person asking.
- *
- * The lookup goes through the Discord id linked in the admin portal, falling
- * back to the client portal, so one command answers for both kinds of account.
- * An unlinked account is told how to link rather than being silently ignored.
- */
-export async function handleDev(message, { via } = {}) {
-  const discordId = message.author?.id;
-  if (!discordId) return undefined;
-
-  let identity;
-  try {
-    identity = await resolveDiscordIdentity(discordId);
-  } catch (error) {
-    console.error('[bot] role lookup failed:', error.message);
-    return message.reply('I could not reach the ProjectHub database just now. Try again shortly.');
-  }
-
-  const resolved = resolveRoles(identity);
-  logCommand(
-    '&dev for %s resolved: linked=%s admin=%s roles=%o',
-    discordId,
-    resolved.isLinked,
-    resolved.isAdmin,
-    resolved.roles,
-  );
-
-  const embed = new EmbedBuilder()
-    .setColor(resolved.isBlocked ? 0xef4444 : resolved.isAdmin ? 0x6366f1 : 0x22c55e)
-    .setAuthor({ name: message.author.username, iconURL: message.author.displayAvatarURL?.() })
-    .setTitle('ProjectHub role')
-    .setTimestamp();
-
-  if (!resolved.isLinked) {
-    embed
-      .setDescription('This Discord account is not linked to a ProjectHub account.')
-      .addFields({
-        name: 'How to link',
-        value:
-          'Sign in at the ProjectHub site, open **Settings**, and choose **Link Discord**.' +
-          ' Administrators link from the admin portal settings page instead.',
-      });
-    return message.reply({ embeds: [embed] });
-  }
-
-  embed.setDescription(
-    resolved.roles
-      .map((role) =>
-        role.scope === 'admin'
-          ? `**Admin portal** — \`${role.label}\``
-          : `**Client portal** — \`${role.label}\`${role.blocked ? ' (account is blocked)' : ''}`,
-      )
-      .join('\n'),
-  );
-
-  if (identity.user) {
-    const name = [identity.user.firstName, identity.user.lastName].filter(Boolean).join(' ');
-    embed.addFields({
-      name: 'Client account',
-      value: name || identity.user.username || identity.user.email || 'linked',
-      inline: true,
-    });
-  }
-
-  if (via === 'mention') embed.setFooter({ text: 'Resolved from your linked Discord account' });
-
-  return message.reply({ embeds: [embed] });
 }
 
 /* --------------------------------------------------------------- usage alert */
@@ -539,8 +424,11 @@ export async function main() {
 
   const client = createClient();
   attachBotEvents(client, {
-    handleMessage,
+    getConfig: currentSettings,
     prefix: BOT_PREFIX,
+    logMessage,
+    logCommand,
+    logInvite,
     logBoot,
     logGateway,
     redactToken,

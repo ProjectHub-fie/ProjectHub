@@ -317,7 +317,7 @@ function buildAdminRouter() {
      This is a link, not a sign-in. An administrator always enters the dashboard
      with their PIN and password; connecting Discord only attaches a
      `discord_id` to that already-authenticated row, which is what the bot reads
-     to report the administrator's role in `&dev`. A Discord account can never
+     to report the administrator's role in `&profile`. A Discord account can never
      by itself reach /pbad, so a public Discord identity and the dashboard share
      nothing.
   ------------------------------------------------------------------------- */

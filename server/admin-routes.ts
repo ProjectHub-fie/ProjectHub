@@ -249,7 +249,7 @@ export async function registerAdminRoutes(app: Express): Promise<Server> {
 
      A link, not a sign-in: the administrator is already authenticated with a
      PIN and password, and connecting Discord only attaches a `discord_id` to
-     that row so the bot can report their role in `&dev`. A Discord account can
+     that row so the bot can report their role in `&profile`. A Discord account can
      never obtain a dashboard session through this handshake.
   ------------------------------------------------------------------------- */
   const adminDiscordRedirectUri = () =>

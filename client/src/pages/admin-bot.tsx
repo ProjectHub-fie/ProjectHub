@@ -215,7 +215,7 @@ export default function AdminBotPage() {
             Discord Bot
           </h1>
           <p className="text-muted-foreground">
-            Configure the private server bot: usage alerts and the <code className="rounded bg-muted px-1">{form.prefix || "&"}dev</code> command.
+            Configure the private server bot: usage alerts and the <code className="rounded bg-muted px-1">{form.prefix || "&"}profile</code> command.
           </p>
         </div>
         <Badge variant={status?.enabled ? "default" : "outline"} className="gap-1">
@@ -260,12 +260,12 @@ export default function AdminBotPage() {
 
       {/* A configured token is not a running bot: the web deployment's
           environment can carry DISCORD_BOT_TOKEN while the bot host is down,
-          which is exactly the state where nothing responds to &dev. */}
+          which is exactly the state where nothing responds to &profile. */}
       {status && !status.running && (
         <div className="flex items-start gap-2 rounded-md border border-red-500/40 bg-red-500/10 p-3 text-sm text-red-700 dark:text-red-400">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
           <span>
-            The bot process is not running, so <code className="rounded bg-muted px-1">&amp;dev</code> and
+            The bot process is not running, so <code className="rounded bg-muted px-1">&amp;profile</code> and
             the usage alert will not respond. {status.lastSeenAt ? `Last heartbeat ${relativeAge(status.lastSeenAt)}.` : "It has never reported a heartbeat."}{" "}
             Start it with <code className="rounded bg-muted px-1">npm run bot</code> on a host that keeps a
             process alive, using the same <code className="rounded bg-muted px-1">DATABASE_URL</code> and
@@ -319,7 +319,7 @@ export default function AdminBotPage() {
                 data-testid="input-bot-prefix"
               />
               <p className="text-xs text-muted-foreground">
-                Commands read <code className="rounded bg-muted px-1">{form.prefix || "&"}dev</code>.
+                Commands read <code className="rounded bg-muted px-1">{form.prefix || "&"}profile</code>.
               </p>
             </div>
             <div className="space-y-2">

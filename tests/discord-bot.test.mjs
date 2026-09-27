@@ -38,15 +38,15 @@ test('the bot prefix is &', () => {
   assert.equal(BOT_PREFIX, '&');
 });
 
-test('&dev is recognised as the dev command', () => {
-  assert.deepEqual(parseCommand('&dev'), { command: 'dev', args: [], rest: '' });
-  assert.equal(parseCommand('&dev hello').command, 'dev');
-  assert.deepEqual(parseCommand('&dev hello').args, ['hello']);
+test('&profile is recognised as the profile command', () => {
+  assert.deepEqual(parseCommand('&profile'), { command: 'profile', args: [], rest: '' });
+  assert.equal(parseCommand('&profile hello').command, 'profile');
+  assert.deepEqual(parseCommand('&profile hello').args, ['hello']);
 });
 
 test('the command is case-insensitive and tolerant of whitespace', () => {
-  assert.equal(parseCommand('  &DEV  ').command, 'dev');
-  assert.equal(parseCommand('&  dev').command, 'dev');
+  assert.equal(parseCommand('  &PROFILE  ').command, 'profile');
+  assert.equal(parseCommand('&  profile').command, 'profile');
 });
 
 test('ordinary messages are not commands', () => {
@@ -71,7 +71,7 @@ test('an admin-linked Discord id reports the admin portal role', () => {
 });
 
 test('the admin PIN is never carried into the reply', () => {
-  // `&dev` answers in a public channel and the PIN is half of the admin login
+  // `&profile` answers in a public channel and the PIN is half of the admin login
   // credential, so even an input that carries one must not surface it.
   const resolved = resolveRoles({ admin: { role: 'owner', pin: '9876' } });
   assert.ok(!JSON.stringify(resolved).includes('9876'), 'the PIN must not appear in the resolved roles');
@@ -390,9 +390,11 @@ test('every package the bot source imports is declared in bot/package.json', () 
 });
 
 test('the bot handles both prefix commands and mentions', () => {
+  // Message handling lives in messageCreate.js; index.js is only the shell.
+  const messages = source('bot/events/messageCreate.js');
+  assert.match(messages, /message\.mentions/, 'mentions are handled');
+  assert.match(messages, /parseCommand/, 'prefix commands are parsed');
   const bot = source('bot/index.js');
-  assert.match(bot, /message\.mentions/, 'mentions are handled');
-  assert.match(bot, /parseCommand/, 'prefix commands are parsed');
   assert.match(bot, /GatewayIntentBits\.MessageContent/, 'message content intent is requested');
 });
 

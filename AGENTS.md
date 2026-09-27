@@ -62,6 +62,10 @@ that a helper under `api/` must not be named `test*` whatever the ignore file sa
   guardrails on the one route that spawns a process. It runs the sibling
   `deployment-limits.test.mjs` for real rather than re-running its own folder,
   which would recurse.
+- `profile-command.test.mjs` — the `&profile` / `&pr` rename, that `&dev` is
+  gone, the link-status words, the date/age formatting, and the profile embed
+  shape (static author icon, real avatar as the image, relative footer
+  timestamp, no `undefined`/`null`/`NaN`).
 
 ### The test-runner console
 
@@ -280,7 +284,7 @@ Discord button that used to sit under the form, and the `mode=link` branch of
 the callback that used to mint a dashboard session, are both gone. What remains
 is a link: an already-signed-in administrator connects a Discord account from
 `/pbad/integrations` so the bot can resolve their `discord_id` and report their
-role in `&dev`. The start route requires the dashboard session, the callback
+role in `&profile`. The start route requires the dashboard session, the callback
 refuses a state that is not `mode: 'link'` and refuses a Discord account already
 attached to another administrator, and it only ever writes `discord_id` — it
 sets no `isAdminLoggedIn` and no `adminRole`. `/pbad/settings` redirects to
@@ -401,15 +405,40 @@ stack traces are covered too. discord.js already censors the signature in the
 `Provided token:` line it emits, so this is a second layer rather than the only
 one.
 
-`&dev` resolves the caller's Discord id against `admin_credentials.discord_id`
+`&profile` resolves the caller's Discord id against `admin_credentials.discord_id`
 first and `users.discord_id` second, because the same Discord account can be
 linked to either portal. An account linked to both is reported as both. A client
 whose account is blocked is reported as blocked, never as unlinked.
 
+`&profile` (alias `&pr`) is the profile command, not a developer command. The old
+`&dev` command no longer exists as a command or an alias. The reply is one embed:
+the author icon is the static brand image, the embed image is the caller's real
+Discord avatar (default avatar when they have none) placed above the field list,
+and the footer carries the requester plus a Discord relative timestamp so each
+reader sees it localized. The per-field values come from the gateway objects where
+possible — display name, username, both timestamps — and from the database only
+for the three things Discord cannot answer: the site role, the Discord link
+status, and who invited the member.
+
+The role is the `admin_credentials.role` when the Discord id is found there, else
+`member`; `No Role` is reserved for a lookup that returned nothing. The Discord
+Linked field distinguishes three states from `users`: a row with this
+`discord_id` is linked, a row under the same email is not linked, neither is "No
+account yet". Invite attribution is done by diffing the guild's invite `uses`
+counts when a member joins (`bot/events/guildMemberAdd.js`), stored in
+`bot_invite_joins` / `bot_invite_uses`, because Discord does not report who used
+an invite. A join that cannot be attributed shows `Unknown`, never a raw id.
+
+The message and command handling now lives in `bot/events/messageCreate.js`;
+`bot/index.js` is only the process shell (client, usage poll, heartbeat, login).
+Both were split so the command surface is testable without a gateway connection.
+
+The bot's activity is `Watching ProjectHub.inc`, set once on `ClientReady`.
+
 The dashboard's "Bot process" tile is a heartbeat, not a token check. The web
 deployment's environment can carry `DISCORD_BOT_TOKEN` while the bot host is
 dead, so `botTokenConfigured` stays true in exactly the state where nothing
-answers `&dev`. The bot process stamps `bot_settings.last_seen_at` (added by
+answers `&profile`. The bot process stamps `bot_settings.last_seen_at` (added by
 `ensureBotSchema` for deployments that predate it) on its own one-minute
 interval — deliberately not the usage poll's, whose 15-minute default would look
 stale against the five-minute `BOT_STALE_AFTER_MS` threshold. `getBotLiveness`
