@@ -11,6 +11,144 @@
 /** The private bot's command prefix. */
 export const BOT_PREFIX = '&';
 
+/** The profile command and the short aliases that resolve to it. */
+export const PROFILE_COMMAND = 'profile';
+export const PROFILE_ALIASES = ['pr'];
+
+/** Whether a parsed command targets the profile command, under any alias. */
+export function isProfileCommand(command) {
+  return command === PROFILE_COMMAND || PROFILE_ALIASES.includes(command);
+}
+
+/** The static brand avatar shown as the embed author, never a user's picture. */
+export const PROFILE_AUTHOR_ICON = 'https://projecthub-me.vercel.app/Project.jpg';
+
+/** The color of the profile embed, matching the bot's indigo theme. */
+export const PROFILE_COLOR = 0x6366f1;
+
+/**
+ * The ProjectHub link status for a Discord id, as one of three words.
+ *
+ * `linked` — a `users` row carries this Discord id.
+ * `not_linked` — a row exists under the same email but was never linked.
+ * `no_account` — neither.
+ *
+ * A boolean would collapse the second and third and misreport them, so the
+ * distinction is kept.
+ */
+export function linkStatus({ userById = null, userByEmail = null } = {}) {
+  if (userById) return 'linked';
+  if (userByEmail) return 'not_linked';
+  return 'no_account';
+}
+
+/** The channel-facing label for a link status. Never invented. */
+export function linkStatusLabel(status) {
+  if (status === 'linked') return 'Yes — linked';
+  if (status === 'not_linked') return 'Not linked';
+  return 'No account yet';
+}
+
+/** A `DD/MM/YYYY` date in UTC, or `Unknown` for a missing/invalid value. */
+export function formatDate(value) {
+  const date = toDate(value);
+  if (!date) return 'Unknown';
+  const day = String(date.getUTCDate()).padStart(2, '0');
+  const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+  return `${day}/${month}/${date.getUTCFullYear()}`;
+}
+
+/**
+ * A coarse "X ago" phrase for an elapsed millisecond count.
+ *
+ * Seconds are shown only under a minute, then minutes, hours, days, months and
+ * years, so a five-year-old account does not read as `1826 days ago`.
+ */
+export function humanizeAge(ms) {
+  const amount = Number(ms);
+  if (!Number.isFinite(amount) || amount < 0) return 'Unknown';
+  const seconds = Math.floor(amount / 1000);
+  if (seconds < 10) return 'Just now';
+  if (seconds < 60) return `${seconds} seconds ago`;
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes} minute${minutes === 1 ? '' : 's'} ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours} hour${hours === 1 ? '' : 's'} ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days} day${days === 1 ? '' : 's'} ago`;
+  const months = Math.floor(days / 30);
+  if (months < 12) return `${months} month${months === 1 ? '' : 's'} ago`;
+  const years = Math.floor(days / 365);
+  return `${years} year${years === 1 ? '' : 's'} ago`;
+}
+
+/** `14/03/2024 • 2 years ago`, or `Unknown` when the date is missing. */
+export function formatDateWithAge(value, now = Date.now()) {
+  const date = toDate(value);
+  if (!date) return 'Unknown';
+  return `${formatDate(date)} • ${humanizeAge(now - date.getTime())}`;
+}
+
+/**
+ * Discord's localized relative timestamp, e.g. `<t:1700000000:R>`.
+ *
+ * Discord renders it in each reader's own locale and timezone, and keeps it
+ * current, so the footer's "how long ago" is not frozen at reply time. An
+ * invalid value falls back to now rather than producing a malformed marker.
+ */
+export function relativeTimestamp(value) {
+  const date = toDate(value) || new Date();
+  return `<t:${Math.floor(date.getTime() / 1000)}:R>`;
+}
+
+/**
+ * Builds the profile embed as plain data.
+ *
+ * A plain object like `buildAlertEmbed`, not a discord.js `EmbedBuilder`: the
+ * rules are asserted directly in the tests, and the bot wraps it at send time.
+ * Every value already has its fallback applied here, so no field can render
+ * `undefined`, `null` or `NaN`.
+ *
+ * The avatar is passed as the embed's image, which Discord places below the
+ * description but above the field list — the "picture above the information"
+ * position the profile asks for.
+ */
+export function buildProfileEmbed({
+  displayName,
+  username,
+  avatarUrl,
+  role,
+  accountCreated,
+  serverJoined,
+  invitedBy,
+  discordLinked,
+  requestedBy,
+  requestedAt = new Date(),
+  now = Date.now(),
+  footerIconUrl = null,
+} = {}) {
+  return {
+    title: '📋 Profile Information',
+    color: PROFILE_COLOR,
+    author: { name: displayName || 'ProjectHub member', icon_url: PROFILE_AUTHOR_ICON, url: PROFILE_AUTHOR_ICON },
+    ...(avatarUrl ? { image: { url: avatarUrl } } : {}),
+    fields: [
+      { name: '👤 Name', value: displayName || 'Unknown', inline: false },
+      { name: '🏷️ Username', value: `@${username || 'unknown'}`, inline: false },
+      { name: '🛡️ Role', value: role || 'No Role', inline: false },
+      { name: '📅 Account Created', value: formatDateWithAge(accountCreated, now), inline: false },
+      { name: '📅 Server Joined', value: formatDateWithAge(serverJoined, now), inline: false },
+      { name: '🤝 Invited By', value: invitedBy || 'Unknown', inline: false },
+      { name: '🔗 Discord Linked', value: discordLinked || 'No account yet', inline: false },
+    ],
+    footer: {
+      text: `Requested by ${username || 'unknown'} • ${relativeTimestamp(requestedAt)}`,
+      ...(footerIconUrl ? { icon_url: footerIconUrl } : {}),
+    },
+    timestamp: new Date(requestedAt).toISOString(),
+  };
+}
+
 /**
  * Parses `&command args...` out of a message body.
  *
@@ -271,4 +409,16 @@ export function isSnowflake(value) {
 function numberOrZero(value) {
   const amount = Number(value);
   return Number.isFinite(amount) ? amount : 0;
+}
+
+/**
+ * Coerces a value to a Date, or `null` when there is nothing usable.
+ *
+ * `new Date(null)` and `new Date(0)` are the Unix epoch, not "missing", so a
+ * null/empty input is rejected explicitly rather than silently rendering 1970.
+ */
+function toDate(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const date = value instanceof Date ? value : new Date(value);
+  return Number.isNaN(date.getTime()) ? null : date;
 }

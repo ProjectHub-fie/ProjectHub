@@ -13,7 +13,7 @@ import { useToast } from "@/hooks/use-toast";
  * Discord is an integration, not a second way to sign in: an administrator
  * always enters the dashboard with a PIN and password. Linking Discord attaches
  * the Discord account to this admin row, which is what the bot reads to report
- * the administrator's role for `&dev`. Linking always goes through the OAuth
+ * the administrator's role for `&profile`. Linking always goes through the OAuth
  * handshake — the client never posts a Discord id — so a forged id cannot
  * attach itself to an admin row.
  */
@@ -49,7 +49,7 @@ export default function AdminIntegrations() {
     if (result === "linked") {
       toast({
         title: "Discord linked",
-        description: "The bot will now report your administrator role for &dev.",
+        description: "The bot will now report your administrator role for &profile.",
         variant: "success",
       });
       void queryClient.invalidateQueries({ queryKey: ["admin-me"] });
@@ -154,7 +154,7 @@ export default function AdminIntegrations() {
           </CardTitle>
           <CardDescription>
             Link the Discord account you use in the server so the bot can report your
-            administrator role for <code>&amp;dev</code>.
+            administrator role for <code>&amp;profile</code>.
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">

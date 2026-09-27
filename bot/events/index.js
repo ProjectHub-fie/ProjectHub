@@ -2,6 +2,7 @@ import { Events } from 'discord.js';
 import { handleDebug } from './debug.js';
 import { handleError } from './error.js';
 import { createMessageCreateHandler } from './messageCreate.js';
+import { createGuildMemberAddHandler } from './guildMemberAdd.js';
 import { createReadyHandler } from './ready.js';
 import { handleShardDisconnect } from './shardDisconnect.js';
 import { handleShardError } from './shardError.js';
@@ -30,8 +31,12 @@ export function attachGatewayLogging(client, { logGateway, redactToken }) {
 }
 
 /** Registers every event used by the bot process. */
-export function attachBotEvents(client, { handleMessage, prefix, logBoot, logGateway, redactToken }) {
+export function attachBotEvents(client, { getConfig, prefix, logMessage, logCommand, logInvite, logBoot, logGateway, redactToken }) {
   attachGatewayLogging(client, { logGateway, redactToken });
-  client.on(Events.MessageCreate, createMessageCreateHandler({ handleMessage }));
+  // Message handling lives entirely in messageCreate.js; this only binds it.
+  client.on(Events.MessageCreate, createMessageCreateHandler({ getConfig, logMessage, logCommand }));
+  // Join attribution is a side effect, so it is wired separately from the
+  // request/response path and never blocks a message reply.
+  client.on(Events.GuildMemberAdd, createGuildMemberAddHandler({ logInvite }));
   client.once(Events.ClientReady, createReadyHandler({ prefix, logBoot }));
 }

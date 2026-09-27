@@ -240,5 +240,5 @@ test('every import of the helpers points at _lib', () => {
 test('the Node test runner can still load the helper modules', async () => {
   // Import resolution is the thing a rename breaks, so prove it works.
   const { parseCommand } = await import('../bot/lib/bot-logic.js');
-  assert.equal(parseCommand('&dev').command, 'dev');
+  assert.equal(parseCommand('&profile').command, 'profile');
 });

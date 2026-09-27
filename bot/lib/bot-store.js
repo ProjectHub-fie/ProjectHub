@@ -15,7 +15,7 @@
  */
 import postgres from 'postgres';
 import { normalizeDatabaseUrl, sslOptionForUrl } from '../../api/_lib/db-url.js';
-import { maskWebhook } from './bot-logic.js';
+import { maskWebhook, linkStatus } from './bot-logic.js';
 
 let _sql = null;
 function db() {
@@ -65,6 +65,42 @@ export function ensureBotSchema() {
       // environment, which stays true even when the bot process is dead — the
       // exact state where the dashboard looked healthy and the bot was silent.
       await sql`ALTER TABLE bot_settings ADD COLUMN IF NOT EXISTS last_seen_at timestamp`;
+      // Invite attribution. One row per (guild, invitee); the inviter is the
+      // member who owned the invite used to join. Kept in the bot database
+      // rather than a new application table, and reused as-is by the profile
+      // command. `bot_invite_uses` is the per-invite use ledger that reveals a
+      // use at join time, since the invite object carries only a total count.
+      await sql`
+        CREATE TABLE IF NOT EXISTS bot_invites (
+          id text PRIMARY KEY,
+          guild_id text NOT NULL,
+          inviter_id text,
+          inviter_tag text,
+          uses integer DEFAULT 0 NOT NULL,
+          updated_at timestamp DEFAULT now() NOT NULL
+        )
+      `;
+      await sql`
+        CREATE TABLE IF NOT EXISTS bot_invite_uses (
+          guild_id text NOT NULL,
+          invite_code text NOT NULL,
+          inviter_id text,
+          inviter_tag text,
+          used_by text NOT NULL,
+          used_at timestamp DEFAULT now() NOT NULL,
+          PRIMARY KEY (guild_id, used_by)
+        )
+      `;
+      await sql`
+        CREATE TABLE IF NOT EXISTS bot_invite_joins (
+          guild_id text NOT NULL,
+          user_id text NOT NULL,
+          inviter_id text,
+          inviter_tag text,
+          joined_at timestamp DEFAULT now() NOT NULL,
+          PRIMARY KEY (guild_id, user_id)
+        )
+      `;
     } catch (error) {
       schemaReady = null;
       throw error;
@@ -275,13 +311,13 @@ export async function recordAlertTimes(marks = {}) {
 /**
  * Resolves a Discord id to the site accounts linked to it.
  *
- * The admin portal is checked first, because `&dev` is specified to report the
- * role an administrator holds there; the public users table is checked second so
- * a client who linked Discord gets an answer too. Both are returned and the
- * caller decides how to present the union.
+ * The admin portal is checked first, because `&profile` is specified to report
+ * the role an administrator holds there; the public users table is checked
+ * second so a client who linked Discord gets an answer too. Both are returned
+ * and the caller decides how to present the union.
  *
- * The admin PIN is not selected: `&dev` renders into a public channel, and the
- * PIN is half of the admin login credential.
+ * The admin PIN is not selected: `&profile` renders into a public channel, and
+ * the PIN is half of the admin login credential.
  */
 export async function resolveDiscordIdentity(discordId) {
   await ensureBotSchema();
@@ -311,6 +347,106 @@ export async function resolveDiscordIdentity(discordId) {
         }
       : null,
   };
+}
+
+/* ------------------------------------------------------------- profile lookup */
+
+/**
+ * The site data the profile command needs, in one round of queries.
+ *
+ * `resolveDiscordIdentity` already answers the role and the by-id link. The
+ * only extra question the profile asks is the email-based link, which is one
+ * bounded query — not a query per row. The invite attribution is looked up
+ * separately because it is guild-scoped.
+ */
+export async function getProfileIdentity(discordId, email = null) {
+  const identity = await resolveDiscordIdentity(discordId);
+  if (identity.user || !email) {
+    return { ...identity, userByEmail: null, linkStatus: linkStatus(identity) };
+  }
+  const sql = db();
+  const [userByEmail] = await sql`SELECT id FROM users WHERE email = ${email} LIMIT 1`;
+  return {
+    ...identity,
+    userByEmail: userByEmail ? { id: userByEmail.id } : null,
+    linkStatus: linkStatus({ ...identity, userByEmail }),
+  };
+}
+
+/* ---------------------------------------------------------------- invite tracking */
+
+/**
+ * Caches the invite list for a guild.
+ *
+ * The invite object reports only a total `uses`, so an invite's next use is
+ * observed by comparing counts before and after a member joins. This is the
+ * existing invite-tracking system the bot has; nothing else reads these tables.
+ */
+export async function snapshotInvites(guildId, invites = []) {
+  await ensureBotSchema();
+  const sql = db();
+  for (const invite of invites) {
+    await sql`
+      INSERT INTO bot_invites (id, guild_id, inviter_id, inviter_tag, uses, updated_at)
+      VALUES (${invite.code}, ${guildId}, ${invite.inviterId || null}, ${invite.inviterTag || null}, ${invite.uses || 0}, now())
+      ON CONFLICT (id) DO UPDATE SET
+        inviter_id = EXCLUDED.inviter_id,
+        inviter_tag = EXCLUDED.inviter_tag,
+        uses = EXCLUDED.uses,
+        updated_at = now()
+    `;
+  }
+}
+
+/** The cached invites for a guild, as `code -> { inviterId, inviterTag, uses }`. */
+export async function getInviteSnapshot(guildId) {
+  await ensureBotSchema();
+  const sql = db();
+  const rows = await sql`SELECT id, inviter_id, inviter_tag, uses FROM bot_invites WHERE guild_id = ${guildId}`;
+  return Object.fromEntries(
+    rows.map((row) => [row.id, { inviterId: row.inviter_id, inviterTag: row.inviter_tag, uses: row.uses }]),
+  );
+}
+
+/**
+ * Records which invite a joining member used.
+ *
+ * The difference between the cached counts and the live ones is the invite that
+ * gained a use; the join is attributed to its owner.
+ */
+export async function recordInviteUse(guildId, memberId, invite) {
+  if (!invite?.code) return null;
+  await ensureBotSchema();
+  const sql = db();
+  await sql`
+    INSERT INTO bot_invite_uses (guild_id, invite_code, inviter_id, inviter_tag, used_by, used_at)
+    VALUES (${guildId}, ${invite.code}, ${invite.inviterId || null}, ${invite.inviterTag || null}, ${memberId}, now())
+    ON CONFLICT (guild_id, used_by) DO UPDATE SET
+      invite_code = EXCLUDED.invite_code,
+      inviter_id = EXCLUDED.inviter_id,
+      inviter_tag = EXCLUDED.inviter_tag,
+      used_at = now()
+  `;
+  await sql`
+    INSERT INTO bot_invite_joins (guild_id, user_id, inviter_id, inviter_tag, joined_at)
+    VALUES (${guildId}, ${memberId}, ${invite.inviterId || null}, ${invite.inviterTag || null}, now())
+    ON CONFLICT (guild_id, user_id) DO UPDATE SET
+      inviter_id = EXCLUDED.inviter_id,
+      inviter_tag = EXCLUDED.inviter_tag
+  `;
+  return { inviterId: invite.inviterId || null, inviterTag: invite.inviterTag || null };
+}
+
+/** The recorded inviter for a member, or `null` when it could not be determined. */
+export async function getInviteJoin(guildId, userId) {
+  await ensureBotSchema();
+  const sql = db();
+  const [row] = await sql`
+    SELECT inviter_id, inviter_tag FROM bot_invite_joins
+    WHERE guild_id = ${guildId} AND user_id = ${userId} LIMIT 1
+  `;
+  if (!row) return null;
+  return { inviterId: row.inviter_id || null, inviterTag: row.inviter_tag || null };
 }
 
 function has(object, key) {

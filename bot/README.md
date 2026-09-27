@@ -1,7 +1,7 @@
 # ProjectHub Discord bot
 
 The private server bot. Prefix `&`, replies to mentions, reports site roles with
-`&dev`, and posts a Neon usage alert when a database metric crosses its tier
+`&profile`, and posts a Neon usage alert when a database metric crosses its tier
 threshold.
 
 ## Why it runs separately
@@ -103,7 +103,7 @@ What each line tells you when something is wrong:
   application. See below.
 
 Set `BOT_DEBUG=bot:*` (or `DEBUG=bot:*`) for the full gateway handshake, every
-message and every `&dev` resolution. Tokens are stripped from all log output,
+message and every `&profile` resolution. Tokens are stripped from all log output,
 including the `Provided token:` line discord.js prints itself.
 
 ## Privileged intents
@@ -243,13 +243,39 @@ contributed the most compute, so a shared quota can be traced to a project.
 
 | Command | Behaviour |
 | --- | --- |
-| `&dev` | Reports the caller's ProjectHub role, resolved from the Discord account linked in the admin portal (or the client portal). |
+| `&profile` | Shows a ProjectHub profile embed: avatar, name, username, site role, Discord account age, server join age, inviter, and Discord link status. |
+| `&pr` | Alias for `&profile`. |
 | `&help` | Lists the commands. |
-| `@mention` | Same as `&dev`; `@mention dev` works too, and an unknown command after a mention gets an error rather than silence. |
+| `@mention` | Same as `&profile`; `@mention profile` and `@mention pr` work too, and an unknown command after a mention gets an error rather than silence. |
 
 An unlinked Discord account is told how to link rather than being ignored. There
-is no `&dev` for an account that has not linked, by design — the link is what
+is no `&profile` for an account that has not linked, by design — the link is what
 proves the identity.
+
+### The profile embed
+
+`&profile` (or `&pr`) replies with one embed:
+
+- **Title** — `📋 Profile Information`.
+- **Author icon** — the static brand image, `Project.jpg`. It is never the user's
+  own picture.
+- **Image** — the caller's real Discord avatar (their default avatar when they
+  have none), which Discord renders above the field list.
+- **Fields** — Name, Username, Role, Account Created, Server Joined, Invited By,
+  Discord Linked.
+- **Footer** — `Requested by {username} • {relative timestamp}`, with the
+  requester's avatar as the footer icon. The timestamp is Discord's `<t:...:R>`
+  form, so each reader sees it in their own locale.
+
+Role is the linked admin credential's role, else `member`; `No Role` when the
+lookup returned nothing. Discord Linked is one of `Yes — linked`, `Not linked`
+(a ProjectHub account exists under the same email but was never linked), or `No
+account yet`.
+
+Inviter attribution uses invite counting: the bot snapshots each guild's invite
+`uses` on boot and every join, and the invite whose count grows is the one used.
+Discord never reports who used an invite, so this is the only way to know. A join
+that cannot be attributed shows `Unknown`.
 
 ## Threshold limits
 
