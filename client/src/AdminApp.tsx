@@ -23,6 +23,7 @@ const AdminLogin = lazy(() => import("@/pages/admin-login-page"));
 const AdminMail = lazy(() => import("@/pages/mail-page"));
 const AdminIntegrations = lazy(() => import("@/pages/admin-integrations"));
 const AdminBot = lazy(() => import("@/pages/admin-bot"));
+const AdminRoblox = lazy(() => import("@/pages/admin-roblox"));
 const AdminTests = lazy(() => import("@/pages/admin-tests"));
 
 /**
@@ -40,7 +41,7 @@ function registerMailServiceWorker() {
   });
 }
 
-type AdminPermission = "viewUsers" | "manageProjects" | "manageAdmins" | "mail" | "bot" | "tests";
+type AdminPermission = "viewUsers" | "manageProjects" | "manageAdmins" | "mail" | "bot" | "roblox" | "tests";
 
 function AdminLoading() {
   return (
@@ -91,7 +92,7 @@ function AdminNotFound() {
  * the URL staying secret or on this component running.
  */
 function AdminGuard({ permission, children }: { permission?: AdminPermission; children: React.ReactNode }) {
-  const { isLoading, isAuthenticated, canViewUsers, canManageProjects, canManageAdmins, canUseMail, canManageBot, canRunTests } = useAdminAuth();
+  const { isLoading, isAuthenticated, canViewUsers, canManageProjects, canManageAdmins, canUseMail, canManageBot, canManageRoblox, canRunTests } = useAdminAuth();
   const [, setLocation] = useLocation();
 
   React.useEffect(() => {
@@ -110,6 +111,8 @@ function AdminGuard({ permission, children }: { permission?: AdminPermission; ch
   if (permission === "mail" && !canUseMail) return <AdminAccessDenied />;
   // The bot console is owner/admin only, same as mail.
   if (permission === "bot" && !canManageBot) return <AdminAccessDenied />;
+  // The Roblox console is owner/admin only, same as the bot console.
+  if (permission === "roblox" && !canManageRoblox) return <AdminAccessDenied />;
   // The test runner is owner only: it executes code on the host. Mirrors
   // requireRole('owner') on /api/admin/tests.
   if (permission === "tests" && !canRunTests) return <AdminAccessDenied />;
@@ -211,6 +214,9 @@ export default function AdminApp() {
                   </Route>
                   <Route path="/bot">
                     <AdminPage permission="bot"><AdminBot /></AdminPage>
+                  </Route>
+                  <Route path="/roblox">
+                    <AdminPage permission="roblox"><AdminRoblox /></AdminPage>
                   </Route>
                   <Route path="/tests">
                     <AdminPage permission="tests"><AdminTests /></AdminPage>

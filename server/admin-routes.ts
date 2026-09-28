@@ -6,6 +6,7 @@ import multer from "multer";
 import { adminStorage } from "./admin-storage.js";
 import { buildMailRouter, handleInboundMessage } from "../api/_lib/mail-routes.js";
 import { buildBotRouter } from "../api/_lib/bot-routes.js";
+import { buildRobloxRouter } from "../api/_lib/roblox-routes.js";
 import { buildTestRouter } from "../api/_lib/suite-runner.js";
 import { createMailNotifications } from "../api/_lib/mail-store.js";
 
@@ -648,6 +649,9 @@ export async function registerAdminRoutes(app: Express): Promise<Server> {
   // The Discord bot configuration, same guards and same shared router as the
   // serverless dashboard function.
   app.use(buildBotRouter({ requireAuth, requireRole }));
+
+  // The Roblox / Bloxlink integration, same shared router and guards.
+  app.use(buildRobloxRouter({ requireAuth, requireRole }));
 
   // The test-runner console, owner only, shared with the serverless backend.
   app.use(buildTestRouter({ requireAuth, requireRole }));

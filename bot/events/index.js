@@ -3,6 +3,8 @@ import { handleDebug } from './debug.js';
 import { handleError } from './error.js';
 import { createMessageCreateHandler } from './messageCreate.js';
 import { createGuildMemberAddHandler } from './guildMemberAdd.js';
+import { createRobloxJoinHandler } from './robloxJoin.js';
+import { notifyLinkChange } from './roblox.js';
 import { createReadyHandler } from './ready.js';
 import { handleShardDisconnect } from './shardDisconnect.js';
 import { handleShardError } from './shardError.js';
@@ -38,5 +40,8 @@ export function attachBotEvents(client, { getConfig, prefix, logMessage, logComm
   // Join attribution is a side effect, so it is wired separately from the
   // request/response path and never blocks a message reply.
   client.on(Events.GuildMemberAdd, createGuildMemberAddHandler({ logInvite }));
+  // A join also triggers one best-effort Bloxlink check, so the member appears in
+  // the linked-accounts table without polling the whole guild.
+  client.on(Events.GuildMemberAdd, createRobloxJoinHandler({ logInvite, notify: notifyLinkChange }));
   client.once(Events.ClientReady, createReadyHandler({ prefix, logBoot }));
 }

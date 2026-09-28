@@ -58,6 +58,10 @@ export function useAdminAuth() {
   // and trigger a real alert. Mirrors `requireRole('admin')` on every
   // /api/admin/bot route, so the sidebar is not the only protection.
   const canManageBot = adminRole === 'owner' || adminRole === 'admin';
+  // The Roblox/Bloxlink console is owner/admin only: it can force a live
+  // Bloxlink lookup and gate channels behind verification. Mirrors
+  // `requireRole('admin')` on every /api/admin/roblox route.
+  const canManageRoblox = adminRole === 'owner' || adminRole === 'admin';
   // The test runner is owner only. It is the only action that starts a process
   // on the host, so it is held to the same role as admin management. Mirrors
   // `requireRole('owner')` on every /api/admin/tests route.
@@ -77,6 +81,7 @@ export function useAdminAuth() {
     canDeleteAdmins,
     canUseMail,
     canManageBot,
+    canManageRoblox,
     canRunTests,
   };
 }

@@ -1,5 +1,9 @@
 import { BOT_PREFIX, parseCommand, isProfileCommand, PROFILE_COMMAND, PROFILE_ALIASES, resolveRoles, buildProfileEmbed, discordLinkedLabel } from '../lib/bot-logic.js';
+import { isRobloxCommand, robloxProfileField } from '../lib/roblox-logic.js';
 import { getProfileIdentity, getInviteJoin } from '../lib/bot-store.js';
+import { handleRobloxCommand, enforceRobloxGate } from './roblox.js';
+import { getRobloxSettings } from '../../api/_lib/roblox-store.js';
+import { getMemberRoblox } from '../../api/_lib/roblox-service.js';
 
 /**
  * Message and command handling for the ProjectHub bot.
@@ -63,12 +67,33 @@ async function runCommand(parsed, message, config, { via, logCommand = null }) {
   if (isProfileCommand(parsed.command)) {
     return handleProfile(message, { via, logCommand });
   }
+
+  if (isRobloxCommand(parsed.command)) {
+    // The Roblox family is where the verified-only gate applies. It reads the
+    // cached status, so a restricted channel costs a database read, not a
+    // Bloxlink call per message; the commands that let a member link are exempt.
+    const prefix = config.prefix || BOT_PREFIX;
+    const staff = await isStaffMember(message);
+    const gate = await enforceRobloxGate(message, { isStaff: staff, prefix });
+    if (gate.blocked) return message.reply(gate.reply);
+    const target = await resolveTargetMember(message);
+    return handleRobloxCommand(message, parsed, { target, logCommand, prefix });
+  }
+
+  // The gate also covers every other command when the operator has not named
+  // specific channels: "verified-only commands" is the default reading of
+  // `requireVerification` with no channel list.
+  const staff = await isStaffMember(message);
+  const gate = await enforceRobloxGate(message, { isStaff: staff, prefix: config.prefix || BOT_PREFIX });
+  if (gate.blocked) return message.reply(gate.reply);
+
   switch (parsed.command) {
     case 'help':
       return message.reply(
         'ProjectHub commands:\n' +
           `\`${config.prefix || BOT_PREFIX}${PROFILE_COMMAND}\` — your ProjectHub profile.\n` +
           `Alias: \`${config.prefix || BOT_PREFIX}${PROFILE_ALIASES[0]}\`.\n` +
+          `\`${config.prefix || BOT_PREFIX}roblox profile|lookup|verify|unlink|status\` — Roblox via Bloxlink.\n` +
           'You can also just @ me.',
       );
     default:
@@ -78,6 +103,28 @@ async function runCommand(parsed, message, config, { via, logCommand = null }) {
         return message.reply(`I don't know \`${parsed.command}\`. Try \`${config.prefix || BOT_PREFIX}help\`.`);
       }
       return undefined;
+  }
+}
+
+/**
+ * The member a Roblox command targets: the first mention, else the author.
+ *
+ * Discord's own member objects are used rather than a REST fetch, so an
+ * uncached member is not an extra request; the author is always resolvable.
+ */
+async function resolveTargetMember(message) {
+  const mentioned = message.mentions?.members?.first?.();
+  if (mentioned) return mentioned;
+  return message.member || message.guild?.members?.cache?.get(message.author?.id) || message.author;
+}
+
+/** Whether the author holds an admin/owner role in the site tables. */
+async function isStaffMember(message) {
+  try {
+    const identity = await getProfileIdentity(message.author?.id);
+    return Boolean(identity.admin?.role);
+  } catch {
+    return false;
   }
 }
 
@@ -124,6 +171,11 @@ export async function handleProfile(message, { via, logCommand = null } = {}) {
   const username = targetUser.username || 'unknown';
   const avatarUrl = targetUser.displayAvatarURL?.({ size: 256, extension: 'png' }) || null;
 
+  // Roblox is opt-in and only added when the integration is enabled, the
+  // "show on profiles" switch is on, and Bloxlink confirms a link. The lookup is
+  // the cached one, so opening a profile does not spend a Bloxlink call.
+  const robloxField = await resolveRobloxProfileField(guild?.id, targetUser.id);
+
   logCommand?.(
     '%s for %s resolved: linked=%s admin=%s roles=%o',
     PROFILE_COMMAND,
@@ -142,12 +194,41 @@ export async function handleProfile(message, { via, logCommand = null } = {}) {
     serverJoined: target?.joinedAt || (target?.joinedTimestamp ? new Date(target.joinedTimestamp) : null),
     invitedBy,
     discordLinked: discordLinkedLabel(identity.linked),
+    robloxField,
     requestedBy: message.author?.username || 'unknown',
     requestedAt: new Date(),
     footerIconUrl: message.author?.displayAvatarURL?.({ size: 64, extension: 'png' }) || null,
   });
 
   return message.reply({ embeds: [embed] });
+}
+
+/**
+ * The Roblox field for the `&profile` embed, or `null`.
+ *
+ * Best-effort by design: a Roblox or database failure must leave the existing
+ * profile exactly as it was, so this swallows its own errors and returns null
+ * rather than failing the profile command.
+ */
+async function resolveRobloxProfileField(guildId, discordId) {
+  try {
+    const settings = await getRobloxSettings();
+    if (!settings.enabled || !settings.showOnProfiles || !settings.bloxlinkEnabled) return null;
+    const result = await getMemberRoblox({ guildId: guildId || '', discordId });
+    if (result.status !== 'linked') return null;
+    return robloxProfileField({
+      robloxUsername: result.profile?.username || null,
+      robloxDisplayName: result.profile?.displayName || null,
+      robloxUserId: result.robloxId || null,
+      // `displayMode` is the operator's choice between a one-line and a fuller
+      // Roblox block on the profile.
+      mode: settings.displayMode === 'full' ? 'full' : 'compact',
+      status: result.status,
+    });
+  } catch (error) {
+    console.error('[bot] roblox profile field failed:', error.message);
+    return null;
+  }
 }
 
 /**

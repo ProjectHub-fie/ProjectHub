@@ -91,6 +91,10 @@ test('the helpers still exist, just under _lib', () => {
     'mail-sanitize.js',
     'push.js',
     'bot-routes.js',
+    'roblox-client.js',
+    'roblox-service.js',
+    'roblox-store.js',
+    'roblox-routes.js',
     'suite-runner.js',
   ]) {
     assert.ok(lib.includes(`api/_lib/${name}`), `api/_lib/${name} is missing`);
