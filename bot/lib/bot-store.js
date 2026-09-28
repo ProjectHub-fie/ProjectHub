@@ -15,7 +15,7 @@
  */
 import postgres from 'postgres';
 import { normalizeDatabaseUrl, sslOptionForUrl } from '../../api/_lib/db-url.js';
-import { maskWebhook, linkStatus } from './bot-logic.js';
+import { maskWebhook } from './bot-logic.js';
 
 let _sql = null;
 function db() {
@@ -352,25 +352,16 @@ export async function resolveDiscordIdentity(discordId) {
 /* ------------------------------------------------------------- profile lookup */
 
 /**
- * The site data the profile command needs, in one round of queries.
+ * The site data the profile command needs.
  *
- * `resolveDiscordIdentity` already answers the role and the by-id link. The
- * only extra question the profile asks is the email-based link, which is one
- * bounded query — not a query per row. The invite attribution is looked up
- * separately because it is guild-scoped.
+ * `resolveDiscordIdentity` already answers both questions the profile asks: the
+ * admin role and whether the Discord id exists in `users`. The Discord Linked
+ * field is that second one — found in `users` by id means linked — so no extra
+ * query is needed.
  */
-export async function getProfileIdentity(discordId, email = null) {
+export async function getProfileIdentity(discordId) {
   const identity = await resolveDiscordIdentity(discordId);
-  if (identity.user || !email) {
-    return { ...identity, userByEmail: null, linkStatus: linkStatus(identity) };
-  }
-  const sql = db();
-  const [userByEmail] = await sql`SELECT id FROM users WHERE email = ${email} LIMIT 1`;
-  return {
-    ...identity,
-    userByEmail: userByEmail ? { id: userByEmail.id } : null,
-    linkStatus: linkStatus({ ...identity, userByEmail }),
-  };
+  return { ...identity, linked: Boolean(identity.user) };
 }
 
 /* ---------------------------------------------------------------- invite tracking */

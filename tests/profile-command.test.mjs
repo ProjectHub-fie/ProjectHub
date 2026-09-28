@@ -21,8 +21,7 @@ const {
   PROFILE_ALIASES,
   PROFILE_AUTHOR_ICON,
   isProfileCommand,
-  linkStatus,
-  linkStatusLabel,
+  discordLinkedLabel,
   formatDate,
   humanizeAge,
   formatDateWithAge,
@@ -50,15 +49,11 @@ test('the old dev command is no longer registered, under any alias', () => {
 
 /* --------------------------------------------------------- link status words */
 
-test('link status keeps the three states apart', () => {
-  assert.equal(linkStatus({ userById: { id: 'u' } }), 'linked');
-  assert.equal(linkStatus({ userByEmail: { id: 'u' } }), 'not_linked');
-  assert.equal(linkStatus({}), 'no_account');
-  assert.equal(linkStatusLabel('linked'), 'Yes — linked');
-  assert.equal(linkStatusLabel('not_linked'), 'Not linked');
-  assert.equal(linkStatusLabel('no_account'), 'No account yet');
-  // An unrecognised status falls back rather than rendering undefined.
-  assert.equal(linkStatusLabel(undefined), 'No account yet');
+test('Discord Linked is Yes only when the users table has the discord id', () => {
+  assert.equal(discordLinkedLabel(true), 'Yes');
+  assert.equal(discordLinkedLabel(false), 'No');
+  // An unrecognised/absent value reads as No rather than undefined.
+  assert.equal(discordLinkedLabel(undefined), 'No');
 });
 
 /* ------------------------------------------------------------- date and age */
@@ -99,7 +94,7 @@ test('the profile embed is one embed with the requested structure', () => {
     accountCreated: new Date('2024-03-14T00:00:00Z'),
     serverJoined: new Date('2025-06-22T00:00:00Z'),
     invitedBy: 'Bob',
-    discordLinked: 'Yes — linked',
+    discordLinked: 'Yes',
     requestedBy: 'alice',
     requestedAt: new Date('2026-09-27T10:00:00Z'),
     now,
@@ -134,7 +129,7 @@ test('the profile embed is one embed with the requested structure', () => {
   assert.equal(embed.fields[3].value, '14/03/2024 • 2 years ago');
   assert.equal(embed.fields[4].value, '22/06/2025 • 1 year ago');
   assert.equal(embed.fields[5].value, 'Bob');
-  assert.equal(embed.fields[6].value, 'Yes — linked');
+  assert.equal(embed.fields[6].value, 'Yes');
 });
 
 test('the profile embed never renders undefined, null or NaN', () => {
@@ -144,7 +139,7 @@ test('the profile embed never renders undefined, null or NaN', () => {
   // The documented fallbacks.
   assert.equal(embed.fields[2].value, 'No Role');
   assert.equal(embed.fields[5].value, 'Unknown');
-  assert.equal(embed.fields[6].value, 'No account yet');
+  assert.equal(embed.fields[6].value, 'No');
   // No avatar means no image block rather than an empty one.
   assert.equal(embed.image, undefined);
 });

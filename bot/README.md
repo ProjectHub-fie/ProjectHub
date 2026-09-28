@@ -268,9 +268,8 @@ proves the identity.
   form, so each reader sees it in their own locale.
 
 Role is the linked admin credential's role, else `member`; `No Role` when the
-lookup returned nothing. Discord Linked is one of `Yes — linked`, `Not linked`
-(a ProjectHub account exists under the same email but was never linked), or `No
-account yet`.
+lookup returned nothing. Discord Linked is `Yes` when the Discord id is found in
+the `users` table, otherwise `No`.
 
 Inviter attribution uses invite counting: the bot snapshots each guild's invite
 `uses` on boot and every join, and the invite whose count grows is the one used.

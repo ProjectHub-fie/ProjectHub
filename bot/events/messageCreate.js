@@ -1,4 +1,4 @@
-import { BOT_PREFIX, parseCommand, isProfileCommand, PROFILE_COMMAND, PROFILE_ALIASES, resolveRoles, buildProfileEmbed, linkStatusLabel } from '../lib/bot-logic.js';
+import { BOT_PREFIX, parseCommand, isProfileCommand, PROFILE_COMMAND, PROFILE_ALIASES, resolveRoles, buildProfileEmbed, discordLinkedLabel } from '../lib/bot-logic.js';
 import { getProfileIdentity, getInviteJoin } from '../lib/bot-store.js';
 
 /**
@@ -98,7 +98,7 @@ export async function handleProfile(message, { via, logCommand = null } = {}) {
 
   let identity;
   try {
-    identity = await getProfileIdentity(targetUser.id, targetUser.email || null);
+    identity = await getProfileIdentity(targetUser.id);
   } catch (error) {
     console.error('[bot] profile lookup failed:', error.message);
     return message.reply('I could not reach the ProjectHub database just now. Try again shortly.');
@@ -141,7 +141,7 @@ export async function handleProfile(message, { via, logCommand = null } = {}) {
     accountCreated: targetUser.createdAt || (targetUser.createdTimestamp ? new Date(targetUser.createdTimestamp) : null),
     serverJoined: target?.joinedAt || (target?.joinedTimestamp ? new Date(target.joinedTimestamp) : null),
     invitedBy,
-    discordLinked: linkStatusLabel(identity.linkStatus),
+    discordLinked: discordLinkedLabel(identity.linked),
     requestedBy: message.author?.username || 'unknown',
     requestedAt: new Date(),
     footerIconUrl: message.author?.displayAvatarURL?.({ size: 64, extension: 'png' }) || null,

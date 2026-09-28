@@ -421,10 +421,10 @@ for the three things Discord cannot answer: the site role, the Discord link
 status, and who invited the member.
 
 The role is the `admin_credentials.role` when the Discord id is found there, else
-`member`; `No Role` is reserved for a lookup that returned nothing. The Discord
-Linked field distinguishes three states from `users`: a row with this
-`discord_id` is linked, a row under the same email is not linked, neither is "No
-account yet". Invite attribution is done by diffing the guild's invite `uses`
+`member`; `No Role` is reserved for a lookup that returned nothing. Discord
+Linked is `Yes` when the Discord id is found in `users`, otherwise `No` — a
+`users` row that merely shares an email was never linked and does not count.
+Invite attribution is done by diffing the guild's invite `uses`
 counts when a member joins (`bot/events/guildMemberAdd.js`), stored in
 `bot_invite_joins` / `bot_invite_uses`, because Discord does not report who used
 an invite. A join that cannot be attributed shows `Unknown`, never a raw id.

@@ -27,26 +27,14 @@ export const PROFILE_AUTHOR_ICON = 'https://projecthub-me.vercel.app/Project.jpg
 export const PROFILE_COLOR = 0x6366f1;
 
 /**
- * The ProjectHub link status for a Discord id, as one of three words.
+ * The Discord Linked field.
  *
- * `linked` — a `users` row carries this Discord id.
- * `not_linked` — a row exists under the same email but was never linked.
- * `no_account` — neither.
- *
- * A boolean would collapse the second and third and misreport them, so the
- * distinction is kept.
+ * `Yes` when the Discord id is found in the `users` table, `No` otherwise. The
+ * lookup is by Discord id alone: an account that merely shares an email was
+ * never linked, so it does not count.
  */
-export function linkStatus({ userById = null, userByEmail = null } = {}) {
-  if (userById) return 'linked';
-  if (userByEmail) return 'not_linked';
-  return 'no_account';
-}
-
-/** The channel-facing label for a link status. Never invented. */
-export function linkStatusLabel(status) {
-  if (status === 'linked') return 'Yes — linked';
-  if (status === 'not_linked') return 'Not linked';
-  return 'No account yet';
+export function discordLinkedLabel(isLinked) {
+  return isLinked ? 'Yes' : 'No';
 }
 
 /** A `DD/MM/YYYY` date in UTC, or `Unknown` for a missing/invalid value. */
@@ -139,7 +127,7 @@ export function buildProfileEmbed({
       { name: '📅 Account Created', value: formatDateWithAge(accountCreated, now), inline: false },
       { name: '📅 Server Joined', value: formatDateWithAge(serverJoined, now), inline: false },
       { name: '🤝 Invited By', value: invitedBy || 'Unknown', inline: false },
-      { name: '🔗 Discord Linked', value: discordLinked || 'No account yet', inline: false },
+      { name: '🔗 Discord Linked', value: discordLinked || 'No', inline: false },
     ],
     footer: {
       text: `Requested by ${username || 'unknown'} • ${relativeTimestamp(requestedAt)}`,
