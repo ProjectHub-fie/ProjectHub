@@ -3,6 +3,7 @@ import {
   CheckCircle,
   FileEdit,
   FlaskConical,
+  Gamepad2,
   Inbox,
   LayoutDashboard,
   Mail,
@@ -69,8 +70,9 @@ export function AdminSidebar() {
   // Shared notification poll: this is what makes the unread badge update without
   // a full page reload. It returns no counts for a non-owner/admin session.
   const { counts } = useMailNotifications();
-  const { canManageBot, canRunTests } = useAdminAuth();
+  const { canManageBot, canManageRoblox, canRunTests } = useAdminAuth();
   const onBot = location === "/bot" || location.startsWith("/bot/");
+  const onRoblox = location === "/roblox" || location.startsWith("/roblox/");
   const onTests = location === "/tests" || location.startsWith("/tests/");
   const onIntegrations = location === "/integrations" || location === "/settings";
 
@@ -174,6 +176,23 @@ export function AdminSidebar() {
                       <span className="truncate flex items-center gap-2">
                         <Bot className="h-4 w-4" />
                         Bot
+                      </span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
+              {/* Owner/admin only, matching the server guard on /api/admin/roblox. */}
+              {canManageRoblox && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={onRoblox}
+                    className={`rounded-lg px-3 py-2 cursor-pointer ${onRoblox ? "sidebar-nav-active" : ""}`}
+                  >
+                    <Link href="/roblox" onClick={closeMobileSidebar}>
+                      <span className="truncate flex items-center gap-2">
+                        <Gamepad2 className="h-4 w-4" />
+                        Roblox
                       </span>
                     </Link>
                   </SidebarMenuButton>

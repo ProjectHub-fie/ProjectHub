@@ -28,6 +28,8 @@ halves is in `api/_lib`, so there is one definition of the alert rules.
 | `BOT_POLL_INTERVAL_MINUTES` | no | How often to check usage. Default `15`. |
 | `BOT_DEBUG` | no | Debug namespaces to enable, e.g. `bot:*`. `DEBUG` works the same way. |
 | `MAIL_DATABASE_URL` | no | Only if the mailbox was split onto its own database. |
+| `BLOXLINK_API_KEY` | for Roblox verification | The Bloxlink **server** API key for this guild (from `blox.link/dashboard/user/developer`). Unset, Roblox checks resolve to *verification unavailable*, never to *not linked*. |
+| `BLOXLINK_GUILD_ID` | for Roblox verification | The guild the key is scoped to. A server key only answers for its own guild. |
 
 The token is read from the first of these that is set, in this order:
 `DISCORD_BOT_TOKEN`, `BOT_TOKEN`, `DISCORD_TOKEN`, `TOKEN`, `CLIENT_TOKEN`. The
@@ -275,6 +277,74 @@ Inviter attribution uses invite counting: the bot snapshots each guild's invite
 `uses` on boot and every join, and the invite whose count grows is the one used.
 Discord never reports who used an invite, so this is the only way to know. A join
 that cannot be attributed shows `Unknown`.
+
+## Roblox verification via Bloxlink
+
+The bot does not verify Roblox accounts itself. **Bloxlink** owns Roblox
+account linking — it is the only thing that ever proves who owns a Roblox
+account — and this bot reads the result and builds the private-server features on
+top of it. A Discord username that happens to equal a Roblox username is never
+treated as evidence of anything.
+
+Two environment variables enable it, and neither has a default:
+
+| Variable | Why |
+| --- | --- |
+| `BLOXLINK_API_KEY` | the server API key from `blox.link/dashboard/user/developer`, generated for this guild |
+| `BLOXLINK_GUILD_ID` | the guild the key is scoped to; a server key only answers for its own guild |
+
+Without both, every Bloxlink check resolves to *verification unavailable* — never
+to *not linked*, because "we could not ask" and "there is no link" are different
+answers and only one of them is safe to show a member. The key is read only in
+`api/_lib/roblox-client.js`, sent only to `api.blox.link`, and never logged or
+returned to the browser; the dashboard reports only whether it is present.
+
+### Roblox commands
+
+| Command | Behaviour |
+| --- | --- |
+| `&roblox` / `&roblox profile [member]` | the Roblox account linked through Bloxlink, or a clear explanation when there is none |
+| `&roblox lookup <username>` | a **public** Roblox lookup — resolves a username, and explicitly does not link it to Discord |
+| `&roblox verify` | points the member at Bloxlink's own verification flow; the bot only reads the outcome |
+| `&roblox unlink` | directs the member to Bloxlink, which owns unlinking |
+| `&roblox status [member]` | a short Bloxlink status line |
+
+The status is one of four, and the distinction matters:
+
+- **Linked** — Bloxlink returned a Roblox id. Rendered as `✓ Bloxlink Verified`.
+- **Not Linked** — Bloxlink answered and there is no account.
+- **Verification unavailable** — no key, wrong guild, or quota exhausted. Not a
+  "not linked" answer.
+- **Bloxlink unavailable** — the API could not be reached.
+
+`&profile` gains one `🎮 Roblox` field, and only when Bloxlink confirms a link and
+*Settings → Roblox → Show Roblox information* is on. An unlinked member's profile
+is byte-for-byte unchanged.
+
+### Efficiency
+
+The bot never polls the guild's members. A member is checked once when they join,
+and thereafter only when they open a profile or run a Roblox command. The answer
+is cached in `roblox_links` with a TTL, so repeat lookups do not re-ask Bloxlink,
+and the cached row holds only the Discord id, the Roblox id, the status, the
+source and the timestamps — never a full Roblox payload. A provider outage
+preserves the last known link and only restarts the TTL, so it cannot strip a
+verified member of their access nor cause a re-ask on every message.
+
+### Configuration
+
+Everything is set in the admin dashboard at **`/pbad/roblox`** (owner and admin
+only): the master switches, the verified-only channels, the verification and
+notification channels, and the verified/unverified role ids (recorded for
+reference only — role assignment stays with Bloxlink, this bot does not sync
+roles). Nothing secret is stored there: only `BLOXLINK_API_KEY` and
+`BLOXLINK_GUILD_ID` are environment-only, and the page reports only whether each
+is present.
+
+The **Test** button on the Bloxlink card performs one real lookup. With a member
+id it checks that member; without one it probes with an id that will not resolve,
+which distinguishes a valid key ("User not found") from an invalid one ("Invalid
+API Key").
 
 ## Threshold limits
 

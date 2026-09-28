@@ -110,25 +110,32 @@ export function buildProfileEmbed({
   serverJoined,
   invitedBy,
   discordLinked,
+  robloxField = null,
   requestedBy,
   requestedAt = new Date(),
   now = Date.now(),
   footerIconUrl = null,
 } = {}) {
+  const fields = [
+    { name: '👤 Name', value: displayName || 'Unknown', inline: false },
+    { name: '🏷️ Username', value: `@${username || 'unknown'}`, inline: false },
+    { name: '🛡️ Role', value: role || 'No Role', inline: false },
+    { name: '📅 Account Created', value: formatDateWithAge(accountCreated, now), inline: false },
+    { name: '📅 Server Joined', value: formatDateWithAge(serverJoined, now), inline: false },
+    { name: '🤝 Invited By', value: invitedBy || 'Unknown', inline: false },
+    { name: '🔗 Discord Linked', value: discordLinked || 'No', inline: false },
+  ];
+  // The Roblox field is opt-in and only present when the integration is on and
+  // Bloxlink confirmed a link, so the profile is unchanged for a server that
+  // does not use it. Its value is built by `robloxProfileField`.
+  if (robloxField) fields.push(robloxField);
+
   return {
     title: '📋 Profile Information',
     color: PROFILE_COLOR,
     author: { name: displayName || 'ProjectHub member', icon_url: PROFILE_AUTHOR_ICON, url: PROFILE_AUTHOR_ICON },
     ...(avatarUrl ? { image: { url: avatarUrl } } : {}),
-    fields: [
-      { name: '👤 Name', value: displayName || 'Unknown', inline: false },
-      { name: '🏷️ Username', value: `@${username || 'unknown'}`, inline: false },
-      { name: '🛡️ Role', value: role || 'No Role', inline: false },
-      { name: '📅 Account Created', value: formatDateWithAge(accountCreated, now), inline: false },
-      { name: '📅 Server Joined', value: formatDateWithAge(serverJoined, now), inline: false },
-      { name: '🤝 Invited By', value: invitedBy || 'Unknown', inline: false },
-      { name: '🔗 Discord Linked', value: discordLinked || 'No', inline: false },
-    ],
+    fields,
     footer: {
       text: `Requested by ${username || 'unknown'} • ${relativeTimestamp(requestedAt)}`,
       ...(footerIconUrl ? { icon_url: footerIconUrl } : {}),

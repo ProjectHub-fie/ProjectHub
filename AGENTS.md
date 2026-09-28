@@ -468,3 +468,53 @@ genuinely low" from the deployment that is actually running.
 
 The alert is best-effort, the same as Mailjet and push: a failed read or send is
 logged and the poll moves on.
+
+## Roblox integration (Bloxlink is the verifier)
+
+The bot does not verify Roblox accounts. Bloxlink owns linking, and the only
+value that ever becomes "verified" is a Roblox id returned by Bloxlink's own
+server API for a Discord id. A matching username is never evidence of ownership.
+
+The provider layer is `api/_lib/roblox-client.js`, which uses
+`GET https://api.blox.link/v4/public/guilds/{guildId}/discord-to-roblox/{discordId}`
+with `Authorization: <BLOXLINK_API_KEY>`. Two environment variables enable it and
+neither has a default: `BLOXLINK_API_KEY` (a **server** key, valid only for the
+guild it was generated for) and `BLOXLINK_GUILD_ID`. The key is read only here,
+sent only to Bloxlink, and never logged or returned; the dashboard reports only
+whether it is present. Roblox's public endpoints
+(`users.roblox.com/v1/usernames/users`, `users/{id}`, and the avatar thumbnail)
+answer the *public lookup*, which proves nothing and never sets a verified state.
+
+Four statuses, and the distinction is the whole point: `linked`, `not_linked`
+(Bloxlink answered, no account), `verification_unavailable` (no key, wrong guild,
+or rate-limited) and `bloxlink_unavailable` (network/5xx). The two unavailable
+states must never render as "not linked" — `normalizeStatus` maps anything
+unrecognised to `verification_unavailable` for the same reason, so a failure
+never reads as a definite no. Command: `&roblox [profile|lookup|verify|unlink|
+status]`; a bare `&roblox` is `profile`.
+
+Data lives in three lazily-created tables (`ensureRobloxSchema`):
+`roblox_settings` (one row, dashboard-owned, no secrets), `roblox_links` (the
+cache — Discord id, Roblox id, status, source, timestamps; deliberately **no**
+Roblox payload) and `roblox_link_events` (the log, appended only on a change).
+The bot never enumerates the guild: a member is checked once on join
+(`bot/events/robloxJoin.js`) and thereafter only on a profile or a Roblox
+command, with a TTL on the cache so repeat lookups do not re-ask Bloxlink. An
+outage **preserves the last known link** and only restarts the TTL
+(`applyLinkResult` calls `touchLinkCheck` instead of `upsertLink`), so it cannot
+strip a verified member of access or cause a re-ask per message.
+
+`evaluateFeatureAccess` gates channels/commands: with `requireVerification` on,
+a listed channel (or, with no list, every command) requires a linked account,
+and staff always pass so an outage cannot lock an administrator out. `&profile`
+gains exactly one `🎮 Roblox` field, and only when a link is confirmed and
+`showOnProfiles` is on — an unlinked profile is unchanged. The dashboard page is
+`/pbad/roblox` (owner/admin, `requireRole('admin')` on the routes in both the
+serverless function and the Express server via the shared `buildRobloxRouter`),
+with the /roblox sidebar entry hidden for lower roles.
+
+Bloxlink exposes only an account **id**, not usernames, ranks or group info,
+through the supported endpoint. Anything beyond the id (username, display name,
+avatar, creation date) is filled from Roblox's public API; a Roblox rank or group
+claim is **not** invented, and the integration does no group administration or
+role sync.
