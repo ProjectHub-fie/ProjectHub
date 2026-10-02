@@ -72,6 +72,7 @@
 /api/_lib/db.js
 /api/_lib/email.js
 /api/_lib/mail-routes.js
+/api/_lib/roblox-routes.js
 /api/_lib/mail-sanitize.js
 /api/_lib/mail-store.js
 /api/_lib/push.js

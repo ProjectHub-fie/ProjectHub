@@ -3,7 +3,7 @@
  *
  * This module is the glue between the Discord message/join events and the
  * shared Roblox service. The pure formatting lives in `bot/lib/roblox-logic.js`
- * and the cache/provider work in `api/_lib/roblox-*`, so everything here is the
+ * and the cache/provider work in `bot/lib/roblox-*`, so everything here is the
  * part that touches live Discord objects.
  *
  * The commands are:
@@ -39,9 +39,9 @@ import {
   isVerifiedOnlyChannel,
   evaluateFeatureAccess,
   featureAccessMessage,
-} from '../../api/_lib/roblox-service.js';
-import { getRobloxSettings } from '../../api/_lib/roblox-store.js';
-import { resolveRobloxUsername } from '../../api/_lib/roblox-client.js';
+} from '../lib/roblox-service.js';
+import { getRobloxSettings } from '../lib/roblox-store.js';
+import { resolveRobloxUsername } from '../lib/roblox-client.js';
 
 /** Commands a verified-only gate never blocks, so a member can always link. */
 const GATE_EXEMPT_COMMANDS = new Set(['roblox', 'help']);

@@ -355,9 +355,9 @@ website toolchain. Run it with `cd bot && npm install && node index.js`. The roo
 exists only for a host that starts from the repository root and calls the same
 `main()`.
 
-The bot's exclusive logic lives under `bot/lib/` — `bot-logic.js`, `bot-store.js`
-and `neon-usage.js` — because the bot's own install is the only one that has to
-resolve them. The dashboard reads them back (`api/_lib/bot-routes.js` imports
+The bot's exclusive logic lives under `bot/lib/` — `bot-logic.js`, `bot-store.js`,
+`neon-usage.js` and the `roblox-*` modules — because the bot's own install is the
+only one that has to resolve them. The dashboard reads them back (`api/_lib/bot-routes.js` imports
 `../../bot/lib/...`), and `bot/lib/bot-store.js` imports the one genuinely shared
 pure helper, `api/_lib/db-url.js`. The old layout kept all four under `api/_lib`,
 which forced a bot-only host to carry the website's `api/` tree and the website's
@@ -366,6 +366,16 @@ function bundle to reach into `bot/`.
 The split matters when changing this feature: **the dashboard is serverless and
 must stay request/response, and only `bot/index.js` may assume a long-lived
 process.** Bot logic under `bot/lib` is shared so both halves use the same rules.
+
+The Roblox modules follow the same rule for a sharper reason: `roblox-store.js`
+imports `postgres`, and `postgres` is declared in `bot/package.json`, not the
+root one. A module the bot imports must therefore sit under `bot/lib`, where Node
+resolves `postgres` from `bot/node_modules`. Under `api/_lib` it resolved from
+the repo root, found nothing — the bot host installs only `bot/` — and the
+process died at load with `ERR_MODULE_NOT_FOUND` before the gateway ever
+connected. The only `api/` module the bot may reach into is a pure helper with no
+bare imports (`db-url.js`); `tests/deployment-limits.test.mjs` enforces both
+directions.
 
 Configuration is stored, not hardcoded, and is edited at `/pbad/bot` (owner and
 admin only, the same `requireRole('admin')` rule as mail):
@@ -475,7 +485,7 @@ The bot does not verify Roblox accounts. Bloxlink owns linking, and the only
 value that ever becomes "verified" is a Roblox id returned by Bloxlink's own
 server API for a Discord id. A matching username is never evidence of ownership.
 
-The provider layer is `api/_lib/roblox-client.js`, which uses
+The provider layer is `bot/lib/roblox-client.js`, which uses
 `GET https://api.blox.link/v4/public/guilds/{guildId}/discord-to-roblox/{discordId}`
 with `Authorization: <BLOXLINK_API_KEY>`. Two environment variables enable it and
 neither has a default: `BLOXLINK_API_KEY` (a **server** key, valid only for the
