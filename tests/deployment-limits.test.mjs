@@ -91,9 +91,6 @@ test('the helpers still exist, just under _lib', () => {
     'mail-sanitize.js',
     'push.js',
     'bot-routes.js',
-    'roblox-client.js',
-    'roblox-service.js',
-    'roblox-store.js',
     'roblox-routes.js',
     'suite-runner.js',
   ]) {
@@ -105,13 +102,65 @@ test('the bot-exclusive helpers live under bot/ so the bot install carries them'
   // The dashboard reads these back, but they are the bot's own logic: keeping
   // them under api/_lib meant the deployed function imported modules from bot/,
   // which Vercel does not bundle. They live with the bot now.
+  //
+  // The Roblox modules joined them for the same class of reason, seen from the
+  // other side: `roblox-store.js` imports `postgres`, which is a *bot*
+  // dependency. A module the bot process imports must sit under `bot/lib` so
+  // Node resolves `postgres` from `bot/node_modules`; from `api/_lib` it looked
+  // in the repo root, found nothing (the bot host installs only `bot/`), and
+  // died at load with ERR_MODULE_NOT_FOUND. The serverless function reaches
+  // them back through `bot/lib`, exactly as it already does `bot-store.js`.
   const botLib = walk(resolve(root, 'bot'))
     .map((f) => f.slice(root.length + 1).split('\\').join('/'))
     .sort();
-  for (const name of ['bot-logic.js', 'bot-store.js', 'neon-usage.js']) {
+  for (const name of [
+    'bot-logic.js',
+    'bot-store.js',
+    'neon-usage.js',
+    'roblox-logic.js',
+    'roblox-client.js',
+    'roblox-service.js',
+    'roblox-store.js',
+  ]) {
     assert.ok(botLib.includes(`bot/lib/${name}`), `bot/lib/${name} is missing`);
     assert.ok(!apiFiles.includes(`api/_lib/${name}`), `api/_lib/${name} must not exist`);
   }
+});
+
+test('a bot module never pulls a bare dependency in through api/', () => {
+  // `postgres` is declared in bot/package.json, not the root one. When the bot
+  // imported api/_lib/roblox-store.js, Node resolved `postgres` from api/_lib/ —
+  // the repo root — where the bot host had installed nothing, and the process
+  // died at load with ERR_MODULE_NOT_FOUND. A bot module may therefore only
+  // reach into api/ for a helper that has no bare imports of its own (db-url.js
+  // is pure, which is why bot-store.js has always been safe). Anything that
+  // imports a package belongs under bot/lib, beside the bot's own install.
+  const botFiles = walk(resolve(root, 'bot'))
+    .map((f) => f.slice(root.length + 1).split('\\').join('/'))
+    .filter((f) => f.endsWith('.js') && !f.includes('/node_modules/'));
+  const offenders = [];
+  const seen = new Set();
+  for (const file of botFiles) {
+    const text = readFileSync(resolve(root, file), 'utf8');
+    for (const match of text.matchAll(/from\s+'(\.\.\/[^']*api\/[^']+)'/g)) {
+      const target = resolve(dirname(resolve(root, file)), match[1]);
+      const rel = target.slice(root.length + 1).split('\\').join('/');
+      if (seen.has(rel)) continue;
+      seen.add(rel);
+      const targetText = readFileSync(target, 'utf8');
+      for (const spec of targetText.matchAll(/from\s+'([^']+)'/g)) {
+        const value = spec[1];
+        if (value.startsWith('.') || value.startsWith('node:')) continue;
+        offenders.push(`${file} -> ${rel} -> ${value}`);
+      }
+    }
+  }
+  assert.deepEqual(
+    offenders,
+    [],
+    'a bot module reaches an api/ helper that imports a package, which the bot install cannot resolve:\n' +
+      offenders.join('\n'),
+  );
 });
 
 /* --------------------------------------------------- .vercelignore stripping */

@@ -296,7 +296,7 @@ Two environment variables enable it, and neither has a default:
 Without both, every Bloxlink check resolves to *verification unavailable* — never
 to *not linked*, because "we could not ask" and "there is no link" are different
 answers and only one of them is safe to show a member. The key is read only in
-`api/_lib/roblox-client.js`, sent only to `api.blox.link`, and never logged or
+`bot/lib/roblox-client.js`, sent only to `api.blox.link`, and never logged or
 returned to the browser; the dashboard reports only whether it is present.
 
 ### Roblox commands
