@@ -34,7 +34,7 @@ import {
   ROBLOX_STATUS,
   isValidRobloxId,
   isValidRobloxUsername,
-} from '../../bot/lib/roblox-logic.js';
+} from './roblox-logic.js';
 
 const BLOXLINK_API = 'https://api.blox.link/v4';
 const ROBLOX_USERS_API = 'https://users.roblox.com/v1';
