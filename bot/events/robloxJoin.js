@@ -10,8 +10,8 @@
  * Everything here is a side effect. A Bloxlink outage, a missing key or a
  * configuration error must never affect the join, so failures are swallowed.
  */
-import { getRobloxSettings, applyLinkResult } from '../../api/_lib/roblox-store.js';
-import { lookupBloxlinkLink, isBloxlinkConfigured } from '../../api/_lib/roblox-client.js';
+import { getRobloxSettings, applyLinkResult } from '../lib/roblox-store.js';
+import { lookupBloxlinkLink, isBloxlinkConfigured } from '../lib/roblox-client.js';
 
 export function createRobloxJoinHandler({ logInvite = null, notify = null } = {}) {
   return async (member) => {

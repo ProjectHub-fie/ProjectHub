@@ -22,8 +22,8 @@ test('the Roblox integration flow', { skip: !hasDatabase ? 'DATABASE_URL is not 
   process.env.BLOXLINK_API_KEY = process.env.BLOXLINK_API_KEY || 'test-key';
   process.env.BLOXLINK_GUILD_ID = process.env.BLOXLINK_GUILD_ID || '999999999999999999';
 
-  const store = await import('../api/_lib/roblox-store.js');
-  const service = await import('../api/_lib/roblox-service.js');
+  const store = await import('../bot/lib/roblox-store.js');
+  const service = await import('../bot/lib/roblox-service.js');
   const { ROBLOX_STATUS } = await import('../bot/lib/roblox-logic.js');
   const postgres = (await import('postgres')).default;
   const { normalizeDatabaseUrl, sslOptionForUrl } = await import('../api/_lib/db-url.js');

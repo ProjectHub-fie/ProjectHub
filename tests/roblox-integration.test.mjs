@@ -46,9 +46,9 @@ const {
 
 const { buildProfileEmbed } = await import('../bot/lib/bot-logic.js');
 const { lookupBloxlinkLink, resolveRobloxUsername, fetchRobloxProfile, isBloxlinkConfigured, bloxlinkGuildId } =
-  await import('../api/_lib/roblox-client.js');
+  await import('../bot/lib/roblox-client.js');
 const { isCacheFresh, evaluateFeatureAccess, isVerifiedOnlyChannel, featureAccessMessage, ROBLOX_CACHE_TTL_MS } =
-  await import('../api/_lib/roblox-service.js');
+  await import('../bot/lib/roblox-service.js');
 
 /* --------------------------------------------------------------- validation */
 
@@ -560,7 +560,7 @@ test('the dashboard page never renders an API key', () => {
 /* ------------------------------------------------------------ store wiring */
 
 test('the cache table stores only the fields the requirement lists', () => {
-  const store = source('api/_lib/roblox-store.js');
+  const store = source('bot/lib/roblox-store.js');
   for (const column of ['guild_id', 'discord_id', 'roblox_id', 'status', 'last_checked_at', 'linked_at']) {
     assert.ok(store.includes(column), `roblox_links carries ${column}`);
   }
@@ -569,13 +569,13 @@ test('the cache table stores only the fields the requirement lists', () => {
 });
 
 test('a status change is the only thing that writes a log row', () => {
-  const store = source('api/_lib/roblox-store.js');
+  const store = source('bot/lib/roblox-store.js');
   assert.match(store, /const changed =/);
   assert.match(store, /if \(changed\)/);
 });
 
 test('an outage preserves the last known link instead of overwriting it', () => {
-  const store = source('api/_lib/roblox-store.js');
+  const store = source('bot/lib/roblox-store.js');
   // The unavailable path must not call upsertLink; it only touches the row.
   assert.match(store, /if \(unavailable && previous\)/);
   assert.match(store, /touchLinkCheck/);

@@ -28,7 +28,7 @@ import {
   ROBLOX_STATUS,
   isLinkedStatus,
   normalizeStatus,
-} from '../../bot/lib/roblox-logic.js';
+} from './roblox-logic.js';
 import { lookupBloxlinkLink, fetchRobloxProfile, isBloxlinkConfigured } from './roblox-client.js';
 import { getCachedLink, applyLinkResult, getRobloxSettings } from './roblox-store.js';
 

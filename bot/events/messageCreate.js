@@ -2,8 +2,8 @@ import { BOT_PREFIX, parseCommand, isProfileCommand, PROFILE_COMMAND, PROFILE_AL
 import { isRobloxCommand, robloxProfileField } from '../lib/roblox-logic.js';
 import { getProfileIdentity, getInviteJoin } from '../lib/bot-store.js';
 import { handleRobloxCommand, enforceRobloxGate } from './roblox.js';
-import { getRobloxSettings } from '../../api/_lib/roblox-store.js';
-import { getMemberRoblox } from '../../api/_lib/roblox-service.js';
+import { getRobloxSettings } from '../lib/roblox-store.js';
+import { getMemberRoblox } from '../lib/roblox-service.js';
 
 /**
  * Message and command handling for the ProjectHub bot.

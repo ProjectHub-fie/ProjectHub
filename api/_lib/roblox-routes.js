@@ -28,9 +28,9 @@ import {
   listLinks,
   listLinkEvents,
   getRobloxStats,
-} from './roblox-store.js';
-import { getMemberRoblox, getRobloxProfile } from './roblox-service.js';
-import { lookupBloxlinkLink, resolveRobloxUsername, isBloxlinkConfigured, bloxlinkGuildId } from './roblox-client.js';
+} from '../../bot/lib/roblox-store.js';
+import { getMemberRoblox, getRobloxProfile } from '../../bot/lib/roblox-service.js';
+import { lookupBloxlinkLink, resolveRobloxUsername, isBloxlinkConfigured, bloxlinkGuildId } from '../../bot/lib/roblox-client.js';
 
 /**
  * Builds the Roblox router. `requireAuth` and `requireRole` come from the caller

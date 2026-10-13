@@ -17,12 +17,14 @@
  *     unlink, status change, or a Bloxlink failure that prevented a check), so
  *     a member whose link is stable writes nothing on repeat lookups.
  *
- * The dashboard and the bot both use this module. It is under `api/_lib`
- * because both the serverless function and the long-running bot read it, and it
- * only imports the shared `db-url` helper.
+ * The dashboard and the bot both use this module. It lives under `bot/lib`
+ * because the bot process is what opens the pool: `postgres` is a bot dependency,
+ * so a module the bot imports must sit where Node resolves `postgres` from
+ * `bot/node_modules`. The serverless function reaches it back through
+ * `bot/lib`, the same way it already reaches `bot-store.js` and `db-url.js`.
  */
 import postgres from 'postgres';
-import { normalizeDatabaseUrl, sslOptionForUrl } from './db-url.js';
+import { normalizeDatabaseUrl, sslOptionForUrl } from '../../api/_lib/db-url.js';
 
 let _sql = null;
 function db() {
