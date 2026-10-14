@@ -38,7 +38,7 @@ const seedProjects = [
     longDescription: "PrimeBot is a comprehensive Discord bot designed to enhance server functionality with a complete suite of moderation, entertainment, and utility features. Built with performance and reliability in mind, it serves thousands of Discord servers with 99.9% uptime. It features a robust architecture that handles high concurrent users and provides a seamless management experience through its companion dashboard.",
     imageUrl: "/primebot.gif",
     category: "bots",
-    technologies: ["discord.js", "Node.js", "PostgreSQL", "Docker", "Redis", "TypeScript", "Express"],
+    technologies: ["JavaScript", "discord.js", "Node.js", "Express", "PostgreSQL"],
     features: [
       "Dynamic giveaway system with customizable entry requirements",
       "Interactive polls with real-time voting and analytics",
@@ -59,6 +59,7 @@ const seedProjects = [
       "Optimized for low latency and high performance"
     ],
     liveUrl: "https://discord.com/oauth2/authorize?client_id=1356575287151951943&permissions=8&integration_type=0&scope=bot%20applications.commands",
+    githubUrl: "https://github.com/ProjectHub-fie/PrimeBot",
     status: "active",
     authorName: "Team ProjectHub",
     architecture: "Multi-sharded microservices architecture with a centralized command handler and persistent PostgreSQL storage.",
@@ -110,7 +111,7 @@ const seedProjects = [
     longDescription: "Sky is a modern task management platform that brings teams together with real-time collaboration, advanced project tracking, and intelligent workflow automation. Designed for productivity and ease of use.",
     imageUrl: "/api/placeholder/400/300",
     category: "bots",
-    technologies: ["Discord.js"],
+    technologies: ["TypeScript", "discord.js", "MongoDB", "Node.js"],
     features: [
       "Real-time collaborative task editing and updates",
       "Advanced project timeline and milestone tracking",
@@ -157,7 +158,7 @@ const seedProjects = [
       "Optimized for high-concurrency database operations",
       "Secure connection management with encryption"
     ],
-    githubUrl: "https://github.com/rajroy1313/Database-web.git",
+    githubUrl: "https://github.com/ProjectHub-fie/Database-web",
     status: "developing",
     authorName: "Raj Roy",
     architecture: "Client-server architecture utilizing direct PostgreSQL connection protocols via secured tunneling for real-time data visualization.",
@@ -185,7 +186,7 @@ const seedProjects = [
       "Low-latency global infrastructure",
       "Integrated monitoring and alerting system"
     ],
-    githubUrl: "https://github.com/rajroy1313/Webhost.git",
+    githubUrl: "https://github.com/ProjectHub-fie/Webhost",
     status: "developing",
     authorName: "Raj Roy",
     timeline: "In development",
