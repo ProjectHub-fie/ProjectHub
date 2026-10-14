@@ -1,4 +1,19 @@
 import { Monitor, Server, Settings, Rocket } from "lucide-react";
+import {
+  SiTypescript,
+  SiJavascript,
+  SiReact,
+  SiNodedotjs,
+  SiPython,
+  SiKotlin,
+  SiGo,
+  SiPostgresql,
+  SiMongodb,
+  SiDocker,
+  SiVercel,
+  SiCloudflare,
+  SiDiscord,
+} from "react-icons/si";
 
 interface Skill {
   name: string;
@@ -19,10 +34,9 @@ const skillCategories: SkillCategory[] = [
     color: "text-blue-400",
     skills: [
       { name: "React", level: 5 },
-      { name: "TypeScript", level: 4 },
-      { name: "Discord.js", level: 4 },
-      { name: "Discord.py", level: 3 },
-      { name: "Tailwind CSS", level:4 }
+      { name: "TypeScript", level: 5 },
+      { name: "Tailwind CSS", level: 4 },
+      { name: "Vite", level: 4 }
     ]
   },
   {
@@ -31,44 +45,50 @@ const skillCategories: SkillCategory[] = [
     color: "text-emerald-400",
     skills: [
       { name: "Node.js", level: 5 },
-      { name: "mySQL", level: 4 },
+      { name: "Express", level: 4 },
       { name: "Python", level: 4 },
-      { name: "MongoDB", level: 4 }
+      { name: "Go", level: 3 }
     ]
   },
   {
-    title: "Tools & DevOps",
+    title: "Data & DevOps",
     icon: <Settings className="text-4xl" />,
     color: "text-violet-400",
     skills: [
-      
-      { name: "Git", level: 5 },
-      { name: "Vercel", level: 4 },
-      { name: "Firebase", level: 5}
+      { name: "PostgreSQL", level: 5 },
+      { name: "MongoDB", level: 4 },
+      { name: "Docker", level: 4 },
+      { name: "Git", level: 5 }
     ]
   },
   {
-    title: "Specializations",
+    title: "Platforms & Bots",
     icon: <Rocket className="text-4xl" />,
     color: "text-orange-400",
     skills: [
-      { name: "Bot Development", level: 4 },
-      { name: "Web Development", level: 4 },
-      { name: "App Building", level: 3 }
-      
+      { name: "Vercel", level: 5 },
+      { name: "Cloudflare", level: 4 },
+      { name: "discord.js", level: 5 },
+      { name: "discord.py", level: 4 }
     ]
   }
 ];
 
 
 const techLogos = [
-  { name: "React", icon: "fab fa-react", color: "text-blue-400" },
-  { name: "Node.js", icon: "fab fa-node-js", color: "text-emerald-400" },
-  { name: "JavaScript", icon: "fab fa-js-square", color: "text-yellow-400" },
-  { name: "Python", icon: "fab fa-python", color: "text-violet-400" },
-  { name: "GitHub", icon: "fab fa-github", color: "text-slate-300" },
-  { name: "discord.js", icon: "fab fa-discord", color: "text-yellow-400" }, // yellow to match JS
-  { name: "discord.py", icon: "fab fa-discord", color: "text-blue-400" }   // blue to match Python
+  { name: "TypeScript", icon: SiTypescript, color: "text-blue-400" },
+  { name: "JavaScript", icon: SiJavascript, color: "text-yellow-400" },
+  { name: "React", icon: SiReact, color: "text-cyan-400" },
+  { name: "Node.js", icon: SiNodedotjs, color: "text-emerald-400" },
+  { name: "Python", icon: SiPython, color: "text-violet-400" },
+  { name: "Kotlin", icon: SiKotlin, color: "text-purple-400" },
+  { name: "Go", icon: SiGo, color: "text-sky-400" },
+  { name: "PostgreSQL", icon: SiPostgresql, color: "text-blue-300" },
+  { name: "MongoDB", icon: SiMongodb, color: "text-green-400" },
+  { name: "Docker", icon: SiDocker, color: "text-blue-500" },
+  { name: "Vercel", icon: SiVercel, color: "text-slate-300" },
+  { name: "Cloudflare", icon: SiCloudflare, color: "text-orange-400" },
+  { name: "discord.js", icon: SiDiscord, color: "text-indigo-400" }
 ];
 
 export default function SkillsSection() {
@@ -128,19 +148,22 @@ export default function SkillsSection() {
         {/* Tech Stack Logos */}
         <div className="mt-16 border-t border-border pt-16">
           <h3 className="text-2xl font-bold text-center text-muted-foreground mb-12">
-            Technologies I Work With
+            Technology We Use
           </h3>
           <div className="flex flex-wrap justify-center items-center gap-8 opacity-60 hover:opacity-100 transition-opacity duration-500">
-            {techLogos.map((tech) => (
-              <div
-                key={tech.name}
-                className={`text-4xl ${tech.color} hover:text-opacity-80 transition-colors duration-200`}
-                title={tech.name}
-                data-testid={`tech-logo-${tech.name.toLowerCase()}`}
-              >
-                <i className={tech.icon}></i>
-              </div>
-            ))}
+            {techLogos.map((tech) => {
+              const Icon = tech.icon;
+              return (
+                <div
+                  key={tech.name}
+                  className={`text-4xl ${tech.color} hover:text-opacity-80 transition-colors duration-200`}
+                  title={tech.name}
+                  data-testid={`tech-logo-${tech.name.toLowerCase()}`}
+                >
+                  <Icon />
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>
