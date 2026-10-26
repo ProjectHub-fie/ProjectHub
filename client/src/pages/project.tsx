@@ -7,34 +7,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
-
-function ProjectSkeleton() {
-  return (
-    <div className="min-h-screen bg-background pt-20 px-4 pb-20">
-      <div className="max-w-4xl mx-auto">
-        <div className="animate-pulse">
-          <div className="h-8 bg-muted rounded w-1/4 mb-8"></div>
-          <div className="bg-card rounded-2xl overflow-hidden border border-border">
-            <div className="h-64 bg-muted"></div>
-            <div className="p-8 space-y-6">
-              <div className="h-8 bg-muted rounded w-3/4"></div>
-              <div className="space-y-3">
-                <div className="h-4 bg-muted rounded"></div>
-                <div className="h-4 bg-muted rounded w-5/6"></div>
-                <div className="h-4 bg-muted rounded w-4/6"></div>
-              </div>
-              <div className="flex gap-2">
-                {[...Array(4)].map((_, i) => (
-                  <div key={i} className="h-6 bg-muted rounded w-16"></div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
+import { ProjectDetailSkeleton } from "@/components/project-skeletons";
 
 interface Project {
   id: string;
@@ -114,25 +87,8 @@ export default function ProjectDetailPage() {
     return (
       <div className="min-h-screen bg-background pt-20 px-4 pb-20">
         <div className="max-w-4xl mx-auto">
-          <div className="animate-pulse">
-            <div className="h-8 bg-muted rounded w-1/4 mb-8"></div>
-            <div className="bg-card rounded-2xl overflow-hidden border border-border">
-              <div className="h-64 bg-muted"></div>
-              <div className="p-8 space-y-6">
-                <div className="h-8 bg-muted rounded w-3/4"></div>
-                <div className="space-y-3">
-                  <div className="h-4 bg-muted rounded"></div>
-                  <div className="h-4 bg-muted rounded w-5/6"></div>
-                  <div className="h-4 bg-muted rounded w-4/6"></div>
-                </div>
-                <div className="flex gap-2">
-                  {[...Array(4)].map((_, i) => (
-                    <div key={i} className="h-6 bg-muted rounded w-16"></div>
-                  ))}
-                </div>
-              </div>
-            </div>
-          </div>
+          <Skeleton className="h-8 w-1/4 mb-8" />
+          <ProjectDetailSkeleton />
         </div>
       </div>
     );
