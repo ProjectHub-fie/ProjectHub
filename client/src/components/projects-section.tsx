@@ -5,6 +5,7 @@ import { ExternalLink, Github, Download, Bot, Network, User } from "lucide-react
 import { useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { ProjectInteractions } from "@/components/project-interactions";
+import { ProjectsGridSkeleton } from "@/components/project-skeletons";
 
 interface Project {
   id: string;
@@ -105,24 +106,7 @@ export default function ProjectsSection() {
         </div>
 
         {/* Loading skeleton */}
-        {isLoading && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {[...Array(6)].map((_, i) => (
-              <div key={i} className="bg-card rounded-2xl overflow-hidden border border-border h-96 animate-pulse">
-                <div className="h-48 bg-muted"></div>
-                <div className="p-6 space-y-4">
-                  <div className="h-6 bg-muted rounded w-3/4"></div>
-                  <div className="h-4 bg-muted rounded w-full"></div>
-                  <div className="h-4 bg-muted rounded w-2/3"></div>
-                  <div className="flex gap-2">
-                    <div className="h-6 bg-muted rounded w-16"></div>
-                    <div className="h-6 bg-muted rounded w-16"></div>
-                  </div>
-                </div>
-              </div>
-            ))}
-          </div>
-        )}
+        {isLoading && <ProjectsGridSkeleton />}
 
         {/* Projects Grid */}
         {!isLoading && (
