@@ -1,14 +1,16 @@
 /**
  * The admin test-runner console.
  *
- * The security-relevant claim is that the endpoint can run exactly one command
- * and that no request data reaches it. That is asserted against the module's
- * source, because it is a property of how the argument list is built rather than
- * of a value the route returns.
+ * The console now runs the suite on GitHub Actions: Vercel has no Docker daemon
+ * and `tests/` is absent from the serverless bundle, so the endpoint dispatches
+ * the repository's `.github/workflows/docker-tests.yml` and polls for the run.
  *
- * The process handling itself is exercised for real: `runTestSuite` is called
- * against the actual `tests/` folder, so the parse of a real TAP summary is
- * checked rather than a stub.
+ * The security-relevant claim is that the endpoint can dispatch exactly one
+ * fixed workflow, that no request data reaches GitHub, and that the token never
+ * leaves the server. Those are asserted against the module's source, because
+ * they are properties of how the dispatch is built rather than of a value the
+ * route returns, and against a mocked GitHub API so no real workflow is ever
+ * triggered during a unit test.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -20,94 +22,309 @@ const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, '..');
 const source = (relative) => readFileSync(resolve(root, relative), 'utf8');
 
-const { parseTap, capOutput, runTestSuite, buildTestRouter, dockerRunArgs, dockerAvailable } = await import('../api/_lib/suite-runner.js');
+const {
+  getConfig,
+  buildTestRouter,
+  cancelRun,
+  __test,
+} = await import('../api/_lib/suite-runner.js');
 
-/* ------------------------------------------------------------------ TAP parse */
+/** Resets env and the mock fetcher between tests. */
+function resetHarness({ token = 'stub-token', repo = 'ProjectHub-fie/ProjectHub' } = {}) {
+  __test.resetStore();
+  __test.setFetcher(null);
+  for (const key of [
+    'GITHUB_ACTIONS_TOKEN',
+    'GITHUB_TOKEN',
+    'GITHUB_REPOSITORY',
+    'GITHUB_WORKFLOW_FILE',
+    'GITHUB_WORKFLOW_BRANCH',
+    'TEST_RUN_TIMEOUT_MS',
+    'TEST_RUN_POLL_MS',
+  ]) {
+    delete process.env[key];
+  }
+  if (token) process.env.GITHUB_ACTIONS_TOKEN = token;
+  if (repo) process.env.GITHUB_REPOSITORY = repo;
+}
 
-test('the TAP summary is read from the reporter output', () => {
-  const summary = parseTap(
-    ['TAP version 13', 'ok 1 - a test', '# tests 12', '# pass 10', '# fail 1', '# skipped 1', '# duration_ms 42.5'].join('\n'),
-  );
-  assert.deepEqual(summary, {
-    tests: 12,
-    pass: 10,
-    fail: 1,
-    skipped: 1,
-    durationMs: 42.5,
-    failures: [],
+/** Builds a fake Response for the GitHub API. */
+function ghResponse({ status = 200, body = null, json = body }) {
+  return {
+    status,
+    ok: status >= 200 && status < 300,
+    async json() {
+      return json;
+    },
+  };
+}
+
+/** A fake GitHub run, newest kinds come last in display_title matching. */
+function fakeRun(overrides = {}) {
+  return {
+    id: 123,
+    name: 'Docker Tests',
+    display_title: 'Docker tests (abc-123)',
+    status: 'completed',
+    conclusion: 'success',
+    head_sha: 'deadbeef',
+    run_started_at: '2026-01-01T00:00:00Z',
+    created_at: '2026-01-01T00:00:00Z',
+    updated_at: '2026-01-01T00:01:00Z',
+    completed_at: '2026-01-01T00:01:00Z',
+    html_url: 'https://github.com/ProjectHub-fie/ProjectHub/actions/runs/123',
+    ...overrides,
+  };
+}
+
+/* ------------------------------------------------------------------- config */
+
+test('config defaults point at the ProjectHub repository and docker-tests workflow', () => {
+  resetHarness({ token: 'abc' });
+  const config = getConfig();
+  assert.equal(config.repository, 'ProjectHub-fie/ProjectHub');
+  assert.equal(config.workflowFile, 'docker-tests.yml');
+  assert.equal(config.branch, 'main');
+  assert.equal(config.token, 'abc');
+  assert.ok(config.timeoutMs > 0);
+});
+
+test('config is read from the environment', () => {
+  resetHarness({});
+  process.env.GITHUB_REPOSITORY = 'someone/else';
+  process.env.GITHUB_WORKFLOW_FILE = 'other.yml';
+  process.env.GITHUB_WORKFLOW_BRANCH = 'dev';
+  process.env.GITHUB_ACTIONS_TOKEN = 'token-2';
+  const config = getConfig();
+  assert.equal(config.repository, 'someone/else');
+  assert.equal(config.workflowFile, 'other.yml');
+  assert.equal(config.branch, 'dev');
+  assert.equal(config.token, 'token-2');
+});
+
+/* ------------------------------------------------------------ dispatch body */
+
+test('dispatch posts a fixed workflow, branch and a server-generated request id', async () => {
+  resetHarness({});
+  let called = null;
+  __test.setFetcher(async (url, options) => {
+    called = { url, options };
+    return ghResponse({ status: 204 });
   });
+
+  const router = buildTestRouter({
+    requireAuth: (_req, _res, next) => next(),
+    requireRole: () => (_req, _res, next) => next(),
+  });
+  // Find the POST route and invoke it directly with a fake req/res.
+  const postLayer = router.stack.find((layer) => layer.route?.path === '/api/admin/tests/run');
+  const handler = postLayer.route.stack[postLayer.route.stack.length - 1].handle;
+
+  const res = { json: (body) => (res.body = body), status: () => res };
+  await handler({}, res);
+
+  assert.ok(called, 'dispatch POST was made');
+  assert.match(called.url, /actions\/workflows\/docker-tests\.yml\/dispatches$/);
+  const sent = JSON.parse(called.options.body);
+  assert.equal(sent.ref, 'main');
+  assert.match(sent.inputs.request_id, /^[0-9a-f-]{36}$/i, 'request_id is a server-side uuid');
+  assert.match(called.options.headers.Authorization, /Bearer stub-token/);
 });
 
-test('failing test names are collected', () => {
-  const summary = parseTap(['not ok 3 - the thing works', '  ---', '  ...'].join('\n'));
-  assert.deepEqual(summary.failures, ['the thing works']);
-});
-
-test('output that does not match the pattern reports null, never a guess', () => {
-  const summary = parseTap('Segmentation fault');
-  assert.equal(summary.tests, null);
-  assert.equal(summary.pass, null);
-  assert.equal(summary.fail, null);
-});
-
-test('long output is capped from the middle so both ends stay readable', () => {
-  const text = `START${'x'.repeat(200)}END`;
-  const capped = capOutput(text, 50);
-  assert.ok(capped.length < text.length);
-  assert.match(capped, /START/);
-  assert.match(capped, /END/);
-  assert.match(capped, /characters omitted/);
-});
-
-test('short output is returned untouched', () => {
-  assert.equal(capOutput('hello', 100), 'hello');
-});
-
-/* --------------------------------------------------------- running the suite */
-
-test('the suite runs for real and reports a TAP summary', async () => {
-  // Point at a small sibling suite. Running the whole folder, or this file
-  // itself, would re-enter this test and recurse — the pass/fail mechanics are
-  // the same, only the set of files differs.
-  const target = resolve(here, 'deployment-limits.test.mjs');
-  const result = await runTestSuite({ timeoutMs: 60_000, target });
-  assert.equal(result.ok, true, `expected a clean run, got exit ${result.exitCode}`);
-  assert.equal(result.timedOut, false);
-  assert.ok(result.summary.tests > 0, 'some tests ran');
-  assert.equal(result.summary.tests, result.summary.pass + result.summary.fail);
-  assert.match(result.output, /TAP version|# tests/);
-});
-
-/* ------------------------------------------------------------- the guardrails */
-
-test('the command is a fixed argument list built from a literal', () => {
+test('the request id is never taken from the request', () => {
   const routes = source('api/_lib/suite-runner.js');
-  // The args are a literal, and the only variable part defaults to the tests dir.
-  assert.match(routes, /function testArgs\(target = TESTS_DIR\)/);
-  assert.match(routes, /return \['--test', '--test-force-exit', '--test-reporter=tap', spec\]/);
-  // No request field is read in the run handler.
+  // No request field reads anywhere: body, query or params.
   assert.doesNotMatch(routes, /req\.body/);
   assert.doesNotMatch(routes, /req\.query/);
   assert.doesNotMatch(routes, /req\.params/);
 });
 
-test('the child process is spawned without a shell', () => {
-  const routes = source('api/_lib/suite-runner.js');
-  assert.match(routes, /shell: false/);
-  // The local child runs the same node binary as the server, and the docker
-  // child runs the literal `node` inside the image; neither is chosen from input.
-  assert.match(routes, /runChild\(process\.execPath, testArgs\(target\)/);
-  assert.match(routes, /runChild\('docker', dockerRunArgs\(image\)/);
+test('the token is never exposed through an API response', async () => {
+  resetHarness({ token: 'supersecrettoken' });
+  __test.setFetcher(async () => ghResponse({ status: 204 }));
+
+  const router = buildTestRouter({
+    requireAuth: (_req, _res, next) => next(),
+    requireRole: () => (_req, _res, next) => next(),
+  });
+  const runLayer = router.stack.find((layer) => layer.route?.path === '/api/admin/tests/run');
+  const runHandler = runLayer.route.stack[runLayer.route.stack.length - 1].handle;
+  const runRes = { json: (body) => (runRes.body = body), status: () => runRes };
+  await runHandler({}, runRes);
+
+  assert.match(JSON.stringify(runRes.body), /"requestId":/);
+  assert.doesNotMatch(JSON.stringify(runRes.body), /supersecrettoken/);
+  assert.doesNotMatch(JSON.stringify(runRes.body), /Bearer/);
 });
 
-test('the executable is the running node binary, not a path from input', () => {
-  const routes = source('api/_lib/suite-runner.js');
-  assert.doesNotMatch(routes, /spawn\([^)]*req\./);
-  // `spawnSync` is used only to probe docker, never to run the suite.
-  assert.doesNotMatch(routes, /exec\(|execSync/);
-  const probes = routes.match(/spawnSync\('docker'/g) || [];
-  assert.equal(probes.length, 2, 'spawnSync is only the docker availability/image probes');
+test('dispatch errors surface as a readable response, not a crash', async () => {
+  resetHarness({});
+  __test.setFetcher(async () => ghResponse({ status: 403, body: { message: 'Forbidden' } }));
+
+  const router = buildTestRouter({
+    requireAuth: (_req, _res, next) => next(),
+    requireRole: () => (_req, _res, next) => next(),
+  });
+  const runLayer = router.stack.find((layer) => layer.route?.path === '/api/admin/tests/run');
+  const runHandler = runLayer.route.stack[runLayer.route.stack.length - 1].handle;
+
+  let status = null;
+  const res = {
+    json: (body) => (res.body = body),
+    status: (code) => {
+      status = code;
+      return res;
+    },
+  };
+  await runHandler({}, res);
+  assert.equal(status, 502);
+  assert.match(res.body.message, /GITHUB_ACTIONS_TOKEN/);
 });
+
+/* --------------------------------------------------------- lookup + polling */
+
+test('run lookup matches the request id from recent runs, never a real call', async () => {
+  resetHarness({});
+  __test.setFetcher(async (url) => {
+    assert.match(url, /actions\/workflows\/docker-tests\.yml\/runs/);
+    return ghResponse({
+      body: {
+        total_count: 1,
+        workflow_runs: [fakeRun({ display_title: 'Docker tests (abc-123)', id: 77 })],
+      },
+    });
+  });
+  const router = buildTestRouter({
+    requireAuth: (_req, _res, next) => next(),
+    requireRole: () => (_req, _res, next) => next(),
+  });
+  const statusLayer = router.stack.find((layer) => layer.route?.path === '/api/admin/tests/status');
+  const statusHandler = statusLayer.route.stack[statusLayer.route.stack.length - 1].handle;
+
+  const res = { json: (body) => (res.body = body), status: () => res };
+  await statusHandler({}, res);
+  // No active run yet, so the status endpoint reports configured and idle.
+  assert.equal(res.body.available, true);
+  assert.equal(res.body.running, false);
+  assert.equal(res.body.mode, 'github-actions');
+});
+
+test('a completed run becomes lastRun and frees the single-run slot', async () => {
+  resetHarness({});
+  let pollCount = 0;
+  // First call: dispatch. Later calls: the poll finds the matching run (the id
+  // is recorded by the module into __test.lastDispatchedId on dispatch).
+  __test.setFetcher(async (url, options) => {
+    if (options.method === 'POST' && /dispatches$/.test(url)) return ghResponse({ status: 204 });
+    pollCount += 1;
+    return ghResponse({
+      body: {
+        total_count: 1,
+        workflow_runs: [fakeRun({ display_title: `Docker tests (${__test.lastDispatchedId || 'none'})`, id: 77 })],
+      },
+    });
+  });
+
+  const router = buildTestRouter({
+    requireAuth: (_req, _res, next) => next(),
+    requireRole: () => (_req, _res, next) => next(),
+  });
+  const runLayer = router.stack.find((layer) => layer.route?.path === '/api/admin/tests/run');
+  const runHandler = runLayer.route.stack[runLayer.route.stack.length - 1].handle;
+  const runRes = { json: (body) => (runRes.body = body), status: () => runRes };
+  await runHandler({}, runRes);
+  assert.ok(__test.lastDispatchedId, 'dispatch recorded the request id');
+
+  const statusLayer = router.stack.find((layer) => layer.route?.path === '/api/admin/tests/status');
+  const statusHandler = statusLayer.route.stack[statusLayer.route.stack.length - 1].handle;
+  const statusRes = { json: (body) => (statusRes.body = body), status: () => statusRes };
+  await statusHandler({}, statusRes);
+
+  assert.equal(statusRes.body.running, false, 'after completion the dashboard stops showing running');
+  assert.ok(statusRes.body.lastRun, 'the completed run is surfaced as lastRun');
+  assert.equal(statusRes.body.lastRun.conclusion, 'success');
+  assert.ok(pollCount >= 1, 'the status handler polled GitHub');
+});
+
+test('the status route reports a 503 when the token is unset', async () => {
+  resetHarness({ token: null });
+  const router = buildTestRouter({
+    requireAuth: (_req, _res, next) => next(),
+    requireRole: () => (_req, _res, next) => next(),
+  });
+  const runLayer = router.stack.find((layer) => layer.route?.path === '/api/admin/tests/run');
+  const runHandler = runLayer.route.stack[runLayer.route.stack.length - 1].handle;
+
+  const res = { json: (body) => (res.body = body), status: (code) => (res.statusCode = code) && res };
+  await runHandler({}, res);
+  assert.equal(res.statusCode, 503);
+  assert.match(res.body.message, /GITHUB_ACTIONS_TOKEN/);
+  assert.equal(res.body.available, false);
+});
+
+test('duplicate runs are refused while one is in flight', async () => {
+  resetHarness({});
+  __test.setFetcher(async (url, options) => {
+    if (options.method === 'POST' && /dispatches$/.test(url)) return ghResponse({ status: 204 });
+    return ghResponse({ body: { total_count: 0, workflow_runs: [] } });
+  });
+
+  const router = buildTestRouter({
+    requireAuth: (_req, _res, next) => next(),
+    requireRole: () => (_req, _res, next) => next(),
+  });
+  const runLayer = router.stack.find((layer) => layer.route?.path === '/api/admin/tests/run');
+  const runHandler = runLayer.route.stack[runLayer.route.stack.length - 1].handle;
+
+  const first = { json: (body) => (first.body = body), status: () => first };
+  await runHandler({}, first); // in-flight after dispatch
+  const second = { json: (body) => (second.body = body), status: (code) => (second.statusCode = code) && second };
+  await runHandler({}, second);
+
+  assert.equal(second.statusCode, 409);
+  assert.match(second.body.message, /in progress/i);
+  __test.resetStore();
+});
+
+test('cancel marks the run cancelled and clears the slot', async () => {
+  resetHarness({});
+  // Dispatch and then cancel button path.
+  __test.setFetcher(async (url, options) => {
+    if (options.method === 'POST' && /dispatches$/.test(url)) return ghResponse({ status: 204 });
+    if (/\/runs\/\d+\/cancel$/.test(url)) return ghResponse({ status: 204 });
+    return ghResponse({ body: { total_count: 0, workflow_runs: [] } });
+  });
+
+  const router = buildTestRouter({
+    requireAuth: (_req, _res, next) => next(),
+    requireRole: () => (_req, _res, next) => next(),
+  });
+  const runLayer = router.stack.find((layer) => layer.route?.path === '/api/admin/tests/run');
+  const runHandler = runLayer.route.stack[runLayer.route.stack.length - 1].handle;
+  const res = { json: (body) => (res.body = body), status: () => res };
+
+  await runHandler({}, res);
+  // After dispatch the run has no id yet (204); set one, as the poll would —
+  // adopt() expects the shaped (shapeRun) record, not the raw GitHub payload.
+  __test.currentRun.adopt({
+    id: 99,
+    status: 'in_progress',
+    conclusion: null,
+    htmlUrl: 'https://github.com/ProjectHub-fie/ProjectHub/actions/runs/99',
+    displayTitle: `Docker tests (${res.body.requestId})`,
+    createdAt: null,
+    updatedAt: null,
+    startedAt: null,
+    completedAt: null,
+  });
+
+  const cancelled = await cancelRun();
+  assert.equal(cancelled.cancelled, true);
+  assert.equal(__test.currentRun, null);
+  __test.resetStore();
+});
+
+/* ------------------------------------------------------------- the guardrails */
 
 test('the routes are owner-only', () => {
   const routes = source('api/_lib/suite-runner.js');
@@ -118,118 +335,6 @@ test('the routes are owner-only', () => {
   const uses = routes.match(/requireAuth, requireOwner/g) || [];
   assert.equal(uses.length, 2, 'both routes are owner-only');
   assert.doesNotMatch(routes, /requireRole\('(admin|moderator)'\)/);
-});
-
-test('a second concurrent run is refused rather than spawned', () => {
-  const routes = source('api/_lib/suite-runner.js');
-  assert.match(routes, /if \(inFlight\)/);
-  assert.match(routes, /409/);
-});
-
-test('a missing tests/ folder is reported as unavailable, not a crash', () => {
-  const routes = source('api/_lib/suite-runner.js');
-  assert.match(routes, /tests_not_deployed/);
-  assert.match(routes, /503/);
-  const status = source('api/_lib/suite-runner.js');
-  assert.match(status, /const local = existsSync\(TESTS_DIR\)/);
-});
-
-/* ------------------------------------------------------------- docker path */
-
-test('the docker argument list is fixed and built from a literal', () => {
-  const args = dockerRunArgs('projecthub:local');
-  // The command inside the container is a literal glob, never a request field.
-  assert.deepEqual(args.slice(-5), [
-    'node',
-    '--test',
-    '--test-force-exit',
-    '--test-reporter=tap',
-    'tests/*.test.mjs',
-  ]);
-  // The image is the first non-flag argument, before the command.
-  assert.equal(args[args.length - 6], 'projecthub:local');
-  // No request data, and no shell metacharacter handling anywhere.
-  const routes = source('api/_lib/suite-runner.js');
-  assert.doesNotMatch(routes, /dockerRunArgs\([^)]*req\./);
-});
-
-test('the suite target is a glob, because node 24 rejects a bare directory', () => {
-  // `node --test tests/` dies with "Cannot find module /app/tests" on Node 24.
-  // The console and the container both run the `npm test` glob instead.
-  const args = dockerRunArgs('projecthub:local');
-  assert.equal(args[args.length - 1], 'tests/*.test.mjs');
-  const routes = source('api/_lib/suite-runner.js');
-  assert.match(routes, /const spec = isTestsDir\(target\) \? 'tests\/\*\.test\.mjs' : target/);
-});
-
-test('the docker runner uses the image it is given, never one from input', () => {
-  const args = dockerRunArgs('custom:tag');
-  assert.ok(args.includes('custom:tag'));
-  // The only source of the image is the module's own config.
-  const routes = source('api/_lib/suite-runner.js');
-  assert.match(routes, /const DEFAULT_IMAGE = process\.env\.TEST_RUNNER_IMAGE \|\| 'projecthub:local'/);
-});
-
-test('secrets are passed to the container by name, not by value', () => {
-  // `-e NAME` copies from the daemon's environment, so a connection string or a
-  // token never lands in the argument list that `ps` can read.
-  const previous = process.env.SESSION_SECRET;
-  process.env.SESSION_SECRET = 'super-secret-value';
-  try {
-    const args = dockerRunArgs('projecthub:local');
-    const joined = args.join(' ');
-    assert.match(joined, /-e SESSION_SECRET/);
-    assert.doesNotMatch(joined, /super-secret-value/);
-  } finally {
-    if (previous === undefined) delete process.env.SESSION_SECRET;
-    else process.env.SESSION_SECRET = previous;
-  }
-});
-
-test('docker mode falls back to unavailable when docker cannot be reached', () => {
-  // The selection logic: with no tests/ folder, no docker and no override, the
-  // run reports tests_not_deployed rather than attempting a spawn.
-  const routes = source('api/_lib/suite-runner.js');
-  assert.match(routes, /TEST_RUNNER_DOCKER === '0'/);
-  assert.match(routes, /mode \|\| \(dockerAvailable\(\) \? 'docker' : 'unavailable'\)/);
-  assert.match(routes, /dockerAvailable\(\)/);
-});
-
-test('the status route reports how the suite will run', () => {
-  const routes = source('api/_lib/suite-runner.js');
-  assert.match(routes, /mode: local \? 'local' : docker \? 'docker' : 'unavailable'/);
-  assert.match(routes, /available: local \|\| docker/);
-  assert.match(routes, /image: local \? null/);
-});
-
-test('the docker run joins the configured network when one is set', () => {
-  const previous = process.env.TEST_RUNNER_NETWORK;
-  process.env.TEST_RUNNER_NETWORK = 'projecthub_default';
-  try {
-    assert.ok(dockerRunArgs('projecthub:local').join(' ').includes('--network projecthub_default'));
-  } finally {
-    if (previous === undefined) delete process.env.TEST_RUNNER_NETWORK;
-    else process.env.TEST_RUNNER_NETWORK = previous;
-  }
-});
-
-test('the suite runs somewhere, locally or in docker', async () => {
-  // The real process path is exercised for the local branch: a small sibling
-  // suite is run and its TAP summary read. Docker is not required for the test
-  // to pass; `dockerAvailable` only gates the cloud path.
-  const target = resolve(here, 'deployment-limits.test.mjs');
-  const result = await runTestSuite({ timeoutMs: 60_000, target });
-  assert.equal(result.ok, true, `expected a clean run, got exit ${result.exitCode}`);
-  assert.equal(typeof dockerAvailable(), 'boolean');
-});
-
-test('the child does not inherit the parent test runner context', () => {
-  // Inheriting NODE_TEST_CONTEXT makes a nested runner attach to the parent's
-  // protocol instead of emitting TAP; the spawned suite must be independent.
-  const routes = source('api/_lib/suite-runner.js');
-  assert.match(routes, /delete env\.NODE_TEST_CONTEXT/);
-  assert.match(routes, /delete env\.NODE_TEST_WORKER_ID/);
-  assert.match(routes, /env: childEnv\(\)/);
 });
 
 test('the router builds with the middleware shapes the app really passes', () => {
@@ -275,6 +380,25 @@ test('the guards are passed as values, never spread', () => {
   assert.match(routes, /const requireOwner = requireRole\('owner'\)/);
 });
 
+test('Vercel never runs docker locally: the module has no docker or process imports', () => {
+  const routes = source('api/_lib/suite-runner.js');
+  // The new implementation must not pull in the parts of Node that ran docker:
+  // child_process and the filesystem probes are gone; only HTTP (fetch) remains.
+  assert.doesNotMatch(routes, /node:child_process/);
+  assert.doesNotMatch(routes, /spawnSync|execFileSync|spawn\(/);
+  assert.doesNotMatch(routes, /existsSync/);
+  assert.doesNotMatch(routes, /docker version|docker build|--network/);
+});
+
+test('the workflow file, branch and target are never validated from the request', () => {
+  const routes = source('api/_lib/suite-runner.js');
+  // The only workflow / branch source is the environment.
+  assert.match(routes, /GITHUB_WORKFLOW_FILE/);
+  assert.match(routes, /GITHUB_WORKFLOW_BRANCH/);
+  assert.match(routes, /GITHUB_REPOSITORY/);
+  // No path or shell metacharacter interpolation from request data.
+  assert.doesNotMatch(routes, /req\.params|req\.query|req\.body/);
+});
 
 /* --------------------------------------------------------------- the wiring */
 
@@ -295,6 +419,7 @@ test('the real admin function loads without throwing', async () => {
         ...process.env,
         SESSION_SECRET: 'test-secret-not-a-real-one',
         DATABASE_URL: 'postgres://u:p@127.0.0.1:5432/placeholder',
+        GITHUB_ACTIONS_TOKEN: 'stub-token',
       },
       timeout: 60_000,
     },
@@ -302,7 +427,6 @@ test('the real admin function loads without throwing', async () => {
   assert.equal(result.status, 0, `api/admin/index.js failed to load:\n${result.stderr}`);
   assert.match(result.stdout, /LOADED/);
 });
-
 
 test('the serverless and dev backends both mount the test router', () => {
   assert.match(source('api/admin/index.js'), /buildTestRouter/);
@@ -327,8 +451,36 @@ test('canRunTests is owner only, while the bot console allows admin too', () => 
   assert.match(hook, /const canManageBot = adminRole === 'owner' \|\| adminRole === 'admin';/);
 });
 
-test('the page shows the exact command it will run', () => {
+test('the page states the run happens on GitHub Actions and links the run', () => {
   const page = source('client/src/pages/admin-tests.tsx');
   assert.match(page, /tests-command/);
   assert.match(page, /data-testid="button-run-tests"/);
+  assert.match(page, /GitHub Actions/);
+  assert.match(page, /github-run-link/);
+  assert.match(page, /not on Vercel/);
+});
+
+/* --------------------------------------------------------------- the workflow */
+
+test('the workflow only listens to workflow_dispatch and carries a run-name', () => {
+  const wf = source('.github/workflows/docker-tests.yml');
+  assert.match(wf, /workflow_dispatch/);
+  assert.doesNotMatch(wf, /push:|pull_request:/);
+  assert.match(wf, /run-name: Docker tests/);
+  // The request_id input is the dashboard's correlation id.
+  assert.match(wf, /request_id/);
+});
+
+test('the workflow runs the existing tests compose service, never builds a new one', () => {
+  const wf = source('.github/workflows/docker-tests.yml');
+  assert.match(wf, /docker compose --profile tests run --rm --build tests/);
+  // The step must not swallow a failing suite: no continue-on-error, and the
+  // pipeline must forward docker's exit code past the `tee`.
+  const runStep = wf.split('--profile tests run')[1] ?? '';
+  assert.doesNotMatch(runStep, /continue-on-error:\s*true/);
+  assert.match(wf, /set -o pipefail/);
+  // The artifact upload always runs, even when the suite fails.
+  assert.match(wf, /if: always\(\)/);
+  const upload = wf.split('Upload test output')[1]?.split('Write the step summary')[0] ?? '';
+  assert.match(upload, /actions\/upload-artifact@v4/);
 });

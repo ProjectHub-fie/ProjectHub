@@ -1,360 +1,208 @@
 /**
- * Admin route that runs the repository's test folder.
+ * Admin route that runs the repository's test suite on GitHub Actions instead
+ * of on the server that hosts this code.
  *
- * ## Why this is locked down
+ * ## Why GitHub Actions
  *
- * This is the only endpoint in the codebase that starts a process on the server,
- * so it is deliberately incapable of running anything but one fixed command:
+ * This module previously ran the suite with a local child process or with
+ * `docker run`. Vercel serverless functions cannot do either reliably:
+ * `tests/` is listed in `.vercelignore` so it is absent from the deployed
+ * bundle, there is no Docker daemon to use, and the function is capped at 30s by
+ * `vercel.json`. The dashboard
+ * now delegates the run to a GitHub Actions workflow
+ * (`.github/workflows/docker-tests.yml`), which checks out the repository with
+ * `tests/` present and runs the existing `docker compose --profile tests run
+ * --rm --build tests` service. Vercel never builds images, never runs `docker`,
+ * and never touches a Docker daemon.
  *
- *   - The binary is `process.execPath` and the argument list is a literal built
- *     here. No request field reaches the command — there is no path, no glob, no
- *     argument and no filter accepted from the client.
- *   - `spawn` is called with `shell: false`, so even a crafted value could not
- *     introduce a pipeline or a redirect. Shell metacharacters have no meaning
- *     when there is no shell.
- *   - Access is owner-only. An admin can already configure the bot and mail, but
- *     executing code on the host is a different class of action, so it is held to
- *     the tighter role the admin-management routes use.
+ * ## What this endpoint can do
  *
- * ## Where it works
+ * It can dispatch exactly one workflow file from configuration and poll for the
+ * run GitHub associates with it. No request field names a workflow, a branch, a
+ * shell command or a test path: everything comes from `process.env` defaults in
+ * this module. The `request_id` is generated server-side, sent as the workflow
+ * input, and used to pick *this* run out of recent ones (the dispatch endpoint
+ * answers 204 with no run id). Access is owner-only — the same class of guard as
+ * the admin-management routes.
  *
- * `tests/` is listed in `.vercelignore`, so it is not deployed to the serverless
- * function and spawning `node --test tests/` there cannot work. Rather than
- * failing with a confusing spawn error, the runner has two ways to reach the
- * suite:
+ * ## Why not a local process
  *
- *   - **Local** — the folder is present (an ordinary long-lived host, a Docker
- *     deployment, or local development) and the child runs in this process's
- *     own image.
- *   - **Docker** — the folder is absent, but a Docker image built from this
- *     repository carries it. The suite is run with `docker run` against that
- *     image, so a host that only runs the serverless function can still exercise
- *     the real tests. The image is built from the repository on first use, or is
- *     the one `docker compose` already made (`projecthub:local`).
- *
- * One run at a time: a module-level promise refuses a second concurrent run, so a
- * held-down button cannot start a process per click.
+ * A serverless function cannot wait 120 seconds for a suite; `vercel.json` caps
+ * `api/admin/index.js` at 30s. Dispatching is a single fast HTTPS call and
+ * polling is cheap, so the ceiling never blocks a real suite run. The workflow
+ * itself carries `timeout-minutes: 15`.
  */
 import express from 'express';
-import { spawn, spawnSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import crypto from 'node:crypto';
 import { fileURLToPath } from 'node:url';
-import { dirname, resolve } from 'node:path';
+import { dirname } from 'node:path';
 
 const here = dirname(fileURLToPath(import.meta.url));
-/** Repo root: this file lives at <root>/api/_lib/. */
-const ROOT = resolve(here, '..', '..');
-const TESTS_DIR = resolve(ROOT, 'tests');
 
-/** A runaway suite must not hold a worker forever. */
-const TIMEOUT_MS = Number(process.env.TEST_RUN_TIMEOUT_MS || 120_000);
-/** Output is returned to the browser, so it is capped rather than buffered whole. */
-const MAX_OUTPUT_CHARS = 60_000;
+/* ------------------------------------------------------------------ config */
 
 /**
- * The image the Docker path runs, and how it is reached.
+ * Server-side configuration, read from the environment on every access.
  *
- * `TEST_RUNNER_IMAGE` names an image that already carries the repository (the
- * one `docker compose` builds is `projecthub:local`). When it is unset, `docker
- * compose`'s image is used; if that is not present either, the runner builds a
- * dedicated `projecthub-tests:local` from the checked-out repository.
+ * Reading lazily instead of snapshotting the object at import makes the module
+ * trivial to test (set `process.env` before a call) and keeps the deployed
+ * process honest about variables that can change between invocations. Nothing
+ * here comes from a request.
  *
- * `TEST_RUNNER_NETWORK` is the Docker network the suite container joins. On a
- * `docker compose` host that is the compose network, so a `db` service is
- * reachable by name — the same place `DATABASE_URL` already points from the app.
+ * `GITHUB_ACTIONS_TOKEN` is a GitHub API token that can dispatch workflows and
+ * read workflow runs on the repository. It is never returned to the browser,
+ * never logged, and never put in a URL.
  */
-const DEFAULT_IMAGE = process.env.TEST_RUNNER_IMAGE || 'projecthub:local';
-const BUILD_IMAGE = 'projecthub-tests:local';
-
-/**
- * Environment variables passed through to the suite container.
- *
- * `-e NAME` (no value) copies the variable from the daemon process's own
- * environment, so a secret such as `DATABASE_URL` reaches the container without
- * ever appearing in the argument list that `ps` can read.
- */
-const PASSTHROUGH_ENV = [
-  'DATABASE_URL',
-  'MAIL_DATABASE_URL',
-  'SESSION_SECRET',
-  'ADMIN_PIN',
-  'ADMIN_PASSWORD',
-  'VITE_TURNSTILE_SITE_KEY',
-  'TURNSTILE_SECRET_KEY',
-];
-
-/** Whether a target names the whole suite folder rather than one file. */
-function isTestsDir(target) {
-  return target === TESTS_DIR || /(^|[\\/])tests[\\/]?$/.test(target);
-}
-
-/**
- * The one command this endpoint can run. Fixed, never assembled from input.
- *
- * Node 24 rejects a bare directory as a test target — it tries to import it as a
- * module and dies with "Cannot find module /app/tests". It wants files or a
- * glob, so the folder becomes `tests/*.test.mjs`, the same set `npm test` runs.
- * A single-file target is the test-side seam and passes through untouched.
- */
-function testArgs(target = TESTS_DIR) {
-  const spec = isTestsDir(target) ? 'tests/*.test.mjs' : target;
-  return ['--test', '--test-force-exit', '--test-reporter=tap', spec];
-}
-
-
-/** A single in-flight run, so repeated clicks do not spawn concurrent suites. */
-let inFlight = null;
-
-/**
- * Parses the TAP summary the Node test runner emits.
- *
- * The reporter prints `# tests N`, `# pass N`, `# fail N`, `# skipped N` and
- * `# duration_ms N`, plus one `not ok N - name` line per failure. Anything the
- * pattern does not match is treated as unavailable rather than guessed at, so a
- * reporter change shows up as "unknown" instead of a wrong number.
- */
-export function parseTap(output) {
-  const summary = {};
-  for (const [, key, value] of output.matchAll(/^# (tests|pass|fail|skipped|todo|cancelled|duration_ms)\s+([\d.]+)/gm)) {
-    summary[key] = Number(value);
-  }
-
-  const failures = [];
-  for (const [, name] of output.matchAll(/^\s*not ok \d+ - (.*)$/gm)) {
-    failures.push(name.trim());
-  }
-
+export function getConfig() {
   return {
-    tests: summary.tests ?? null,
-    pass: summary.pass ?? null,
-    fail: summary.fail ?? null,
-    skipped: summary.skipped ?? null,
-    durationMs: summary.duration_ms ?? null,
-    failures,
+    /** The token TTL is outside this module; the failure mode is a clear 403. */
+    token: process.env.GITHUB_ACTIONS_TOKEN || process.env.GITHUB_TOKEN || '',
+    repository: process.env.GITHUB_REPOSITORY || 'ProjectHub-fie/ProjectHub',
+    workflowFile: process.env.GITHUB_WORKFLOW_FILE || 'docker-tests.yml',
+    branch: process.env.GITHUB_WORKFLOW_BRANCH || 'main',
+    /** How long the dashboard keeps polling before reporting a timeout. */
+    timeoutMs: Number(process.env.TEST_RUN_TIMEOUT_MS || 15 * 60 * 1000),
+    /** How often the status route is allowed as a poll. */
+    pollIntervalMs: Number(process.env.TEST_RUN_POLL_MS || 3_000),
   };
 }
 
-/** Trims the middle out of over-long output, keeping both ends readable. */
-export function capOutput(text, max = MAX_OUTPUT_CHARS) {
-  if (text.length <= max) return text;
-  const head = Math.floor(max * 0.6);
-  const tail = max - head;
-  return `${text.slice(0, head)}\n\n… ${text.length - max} characters omitted …\n\n${text.slice(-tail)}`;
-}
-
-/**
- * The environment for the child process.
- *
- * The Node test runner sets `NODE_TEST_CONTEXT`/`NODE_TEST_WORKER_ID` in the
- * process it runs tests in. Those are inherited by a spawned child, and a nested
- * runner that sees them attaches to the *parent's* test protocol instead of
- * reporting its own TAP — which is what happens when this endpoint is exercised
- * from a test. They are dropped so the child is always an independent run.
- */
-function childEnv() {
-  const env = { ...process.env, NO_COLOR: '1', FORCE_COLOR: '0' };
-  delete env.NODE_TEST_CONTEXT;
-  delete env.NODE_TEST_WORKER_ID;
-  return env;
-}
-
-/**
- * Whether a usable Docker daemon is reachable.
- *
- * Probed once and cached: the answer cannot change while the function instance
- * is warm, and `docker version` costs a process spawn. `TEST_RUNNER_DOCKER=0`
- * disables the path outright, which is how an operator says "this host has no
- * Docker, do not even try".
- */
-let dockerChecked = null;
-export function dockerAvailable() {
-  if (process.env.TEST_RUNNER_DOCKER === '0') return false;
-  if (dockerChecked !== null) return dockerChecked;
-  try {
-    const probe = spawnSync('docker', ['version', '--format', '{{.Server.Version}}'], {
-      encoding: 'utf8',
-      timeout: 5_000,
-    });
-    dockerChecked = probe.status === 0;
-  } catch {
-    dockerChecked = false;
-  }
-  return dockerChecked;
-}
-
-/** Whether an image already exists locally, so a build can be skipped. */
-function imagePresent(image) {
-  const probe = spawnSync('docker', ['image', 'inspect', image], { stdio: 'ignore', timeout: 15_000 });
-  return probe.status === 0;
-}
-
-/**
- * `docker run` arguments for the suite.
- *
- * The command inside the container is the same literal the local path uses, and
- * the image is chosen from the environment or the known local tags — never from
- * a request. Secrets are passed as `-e NAME` with no value, which copies them
- * from this process's environment so they do not appear in the argument list.
- */
-export function dockerRunArgs(image, target = 'tests/') {
-  const args = ['run', '--rm'];
-  const network = process.env.TEST_RUNNER_NETWORK;
-  if (network) args.push('--network', network);
-  for (const name of PASSTHROUGH_ENV) {
-    if (process.env[name] != null) args.push('-e', name);
-  }
-  const spec = isTestsDir(target) ? 'tests/*.test.mjs' : target;
-  args.push(image, 'node', '--test', '--test-force-exit', '--test-reporter=tap', spec);
-  return args;
-}
-
-/**
- * Finds an image that carries the repository, building one if needed.
- *
- * Preference order: `TEST_RUNNER_IMAGE`, then the compose image
- * (`projecthub:local`), then a build of the dedicated `projecthub-tests:local`.
- * A build shells out to `docker build` against the checked-out repository, so it
- * only makes sense where the Dockerfile and `tests/` are both on disk; elsewhere
- * an operator sets `TEST_RUNNER_IMAGE` to an image that already has them.
- */
-async function ensureDockerImage() {
-  const candidates = [DEFAULT_IMAGE, BUILD_IMAGE];
-  for (const image of candidates) {
-    if (image && imagePresent(image)) return image;
-  }
-
-  const dockerfile = resolve(ROOT, 'Dockerfile');
-  if (!existsSync(dockerfile)) {
-    return null;
-  }
-
-  const built = await new Promise((resolveBuild) => {
-    const child = spawn('docker', ['build', '-t', BUILD_IMAGE, ROOT], {
-      cwd: ROOT,
-      shell: false,
-      env: childEnv(),
-    });
-    // A build's chatter is not the suite's output; drop it and let a failure show
-    // up as "could not prepare the image" with the exit code.
-    child.stdout.resume();
-    child.stderr.resume();
-    child.on('error', () => resolveBuild(false));
-    child.on('close', (code) => resolveBuild(code === 0));
-  });
-
-  return built ? BUILD_IMAGE : null;
-}
-
-function testsNotDeployedError() {
-  const error = new Error(
-    'The tests/ directory is not present in this deployment and Docker is not available to run it. ' +
-      'Deploy with the provided Dockerfile / docker-compose.yml (which include tests/), ' +
-      'or set TEST_RUNNER_IMAGE to an image built from this repository.',
-  );
-  error.code = 'tests_not_deployed';
-  return error;
-}
-
-/**
- * Spawns one process and resolves a result, or throws with a readable reason.
- *
- * `binary`/`args` come from this module only. `shell: false` means even a
- * crafted argument could not be reinterpreted as a command line.
- */
-function runChild(binary, args, { timeoutMs }) {
-  return new Promise((resolveRun, rejectRun) => {
-    const startedAt = Date.now();
-    const child = spawn(binary, args, {
-      cwd: ROOT,
-      // No shell: the argument list cannot be reinterpreted as a command line.
-      shell: false,
-      env: childEnv(),
-    });
-
-    let stdout = '';
-    let stderr = '';
-    let timedOut = false;
-
-    child.stdout.on('data', (chunk) => {
-      if (stdout.length < MAX_OUTPUT_CHARS * 2) stdout += chunk.toString();
-    });
-    child.stderr.on('data', (chunk) => {
-      if (stderr.length < MAX_OUTPUT_CHARS * 2) stderr += chunk.toString();
-    });
-
-    const timer = setTimeout(() => {
-      timedOut = true;
-      child.kill('SIGKILL');
-    }, timeoutMs);
-
-    child.on('error', (error) => {
-      clearTimeout(timer);
-      rejectRun(error);
-    });
-
-    child.on('close', (code) => {
-      clearTimeout(timer);
-      const parsed = parseTap(stdout);
-      resolveRun({
-        ok: code === 0 && !timedOut,
-        exitCode: code,
-        timedOut,
-        durationMs: parsed.durationMs ?? Date.now() - startedAt,
-        summary: {
-          tests: parsed.tests,
-          pass: parsed.pass,
-          fail: parsed.fail,
-          skipped: parsed.skipped,
-        },
-        failures: parsed.failures,
-        output: capOutput(timedOut ? `${stdout}\n\n[timed out after ${timeoutMs}ms]` : stdout),
-        stderr: capOutput(stderr, 8_000),
-      });
-    });
-  });
-}
-
-/**
- * Runs the suite and resolves a result, or throws with a readable reason.
- *
- * The folder is present in the common case (a Docker deployment, a long-lived
- * host, local development) and the child runs with this process's own Node. When
- * it is absent — the serverless build strips `tests/` — the suite is run in a
- * Docker image built from the repository instead, which is what makes the console
- * work from a deployment that otherwise could not host it.
- *
- * `target` is a test-side seam with a default only: the HTTP route never passes
- * it, so a request cannot choose what runs. It exists so a test can point the
- * runner at a single short-lived file instead of re-spawning the whole suite.
- * Docker always runs the whole `tests/` folder; the seam is local-only.
- */
-export async function runTestSuite({ timeoutMs = TIMEOUT_MS, target = TESTS_DIR, mode } = {}) {
-  if (existsSync(target)) {
-    return runChild(process.execPath, testArgs(target), { timeoutMs });
-  }
-
-  const requested = mode || (dockerAvailable() ? 'docker' : 'unavailable');
-  if (requested === 'unavailable') {
-    throw testsNotDeployedError();
-  }
-
-  const image = await ensureDockerImage();
-  if (!image) {
-    throw new Error(
-      'Could not find or build a Docker image carrying the test suite. ' +
-        'Run `docker compose build` first, or set TEST_RUNNER_IMAGE to one that exists.',
+/** Rejects if `promise` has not settled within `ms`, without cancelling it. */
+function withTimeout(promise, ms) {
+  return new Promise((accept, reject) => {
+    const timer = setTimeout(() => reject(new Error(`Timed out after ${ms}ms`)), ms);
+    promise.then(
+      (value) => {
+        clearTimeout(timer);
+        accept(value);
+      },
+      (error) => {
+        clearTimeout(timer);
+        reject(error);
+      },
     );
-  }
-
-  return runChild('docker', dockerRunArgs(image), { timeoutMs });
+  });
 }
+
+/** Fields a status response may include, with a safe fallback for partial data. */
+const STATUS_COMMON = {
+  runner: 'github-actions',
+  /** The workflow uses the repo's own compose defaults for its Postgres. */
+  usesComposeDb: true,
+};
+
+/* ------------------------------------------------------------ GitHub client */
+
+/** Headers for GitHub REST calls. The token never appears in a URL or log. */
+function apiHeaders() {
+  const { token } = getConfig();
+  const headers = {
+    Accept: 'application/vnd.github+json',
+    'X-GitHub-Api-Version': '2022-11-28',
+    'User-Agent': 'projecthub-test-console',
+  };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  return headers;
+}
+
+/**
+ * The GitHub API fetcher.
+ *
+ * In production this is Node's `fetch`. The test suite swaps it via
+ * `__test.setFetcher` so dispatch/poll/lookup are exercised against a stub
+ * without ever reaching the real GitHub API. Defaults stay frozen.
+ */
+function githubFetch(...args) {
+  if (typeof globalThis.__testFetcher === 'function') return globalThis.__testFetcher(...args);
+  return fetch(...args);
+}
+
+/** A single GitHub workflow run, shaped for the dashboard and internal matching. */
+function shapeRun(raw) {
+  return {
+    id: raw.id,
+    status: raw.status, // queued | in_progress | completed | ...
+    conclusion: raw.conclusion ?? null,
+    name: raw.name || null,
+    headSha: raw.head_sha || null,
+    createdAt: raw.created_at || null,
+    updatedAt: raw.updated_at || null,
+    startedAt: raw.run_started_at || null,
+    completedAt: raw.completed_at || null,
+    htmlUrl: raw.html_url || null,
+    displayTitle: raw.display_title || raw.name || null,
+  };
+}
+
+/**
+ * Lists recent `workflow_dispatch` runs of the configured workflow and picks
+ * the one whose display title carries `requestId`. The dispatch endpoint
+ * answers 204 without a body, so this is how the run id is found.
+ *
+ * `per_page` stays at 20 and the search walks at most five pages; the dashboard
+ * is the only trigger, so the matching run is normally the newest. It stops
+ * paging as soon as a page no longer contains Docker-tests runs.
+ */
+async function findRunByRequestId(requestId, { signal }) {
+  const { repository, workflowFile } = getConfig();
+  const params = new URLSearchParams({
+    per_page: '20',
+    event: 'workflow_dispatch',
+  });
+  const workflow = encodeURIComponent(workflowFile);
+  const url = `https://api.github.com/repos/${repository}/actions/workflows/${workflow}/runs?${params}`;
+
+  for (let page = 1; page <= 5; page += 1) {
+    const response = await githubFetch(`${url}&page=${page}`, { headers: apiHeaders(), signal });
+    if (response.status === 403 || response.status === 401) {
+      const error = new Error(
+        'GitHub API denied access to workflow runs. Check GITHUB_ACTIONS_TOKEN permissions.',
+      );
+      error.code = 'github_unauthorized';
+      throw error;
+    }
+    if (!response.ok) {
+      throw Object.assign(new Error(`GitHub returned ${response.status} reading workflow runs.`), {
+        code: 'github_api_error',
+        status: 502,
+      });
+    }
+    const body = await response.json();
+    const runs = body.workflow_runs || [];
+    const match = runs.find((run) => run.display_title && run.display_title.includes(requestId));
+    if (match) return shapeRun(match);
+    // Stop paginating as soon as a page has no recent candidates left.
+    const oldest = runs[runs.length - 1];
+    if (runs.length < 20 || (oldest && !oldest.display_title.includes('Docker tests'))) break;
+  }
+  return null;
+}
+
+/* -------------------------------------------------------------- run storage */
+
+/**
+ * The known in-flight run and the last completed one.
+ *
+ * Vercel function instances are request-scoped but their module state survives
+ * across warm invocations, which is what makes the "is a run still in flight?"
+ * guard possible without a store. The last finished run is kept so a page
+ * refresh can show the previous outcome.
+ */
+const store = {
+  current: null,
+  last: null,
+  /** Monotonic guard against two dispatches racing the same warm instance. */
+  dispatching: false,
+};
+
+/* ------------------------------------------------------------------ router */
 
 /**
  * Builds the router.
  *
  * `requireAuth`/`requireRole` come from the caller, so the serverless function
- * and the Express dev server share one definition, the same way the mail and bot
- * routers do.
+ * and the Express dev server share one definition, the same way the mail, bot
+ * and roblox routers do.
  */
 export function buildTestRouter({ requireAuth, requireRole }) {
   const router = express.Router();
@@ -364,38 +212,274 @@ export function buildTestRouter({ requireAuth, requireRole }) {
   // keeps both routes reading like the rest of the dashboard.
   const requireOwner = requireRole('owner');
 
-  /** What the page shows before a run: is the suite reachable, and how? */
-  router.get('/api/admin/tests/status', requireAuth, requireOwner, (_req, res) => {
-    const local = existsSync(TESTS_DIR);
-    const docker = !local && dockerAvailable();
+  /** What the page shows before/during a run, refreshing GitHub state on poll. */
+  router.get('/api/admin/tests/status', requireAuth, requireOwner, async (_req, res) => {
+    const { token, repository, workflowFile, branch, timeoutMs } = getConfig();
+    // Polling path: refresh the active run from GitHub before answering. A
+    // status request is cheap anyway, and this is what lets the page track a
+    // queued -> in_progress -> completed run without holding a Vercel instance.
+    let active = store.current && store.current.running;
+    if (store.current && store.current.isAwaitingWorkflow) {
+      try {
+        // Bounded: never let a status request hang near the 30s function cap.
+        await withTimeout(store.current.poll(), 8_000);
+      } catch {
+        // A GitHub outage must not take the whole dashboard down; report the
+        // last known state and let the next poll retry.
+      }
+      active = store.current ? store.current.running : false;
+    }
+
     res.json({
-      available: local || docker,
-      running: Boolean(inFlight),
-      mode: local ? 'local' : docker ? 'docker' : 'unavailable',
-      image: local ? null : process.env.TEST_RUNNER_IMAGE || DEFAULT_IMAGE,
-      command: `node ${testArgs('tests/').join(' ')}`,
-      timeoutMs: TIMEOUT_MS,
+      ...STATUS_COMMON,
+      available: Boolean(token),
+      running: Boolean(active),
+      configured: Boolean(token),
+      mode: 'github-actions',
+      repository,
+      workflowFile,
+      workflowBranch: branch,
+      command: `docker compose --profile tests run --rm --build tests`,
+      timeoutMs,
+      image: null, // this deployment never runs Docker locally
+      ...(active ? { activeRun: store.current.toJSON() } : {}),
+      ...(store.last ? { lastRun: store.last.toJSON() } : {}),
     });
   });
 
   router.post('/api/admin/tests/run', requireAuth, requireOwner, async (_req, res) => {
-    if (inFlight) {
+    const { token } = getConfig();
+    if (store.current && store.current.running) {
+      return res.status(409).json({ message: 'A test run is already in progress.' });
+    }
+    if (!token) {
+      return res.status(503).json({
+        ...STATUS_COMMON,
+        available: false,
+        message: 'GitHub Actions is not configured on this deployment. Set GITHUB_ACTIONS_TOKEN.',
+      });
+    }
+    // The sync guard is only an approximation in a serverless world, but it
+    // still stops the common double-click within one warm instance.
+    if (store.dispatching) {
       return res.status(409).json({ message: 'A test run is already in progress.' });
     }
 
+    store.dispatching = true;
+    const run = new GithubRun();
+    store.current = run;
+    let started = false;
+
     try {
-      inFlight = runTestSuite();
-      const result = await inFlight;
-      res.json(result);
+      await run.dispatch();
+      started = true;
+      res.json(run.toJSON());
+      // The workflow is now queued on GitHub; the page polls /status until the
+      // run reaches a terminal state. Nothing further happens in this request.
     } catch (error) {
-      if (error.code === 'tests_not_deployed') {
-        return res.status(503).json({ message: error.message, available: false });
-      }
-      res.status(500).json({ message: error.message || 'The test run failed to start.' });
+      store.current = null;
+      console.error('Test dispatch error:', error.message || error);
+      const status = error.status || (error.code === 'github_unauthorized' ? 502 : 500);
+      res.status(status).json({
+        message: error.message || 'Failed to dispatch the GitHub Actions workflow.',
+        error: error.code || null,
+      });
     } finally {
-      inFlight = null;
+      store.dispatching = false;
+      // A completed dispatch leaves `store.current` live so the page can poll;
+      // only a failed dispatch cleared it above.
+      if (!started) store.current = null;
     }
   });
 
   return router;
 }
+
+/**
+ * A single dispatch-and-poll cycle for the dashboard.
+ *
+ * Mirrors the fields the old local runner exposed (`ok`, `summary`, `failures`,
+ * `output`, …) so the page keeps working, and adds the GitHub run identity and
+ * URL the page links out to. It also holds the /status polling state: a stored
+ * run can be `running`, `completed`, or left in its queued/in-progress status.
+ */
+class GithubRun {
+  /** Server-side correlation id, also passed to the workflow as its input. */
+  requestId = crypto.randomUUID();
+
+  /** GitHub's own run id; null until found by lookup. */
+  id = null;
+  status = 'queued'; // queued | in_progress | completed
+  conclusion = null;
+  createdAt = null;
+  updatedAt = null;
+  startedAt = null;
+  completedAt = null;
+  htmlUrl = null;
+  displayTitle = null;
+
+  /** Client-facing lifecycle. */
+  running = false;
+  completed = false;
+  timedOut = false;
+  dispatchAt = null;
+
+  /** Result-shaped fields for the dashboard, mirroring the old local runner. */
+  exitCode = null;
+  durationMs = null;
+  summary = { tests: null, pass: null, fail: null, skipped: null };
+  failures = [];
+  output = '';
+
+  /** Whether the workflow has been sent to GitHub. */
+  get dispatched() {
+    return Boolean(this.dispatchAt);
+  }
+
+  /** Adopts the fields of a found GitHub run. */
+  adopt(raw) {
+    this.id = raw.id;
+    this.status = raw.status;
+    this.conclusion = raw.conclusion;
+    this.htmlUrl = raw.htmlUrl;
+    this.displayTitle = raw.displayTitle;
+    this.createdAt = raw.createdAt;
+    this.updatedAt = raw.updatedAt;
+    this.startedAt = raw.startedAt;
+    this.completedAt = raw.completedAt;
+    this.running = raw.status === 'queued' || raw.status === 'in_progress';
+    this.completed = raw.status === 'completed';
+    this.timedOut = raw.conclusion === 'timed_out';
+    if (raw.startedAt && raw.completedAt) {
+      this.durationMs = Math.max(0, new Date(raw.completedAt).getTime() - new Date(raw.startedAt).getTime());
+      this.exitCode = raw.conclusion === 'success' ? 0 : 1;
+    }
+  }
+
+  /** Sends the workflow-dispatch request. Returns nothing; the id is found later. */
+  async dispatch() {
+    const { repository, workflowFile, branch } = getConfig();
+    const url = `https://api.github.com/repos/${repository}/actions/workflows/${encodeURIComponent(workflowFile)}/dispatches`;
+    const response = await githubFetch(url, {
+      method: 'POST',
+      headers: { ...apiHeaders(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ref: branch, inputs: { request_id: this.requestId } }),
+    });
+    if (response.status === 403 || response.status === 401) {
+      const error = new Error(
+        'GitHub rejected the workflow dispatch. GITHUB_ACTIONS_TOKEN needs "Actions" read and write on this repository.',
+      );
+      error.code = 'github_unauthorized';
+      error.status = 502;
+      throw error;
+    }
+    if (!response.ok) {
+      // A 422 usually means the workflow file is missing on the branch or the
+      // workflow has no workflow_dispatch trigger.
+      const body = await response.json().catch(() => null);
+      const error = new Error(
+        `GitHub rejected the workflow dispatch (${response.status}).` +
+          (body?.message ? ` ${body.message}` : ''),
+      );
+      error.code = 'github_api_error';
+      error.status = 502;
+      throw error;
+    }
+    // 204 No Content is the success shape for this endpoint. GitHub assigns the
+    // run id asynchronously, so findRunByRequestId picks it up on the first poll.
+    this.dispatchAt = new Date();
+    this.running = true;
+    this.status = 'queued';
+    __test.lastDispatchedId = this.requestId;
+  }
+
+  /** One poll against the /status route: refreshes GitHub's state if it is done. */
+  async poll() {
+    if (!this.dispatched) return;
+    const run = await findRunByRequestId(this.requestId, {});
+    if (run) this.adopt(run);
+    // A terminal run becomes the dashboard's last-known result and frees the
+    // single-run slot so the next dispatch is allowed.
+    if (this.completed && store.current === this) {
+      store.current = null;
+      store.last = this;
+    }
+  }
+
+  /** Whether a run is still waiting on GitHub and not yet terminal. */
+  get isAwaitingWorkflow() {
+    return this.dispatched && !this.completed;
+  }
+
+  /** The JSON sent to the dashboard. */
+  toJSON() {
+    return {
+      requestId: this.requestId,
+      runId: this.id,
+      status: this.status,
+      conclusion: this.conclusion,
+      running: this.running,
+      completed: this.completed,
+      timedOut: this.timedOut,
+      htmlUrl: this.htmlUrl,
+      displayTitle: this.displayTitle,
+      createdAt: this.createdAt,
+      completedAt: this.completedAt,
+      durationMs: this.durationMs,
+      exitCode: this.exitCode,
+      summary: this.summary,
+      failures: this.failures,
+      output: this.output,
+      poll: { intervalMs: getConfig().pollIntervalMs, timeoutMs: getConfig().timeoutMs },
+    };
+  }
+}
+
+/** Cancels GitHub's run and marks it done locally. Best effort. */
+export async function cancelRun() {
+  const run = store.current;
+  if (!run || !run.id) return { cancelled: false, message: 'No active run to cancel.' };
+  try {
+    await githubFetch(
+      `https://api.github.com/repos/${getConfig().repository}/actions/runs/${run.id}/cancel`,
+      { method: 'POST', headers: apiHeaders() },
+    );
+    run.conclusion = 'cancelled';
+    run.completed = true;
+    run.running = false;
+  } catch (error) {
+    return { cancelled: false, message: error.message || 'Cancellation failed.' };
+  } finally {
+    store.current = null;
+    store.last = store.last && store.last.id === run.id ? null : store.last;
+  }
+  return { cancelled: true };
+}
+
+/* --------------------------------------------------------- test only */
+/**
+ * Test seams. These are exported so the unit tests can stub the GitHub API and
+ * reset the single-flight store without refactoring the router; the real routes
+ * never touch them.
+ */
+export const __test = {
+  resetStore() {
+    store.current = null;
+    store.last = null;
+    store.dispatching = false;
+  },
+  /** Swap the fetcher used for GitHub API calls. Returns the previous one. */
+  setFetcher(fn) {
+    const previous = globalThis.__testFetcher;
+    globalThis.__testFetcher = fn;
+    return previous;
+  },
+  /** The request id the last dispatch used, so a mock run list can match it. */
+  lastDispatchedId: null,
+  get currentRun() {
+    return store.current;
+  },
+  get lastRun() {
+    return store.last;
+  },
+};

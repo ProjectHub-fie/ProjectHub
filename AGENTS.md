@@ -58,10 +58,11 @@ that a helper under `api/` must not be named `test*` whatever the ignore file sa
   the types, and those modules import nothing from React or the DOM). Both files
   also grep `api/index.js` and `server/routes.ts` to assert the backends carry
   the same validators, because the form is not a security boundary.
-- `admin-test-runner.test.mjs` — the TAP parser, output capping, and the
-  guardrails on the one route that spawns a process. It runs the sibling
-  `deployment-limits.test.mjs` for real rather than re-running its own folder,
-  which would recurse.
+- `admin-test-runner.test.mjs` — the GitHub Actions dispatch, run matching by
+  request id, polling/state transitions, dispatch errors, single-flight, and the
+  source guardrails on the route that can trigger CI (no request fields, token
+  never exposed, no local Docker/process imports). It exercises the router with a
+  mocked GitHub API; no real workflow is ever dispatched during tests.
 - `profile-command.test.mjs` — the `&profile` / `&pr` rename, that `&dev` is
   gone, the link-status words, the date/age formatting, and the profile embed
   shape (static author icon, real avatar as the image, relative footer
@@ -70,22 +71,32 @@ that a helper under `api/` must not be named `test*` whatever the ignore file sa
 ### The test-runner console
 
 `/pbad/tests` (owner only) runs the repository's `tests/` folder and shows the
-TAP summary. It is the only route that starts a process, so `api/_lib/suite-runner.js`
-builds one fixed argument list and reads no request field at all; the spawn uses
-`shell: false`. One run at a time is enforced with a module-level promise.
+workflow's progress and outcome. It is the one dashboard route that triggers
+external execution, and it does so on **GitHub Actions**, never on Vercel:
+`api/_lib/suite-runner.js` dispatches `.github/workflows/docker-tests.yml` via
+the GitHub REST API (a `request_id` it generates server-side is passed as a
+workflow input), then polls `GET /actions/workflows/{file}/runs` for the run
+whose `display_title` carries that id. The request accepts no input fields at
+all; workflow, branch and token all come from process environment defaults.
 
 `tests/` is in `.vercelignore`, so it is not deployed to the serverless function.
-The runner therefore has two ways to reach the suite, and reports which one it
-used as `mode`:
+The workflow checks out the repository (which includes `tests/`) on a
+GitHub-hosted runner and runs the existing `tests` compose service against the
+compose database. The image is built with the repository's own `Dockerfile`
+via `--build`, so the suite runs in exactly the environment a long-lived host
+would use. A `DATABASE_URL_CI` repository variable overrides the integration's
+default compose DB URL; `SESSION_SECRET_CI`, `ADMIN_PIN_CI`/`ADMIN_PASSWORD_CI`
+secrets override those for the worker (the defaults let the auth/mail tests run
+without them). The web deployment itself needs one secret:
+`GITHUB_ACTIONS_TOKEN`, scoped to `workflow` dispatch and `actions` read on
+`ProjectHub-fie/ProjectHub`.
 
-- **local** — the folder is on disk (a long-lived host, a Docker deployment, local
-  development) and the child is this process's own Node.
-- **docker** — the folder is absent but a Docker daemon is reachable, so the suite
-  runs with `docker run` against an image built from this repository. The image is
-  `TEST_RUNNER_IMAGE`, else the compose image `projecthub:local`, else a build of
-  `projecthub-tests:local` from the checked-out `Dockerfile`.
-- **unavailable** — neither, so `status` says so and a run is a `503` rather than a
-  spawn error.
+The endpoint leans on Vercel's 30s `maxDuration` only for the dispatch call —
+it never waits for the suite. The dashboard polls `/api/admin/tests/status`
+every few seconds; the status handler refreshes the active run from GitHub in
+<8s and surfaces the result. A failing suite must make the GitHub job fail, so
+the workflow uses `set -o pipefail` and no `continue-on-error`, and the
+dashboard reads the run's `conclusion`.
 
 The compose file carries the app, the bot and a `db`, plus a `tests` service behind
 the `tests` profile that runs the suite on demand:
@@ -96,15 +107,10 @@ docker compose run --rm tests        # the suite, against the compose db
 ```
 
 Node 24 rejects a bare directory as a test target — it tries to import it and dies
-with `Cannot find module /app/tests` — so the target is the glob `tests/*.test.mjs`,
-the same set `npm test` runs. `runTestSuite` takes an optional `target` that only
-the tests pass; the HTTP route never does, so a request cannot choose what runs,
-and Docker always runs the whole folder.
-
-The spawned child deletes `NODE_TEST_CONTEXT`/`NODE_TEST_WORKER_ID` from its
-environment. A nested runner that inherits them attaches to the parent's test
-protocol instead of emitting TAP, which is what a naive spawn does when the
-endpoint is exercised from the suite.
+with `Cannot find module /app/tests` — so the compose `tests` service target is
+the glob `tests/*.test.mjs`, the same set `npm test` runs. The workflow only
+starts the `tests` service; the command lives in `docker-compose.yml` so a
+long-lived host and the dashboard exercise the identical invocation.
 
 ### Client modules are loadable from node:test
 
