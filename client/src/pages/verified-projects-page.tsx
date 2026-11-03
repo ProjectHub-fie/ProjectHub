@@ -13,7 +13,8 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Loader2, Plus, Trash2, Search, CheckCircle, Pencil, Globe, Github, Upload, X, ImageIcon } from "lucide-react";
+import { Loader2, Plus, Trash2, Search, CheckCircle, Pencil, Globe, Github, Upload, X, ImageIcon, Smartphone, Monitor, AlertCircle } from "lucide-react";
+import { downloadUrlProblem, sha256Problem, MEGA_DOWNLOAD_HOSTS } from "@/lib/download-links";
 
 const CATEGORIES = ["websites", "bots", "utilities"] as const;
 const STATUSES = ["active", "developing", "live", "beta", "archived"] as const;
@@ -57,6 +58,15 @@ type FormData = {
   requirements: string;
   releaseNotes: string;
   screenshots: string;
+  androidDownloadUrl: string;
+  windowsDownloadUrl: string;
+  androidPackageName: string;
+  androidSha256: string;
+  androidReleaseDate: string;
+  windowsPackageName: string;
+  windowsSha256: string;
+  windowsReleaseDate: string;
+  githubReleasesFallback: boolean;
   isActive: boolean;
   sortOrder: number;
 };
@@ -86,6 +96,15 @@ const emptyForm: FormData = {
   requirements: "",
   releaseNotes: "",
   screenshots: "",
+  androidDownloadUrl: "",
+  windowsDownloadUrl: "",
+  androidPackageName: "",
+  androidSha256: "",
+  androidReleaseDate: "",
+  windowsPackageName: "",
+  windowsSha256: "",
+  windowsReleaseDate: "",
+  githubReleasesFallback: false,
   isActive: true,
   sortOrder: 0,
 };
@@ -98,6 +117,47 @@ function toArrayField(val: string | null | undefined): string[] | null {
 function fromArrayField(arr: string[] | null | undefined): string {
   if (!arr) return "";
   return arr.join(", ");
+}
+
+/** Reads one per-platform fact out of the stored `downloadDetails` blob. */
+function platformDetailField(
+  p: VerifiedProject,
+  platform: "android" | "windows",
+  field: string,
+): string {
+  const details = p.downloadDetails;
+  if (!details || typeof details !== "object") return "";
+  const entry = (details as Record<string, Record<string, unknown>>)[platform];
+  const value = entry?.[field];
+  return typeof value === "string" ? value : "";
+}
+
+/**
+ * Builds the per-platform fact blob from the form.
+ *
+ * Only the platforms that have a link are written: facts for a platform with no
+ * installer would never be shown, and keeping them would mean a stale package
+ * name reappearing if the link is removed and added back.
+ */
+function buildDownloadDetails(f: FormData): Record<string, Record<string, string>> | null {
+  const details: Record<string, Record<string, string>> = {};
+
+  const add = (platform: "android" | "windows", packageName: string, sha256: string, releaseDate: string) => {
+    const entry: Record<string, string> = {};
+    if (packageName.trim()) entry.packageName = packageName.trim();
+    if (releaseDate.trim()) entry.releaseDate = releaseDate.trim();
+    if (sha256.trim()) entry.sha256 = sha256.trim().toLowerCase();
+    if (Object.keys(entry).length > 0) details[platform] = entry;
+  };
+
+  if (f.androidDownloadUrl.trim()) {
+    add("android", f.androidPackageName, f.androidSha256, f.androidReleaseDate);
+  }
+  if (f.windowsDownloadUrl.trim()) {
+    add("windows", f.windowsPackageName, f.windowsSha256, f.windowsReleaseDate);
+  }
+
+  return Object.keys(details).length > 0 ? details : null;
 }
 
 function projectToForm(p: VerifiedProject): FormData {
@@ -126,6 +186,18 @@ function projectToForm(p: VerifiedProject): FormData {
     requirements: fromArrayField(p.requirements),
     releaseNotes: p.releaseNotes || "",
     screenshots: fromArrayField(p.screenshots),
+    // Existing links are loaded back into the form unchanged, so opening the
+    // edit dialog and saving without touching them preserves both the URL and
+    // its MEGA decryption key.
+    androidDownloadUrl: p.androidDownloadUrl || "",
+    windowsDownloadUrl: p.windowsDownloadUrl || "",
+    androidPackageName: platformDetailField(p, "android", "packageName"),
+    androidSha256: platformDetailField(p, "android", "sha256"),
+    androidReleaseDate: platformDetailField(p, "android", "releaseDate"),
+    windowsPackageName: platformDetailField(p, "windows", "packageName"),
+    windowsSha256: platformDetailField(p, "windows", "sha256"),
+    windowsReleaseDate: platformDetailField(p, "windows", "releaseDate"),
+    githubReleasesFallback: p.githubReleasesFallback === true,
     isActive: p.isActive,
     sortOrder: p.sortOrder,
   };
@@ -157,9 +229,140 @@ function formToPayload(f: FormData) {
     requirements: toArrayField(f.requirements),
     releaseNotes: f.releaseNotes || null,
     screenshots: toArrayField(f.screenshots),
+    // Sent as null when blank, which is how a link is cleared. The API
+    // re-validates both links and refuses a bad one rather than storing it.
+    androidDownloadUrl: f.androidDownloadUrl.trim() || null,
+    windowsDownloadUrl: f.windowsDownloadUrl.trim() || null,
+    downloadDetails: buildDownloadDetails(f),
+    githubReleasesFallback: f.githubReleasesFallback,
     isActive: f.isActive,
     sortOrder: f.sortOrder,
   };
+}
+
+/**
+ * One platform's download fields.
+ *
+ * Extracted because Android and Windows need the identical four inputs and the
+ * identical live validation, and a copy per platform is how the two drift: the
+ * Windows field ends up accepting something the Android field rejects. The
+ * `platform` prop selects both the test ids and the field keys, so the caller
+ * only supplies the current values.
+ *
+ * The validation runs on every keystroke but only complains once something has
+ * been typed, so an untouched empty field is not shown as an error.
+ */
+function DownloadPlatformFields({
+  platform,
+  icon,
+  url,
+  packageName,
+  sha256,
+  releaseDate,
+  onChange,
+}: {
+  platform: "android" | "windows";
+  icon: React.ReactNode;
+  url: string;
+  packageName: string;
+  sha256: string;
+  releaseDate: string;
+  onChange: (patch: Partial<FormData>) => void;
+}) {
+  const label = platform === "windows" ? "Windows" : "Android";
+  const example = `https://mega.nz/file/AbCdEf12#${"K".repeat(22)}`;
+  const urlProblem = url.trim() ? downloadUrlProblem(url) : null;
+  const checksumProblem = url.trim() ? sha256Problem(sha256) : null;
+
+  const fields = {
+    url: platform === "windows" ? "windowsDownloadUrl" : "androidDownloadUrl",
+    packageName: platform === "windows" ? "windowsPackageName" : "androidPackageName",
+    sha256: platform === "windows" ? "windowsSha256" : "androidSha256",
+    releaseDate: platform === "windows" ? "windowsReleaseDate" : "androidReleaseDate",
+  } as const;
+
+  return (
+    <div
+      className="sm:col-span-2 rounded-xl border p-4 space-y-3 bg-secondary/10"
+      data-testid={`section-download-${platform}`}
+    >
+      <div className="flex items-center gap-2">
+        <span className="text-primary">{icon}</span>
+        <h5 className="text-sm font-semibold">{label} download</h5>
+        {url.trim() && !urlProblem && (
+          <Badge variant="outline" className="ml-auto text-[10px] gap-1">
+            <CheckCircle className="h-3 w-3 text-green-500" />
+            Link set
+          </Badge>
+        )}
+      </div>
+
+      <div className="space-y-1">
+        <Label htmlFor={`vp-${platform}-download-url`}>{label} Download URL (MEGA)</Label>
+        <Input
+          id={`vp-${platform}-download-url`}
+          value={url}
+          onChange={(e) => onChange({ [fields.url]: e.target.value } as Partial<FormData>)}
+          placeholder={example}
+          aria-invalid={urlProblem ? true : undefined}
+          className={urlProblem ? "border-red-500 focus-visible:ring-red-500" : undefined}
+          data-testid={`input-project-${platform}-download-url`}
+        />
+        {urlProblem ? (
+          <p className="text-xs text-red-500 flex items-center gap-1" data-testid={`error-${platform}-download-url`}>
+            <AlertCircle className="h-3 w-3" />
+            {urlProblem}
+          </p>
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            Complete MEGA share link, e.g. <code className="break-all">{example}</code>. Trusted
+            hosts: {MEGA_DOWNLOAD_HOSTS.join(", ")}.
+          </p>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className="space-y-1">
+          <Label htmlFor={`vp-${platform}-package-name`}>Package name</Label>
+          <Input
+            id={`vp-${platform}-package-name`}
+            value={packageName}
+            onChange={(e) => onChange({ [fields.packageName]: e.target.value } as Partial<FormData>)}
+            placeholder={platform === "windows" ? "ClearCut-Setup-1.1.0.exe" : "clearcut-1.1.0.apk"}
+            data-testid={`input-project-${platform}-package-name`}
+          />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor={`vp-${platform}-release-date`}>Release date</Label>
+          <Input
+            id={`vp-${platform}-release-date`}
+            value={releaseDate}
+            onChange={(e) => onChange({ [fields.releaseDate]: e.target.value } as Partial<FormData>)}
+            placeholder="2026-03-14"
+            data-testid={`input-project-${platform}-release-date`}
+          />
+        </div>
+        <div className="space-y-1">
+          <Label htmlFor={`vp-${platform}-sha256`}>SHA-256 checksum</Label>
+          <Input
+            id={`vp-${platform}-sha256`}
+            value={sha256}
+            onChange={(e) => onChange({ [fields.sha256]: e.target.value } as Partial<FormData>)}
+            placeholder="64 hex characters"
+            aria-invalid={checksumProblem ? true : undefined}
+            className={checksumProblem ? "border-red-500 focus-visible:ring-red-500" : undefined}
+            data-testid={`input-project-${platform}-sha256`}
+          />
+          {checksumProblem && (
+            <p className="text-xs text-red-500 flex items-center gap-1" data-testid={`error-${platform}-sha256`}>
+              <AlertCircle className="h-3 w-3" />
+              {checksumProblem}
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
 }
 
 export default function VerifiedProjectsPage() {
@@ -275,6 +478,33 @@ export default function VerifiedProjectsPage() {
       toast({ title: "Missing required fields", description: "Slug, title, description, category and status are required.", variant: "error" });
       return;
     }
+
+    // Installer links are checked before the request so the administrator gets
+    // the reason immediately. The server checks again — this is convenience,
+    // not the boundary — and neither message repeats the link, because the
+    // link carries the MEGA decryption key.
+    for (const [label, value] of [
+      ["Android", form.androidDownloadUrl],
+      ["Windows", form.windowsDownloadUrl],
+    ] as const) {
+      const problem = downloadUrlProblem(value);
+      if (problem) {
+        toast({ title: `${label} download link is not valid`, description: problem, variant: "error" });
+        return;
+      }
+    }
+
+    for (const [label, value] of [
+      ["Android", form.androidSha256],
+      ["Windows", form.windowsSha256],
+    ] as const) {
+      const problem = sha256Problem(value);
+      if (problem) {
+        toast({ title: `${label} checksum is not valid`, description: problem, variant: "error" });
+        return;
+      }
+    }
+
     if (editingProject) {
       updateMutation.mutate({ id: editingProject.id, data: payload });
     } else {
@@ -672,6 +902,56 @@ export default function VerifiedProjectsPage() {
             <div className="space-y-1 sm:col-span-2">
               <Label htmlFor="vp-screenshots">Screenshots (comma-separated image URLs)</Label>
               <Input id="vp-screenshots" value={form.screenshots} onChange={e => setForm(f => ({ ...f, screenshots: e.target.value }))} placeholder="https://..., https://..." data-testid="input-project-screenshots" />
+            </div>
+
+            {/* Per-platform installer links. Each is optional: a platform with
+                no link shows no download button on the detail page, so an app
+                that only ships for Android does not advertise Windows. */}
+            <div className="sm:col-span-2 pt-2 border-t">
+              <h4 className="text-sm font-semibold">Downloads (installable utilities)</h4>
+              <p className="text-xs text-muted-foreground">
+                Paste the complete MEGA share link, including the part after <code>#</code> — that is
+                the decryption key, and the download only works with it. Leave a field empty to hide
+                that platform's download button. Links are never shown on the public page.
+              </p>
+            </div>
+
+            <DownloadPlatformFields
+              platform="android"
+              icon={<Smartphone className="h-4 w-4" />}
+              url={form.androidDownloadUrl}
+              packageName={form.androidPackageName}
+              sha256={form.androidSha256}
+              releaseDate={form.androidReleaseDate}
+              onChange={(patch) => setForm(f => ({ ...f, ...patch }))}
+            />
+
+            <DownloadPlatformFields
+              platform="windows"
+              icon={<Monitor className="h-4 w-4" />}
+              url={form.windowsDownloadUrl}
+              packageName={form.windowsPackageName}
+              sha256={form.windowsSha256}
+              releaseDate={form.windowsReleaseDate}
+              onChange={(patch) => setForm(f => ({ ...f, ...patch }))}
+            />
+
+            <div className="flex items-start gap-2 sm:col-span-2">
+              <input
+                id="vp-github-releases-fallback"
+                type="checkbox"
+                checked={form.githubReleasesFallback}
+                onChange={e => setForm(f => ({ ...f, githubReleasesFallback: e.target.checked }))}
+                className="h-4 w-4 rounded border-gray-300 mt-0.5"
+                data-testid="checkbox-project-github-releases-fallback"
+              />
+              <div>
+                <Label htmlFor="vp-github-releases-fallback">Fall back to GitHub Releases</Label>
+                <p className="text-xs text-muted-foreground">
+                  Only used when no Android or Windows link is set. Off by default, so an app with no
+                  installer does not offer a download button.
+                </p>
+              </div>
             </div>
 
             <div className="flex items-center gap-2 sm:col-span-2">

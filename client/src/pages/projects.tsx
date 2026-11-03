@@ -3,7 +3,8 @@ import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ExternalLink, Bot, Download, ArrowLeft, Github, Network, User } from "lucide-react";
-import { isInstallableApp, githubLatestReleaseUrl } from "@/lib/project-display";
+import { isInstallableApp } from "@/lib/project-display";
+import { primaryInstallUrl } from "@/lib/download-links";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -25,6 +26,9 @@ interface Project {
   appSize?: string | null;
   platforms?: string[] | null;
   releaseNotes?: string | null;
+  androidDownloadUrl?: string | null;
+  windowsDownloadUrl?: string | null;
+  githubReleasesFallback?: boolean | null;
   status: string;
   authorName?: string;
   architecture?: string;
@@ -172,11 +176,13 @@ export default function ProjectsPage() {
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
           {filteredProjects.map((project) => {
-            // An installable utility installs from its GitHub release, so the
-            // Download action needs that fallback; other categories keep
-            // requiring a live URL.
-            const actionUrl = project.liveUrl
-              || (isInstallableApp(project) ? githubLatestReleaseUrl(project.githubUrl) : null);
+            // An installable utility installs from its own MEGA package, so the
+            // Download action prefers the platform links and falls back to the
+            // GitHub release feed only when the dashboard turned that on. A
+            // website's own address is never used as an installer.
+            const actionUrl = isInstallableApp(project)
+              ? primaryInstallUrl(project)
+              : project.liveUrl || null;
 
             return (
             <div

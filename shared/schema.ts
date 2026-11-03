@@ -97,6 +97,16 @@ export type InsertVerifiedProjectInput = {
   requirements?: string[] | null;
   releaseNotes?: string | null;
   screenshots?: string[] | null;
+  // Per-platform installer links. Each is a complete public MEGA share link
+  // (decryption key included) or null; the detail page shows a download button
+  // for a platform only when its link is set.
+  androidDownloadUrl?: string | null;
+  windowsDownloadUrl?: string | null;
+  // Per-platform package facts shown in the download dialog. Free-form because
+  // it is stored as jsonb and validated on write, not by this type.
+  downloadDetails?: Record<string, Record<string, string>> | null;
+  // GitHub Releases is an opt-in fallback, never an implicit one.
+  githubReleasesFallback?: boolean;
   isActive?: boolean;
   sortOrder?: number;
 };

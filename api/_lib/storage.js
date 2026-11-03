@@ -174,6 +174,10 @@ async function ensureTableAndSeed() {
         requirements text[],
         release_notes text,
         screenshots text[],
+        android_download_url text,
+        windows_download_url text,
+        download_details jsonb,
+        github_releases_fallback boolean DEFAULT false NOT NULL,
         is_active boolean DEFAULT true NOT NULL,
         sort_order integer DEFAULT 0 NOT NULL,
         created_at timestamp DEFAULT now() NOT NULL,
@@ -191,6 +195,14 @@ async function ensureTableAndSeed() {
     await db.execute(sql`ALTER TABLE verified_projects ADD COLUMN IF NOT EXISTS requirements text[]`);
     await db.execute(sql`ALTER TABLE verified_projects ADD COLUMN IF NOT EXISTS release_notes text`);
     await db.execute(sql`ALTER TABLE verified_projects ADD COLUMN IF NOT EXISTS screenshots text[]`);
+
+    // Per-platform installer links, added after the app-metadata columns
+    // shipped. Each holds a complete public MEGA share link, so it is a
+    // credential and must never be logged (see api/_lib/download-links.js).
+    await db.execute(sql`ALTER TABLE verified_projects ADD COLUMN IF NOT EXISTS android_download_url text`);
+    await db.execute(sql`ALTER TABLE verified_projects ADD COLUMN IF NOT EXISTS windows_download_url text`);
+    await db.execute(sql`ALTER TABLE verified_projects ADD COLUMN IF NOT EXISTS download_details jsonb`);
+    await db.execute(sql`ALTER TABLE verified_projects ADD COLUMN IF NOT EXISTS github_releases_fallback boolean DEFAULT false NOT NULL`);
 
     // Check if empty and seed if so
     const count = await db.execute(sql`SELECT COUNT(*) as cnt FROM verified_projects`);

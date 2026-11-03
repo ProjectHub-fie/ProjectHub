@@ -37,6 +37,10 @@ interface Project {
   requirements?: string[] | null;
   releaseNotes?: string | null;
   screenshots?: string[] | null;
+  androidDownloadUrl?: string | null;
+  windowsDownloadUrl?: string | null;
+  downloadDetails?: Record<string, Record<string, string>> | null;
+  githubReleasesFallback?: boolean | null;
   createdAt: string;
   updatedAt: string;
 }

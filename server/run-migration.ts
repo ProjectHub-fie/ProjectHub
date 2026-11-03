@@ -55,6 +55,10 @@ async function runMigration() {
         requirements text[],
         release_notes text,
         screenshots text[],
+        android_download_url text,
+        windows_download_url text,
+        download_details jsonb,
+        github_releases_fallback boolean DEFAULT false NOT NULL,
         is_active boolean DEFAULT true NOT NULL,
         sort_order integer DEFAULT 0 NOT NULL,
         created_at timestamp DEFAULT now() NOT NULL,
@@ -73,6 +77,15 @@ async function runMigration() {
     await client`ALTER TABLE verified_projects ADD COLUMN IF NOT EXISTS release_notes text`;
     await client`ALTER TABLE verified_projects ADD COLUMN IF NOT EXISTS screenshots text[]`;
     console.log('✅ verified_projects app columns');
+
+    // Per-platform installer links, added after the app-metadata columns
+    // shipped. Each holds a complete public MEGA share link, so it is a
+    // credential and must never be logged (see api/_lib/download-links.js).
+    await client`ALTER TABLE verified_projects ADD COLUMN IF NOT EXISTS android_download_url text`;
+    await client`ALTER TABLE verified_projects ADD COLUMN IF NOT EXISTS windows_download_url text`;
+    await client`ALTER TABLE verified_projects ADD COLUMN IF NOT EXISTS download_details jsonb`;
+    await client`ALTER TABLE verified_projects ADD COLUMN IF NOT EXISTS github_releases_fallback boolean DEFAULT false NOT NULL`;
+    console.log('✅ verified_projects download columns');
 
     // Also patch users table
     await client`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_blocked boolean DEFAULT false NOT NULL`;

@@ -73,7 +73,14 @@ services:
   # On-demand suite. Not started by `up` (it has no long-running process); run it
   # with `docker compose run --rm tests`. The suite is also reachable from the
   # admin portal, because the image above carries `tests/`.
+  #
+  # `build: .` is required, not decorative: without it `docker compose run
+  # --build tests` has nothing to build and falls back to *pulling*
+  # `projecthub:local` from a registry, which fails with "pull access denied".
+  # The image is local-only, so the same context the app uses must be declared
+  # here. This is what the docker-tests workflow hit on a cold runner.
   tests:
+    build: .
     image: ${PROJECTHUB_IMAGE:-projecthub:local}
     profiles: ['tests']
     depends_on:
@@ -85,7 +92,21 @@ services:
       ADMIN_PIN: ${ADMIN_PIN:-}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
       NO_COLOR: '1'
-    command: ['node', '--test', '--test-force-exit', 'tests/*.test.mjs']
+    # The schema is created first, in the same container, and then the suite runs.
+    #
+    # Why this is not optional: the suite's database-backed tests assert on real
+    # tables, and nothing else creates them on a fresh volume. `db-bootstrap.mjs`
+    # derives the DDL from `drizzle/schema.ts` and is idempotent, so it is safe
+    # on an existing database too. `set -e` is what makes the step meaningful:
+    # if the bootstrap fails, the suite must not run against a schema-less
+    # database and report 11 misleading assertion failures.
+    command:
+      - sh
+      - -c
+      - |
+        set -e
+        node scripts/db-bootstrap.mjs
+        node --test --test-force-exit tests/*.test.mjs
 
 volumes:
   db-data:

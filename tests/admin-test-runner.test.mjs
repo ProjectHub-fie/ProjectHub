@@ -484,3 +484,104 @@ test('the workflow runs the existing tests compose service, never builds a new o
   const upload = wf.split('Upload test output')[1]?.split('Write the step summary')[0] ?? '';
   assert.match(upload, /actions\/upload-artifact@v4/);
 });
+
+test('the workflow supplies every variable docker-compose declares as required', () => {
+  // `docker compose` interpolates the *whole* file before it runs any single
+  // service. So a `${VAR:?}` on the `bot` service fails `docker compose config
+  // --services` and `docker compose run tests` alike, even though the tests
+  // service never receives the variable. That is exactly how this workflow
+  // broke: the bot token was required by compose but absent from the job, and
+  // the very first compose call — the "Show what will run" step — exited 1.
+  const compose = source('docker-compose.yml');
+  const wf = source('.github/workflows/docker-tests.yml');
+
+  const required = [...compose.matchAll(/\$\{([A-Z_][A-Z0-9_]*):\?/g)].map((m) => m[1]);
+  assert.ok(required.length > 0, 'the compose file is expected to declare required variables');
+
+  // Upper-case env keys indented under an `env:` block. Compose variables are
+  // conventionally upper-case, and the workflow's own inputs are lower-case.
+  const supplied = new Set(
+    [...wf.matchAll(/^\s{6,10}([A-Z_][A-Z0-9_]*):/gm)].map((m) => m[1]),
+  );
+
+  for (const name of required) {
+    assert.ok(
+      supplied.has(name),
+      `docker-compose.yml requires ${name} but the workflow never sets it, so every compose call in this job fails`,
+    );
+  }
+});
+
+test('the bot token the workflow supplies cannot be mistaken for a real one', () => {
+  // The value exists only to satisfy compose interpolation. If a genuine token
+  // were ever used it would be a live credential sitting in a job that has no
+  // use for one, and a Discord token always contains a dot.
+  const wf = source('.github/workflows/docker-tests.yml');
+  const line = wf.split('\n').find((l) => /^\s*DISCORD_BOT_TOKEN:/.test(l)) ?? '';
+  assert.ok(line, 'the workflow must set DISCORD_BOT_TOKEN for interpolation');
+
+  const value = line.split(':').slice(1).join(':').trim().replace(/^['"]|['"]$/g, '');
+  assert.ok(value, 'the job must supply a value or every compose call fails');
+  assert.ok(!value.includes('.'), `the placeholder must not look like a Discord token: ${value}`);
+
+  // A literal, not a secret: no test here reads the token, so offering a
+  // `*_CI` secret would invite a live credential into a job that cannot use it.
+  assert.ok(
+    !/secrets\./.test(line),
+    'the interpolation placeholder must be a fixed value, not a secret',
+  );
+});
+
+/* ------------------------------------------------------ the compose tests service */
+
+/** The `tests` service block, up to the next top-level service or `volumes:`. */
+function testsService() {
+  const compose = source('docker-compose.yml');
+  const start = compose.indexOf('\n  tests:');
+  assert.ok(start !== -1, 'docker-compose.yml must define a tests service');
+  const rest = compose.slice(start + 1);
+  const end = rest.search(/\n  [a-z][a-z0-9_-]*:\n|\nvolumes:/);
+  return end === -1 ? rest : rest.slice(0, end);
+}
+
+test('the tests service declares a build context, so --build can build it', () => {
+  // `docker compose run --build tests` builds the service's own `build:` block.
+  // With only `image:`, there is nothing to build and compose falls back to
+  // *pulling* `projecthub:local` from a registry, which fails with "pull access
+  // denied for projecthub, repository does not exist". That is exactly what
+  // happened on a cold runner, where the image had never been built.
+  const service = testsService();
+  assert.match(
+    service,
+    /^\s+build:\s*\.\s*$/m,
+    'the tests service must declare `build: .`, or --build cannot produce the image',
+  );
+  assert.match(service, /^\s+image:\s*\$\{PROJECTHUB_IMAGE:-projecthub:local\}/m);
+});
+
+test('the tests service bootstraps the schema before running the suite', () => {
+  // A fresh compose volume has no tables, and nothing else creates them: the
+  // tests service depends on `db` only, and `server/index.ts` never runs. The
+  // database-backed tests then fail with `relation "users" does not exist` —
+  // 11 misleading assertion failures rather than a clear setup error.
+  const service = testsService();
+  assert.match(service, /node scripts\/db-bootstrap\.mjs/, 'the schema must be created first');
+  assert.match(service, /node --test --test-force-exit tests\/\*\.test\.mjs/, 'the suite must still run');
+  assert.match(service, /set -e/, 'a failed bootstrap must stop the run, not be ignored');
+
+  // The bootstrap must run before the suite, not after or in parallel.
+  const bootAt = service.indexOf('db-bootstrap.mjs');
+  const suiteAt = service.indexOf('tests/*.test.mjs');
+  assert.ok(bootAt < suiteAt, 'the bootstrap must precede the suite');
+
+  // And the bootstrap script must exist, or the command fails at runtime.
+  assert.ok(source('scripts/db-bootstrap.mjs').length > 0);
+});
+
+test('the tests service keeps the DB-free suite free of admin secrets', () => {
+  // ADMIN_PIN and ADMIN_PASSWORD gate the admin-login tests, which skip when
+  // empty. They must default to empty so a CI run without them still passes.
+  const service = testsService();
+  assert.match(service, /ADMIN_PIN:\s*\$\{ADMIN_PIN:-\}/);
+  assert.match(service, /ADMIN_PASSWORD:\s*\$\{ADMIN_PASSWORD:-\}/);
+});

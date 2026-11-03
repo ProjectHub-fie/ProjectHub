@@ -25,6 +25,7 @@ import { buildBotRouter } from '../_lib/bot-routes.js';
 import { buildRobloxRouter } from '../_lib/roblox-routes.js';
 import { buildTestRouter } from '../_lib/suite-runner.js';
 import { ingestMessage, createMailNotifications, ensureMailSchema, purgeAdminMailData } from '../_lib/mail-store.js';
+import { validateDownloadFields } from '../_lib/download-links.js';
 
 const sql = postgres(normalizeDatabaseUrl(process.env.DATABASE_URL), { ssl: sslOptionForUrl(process.env.DATABASE_URL), max: 5 });
 
@@ -92,6 +93,13 @@ const ensureVerifiedProjectSchema = () => {
       await sql`ALTER TABLE verified_projects ADD COLUMN IF NOT EXISTS requirements text[]`;
       await sql`ALTER TABLE verified_projects ADD COLUMN IF NOT EXISTS release_notes text`;
       await sql`ALTER TABLE verified_projects ADD COLUMN IF NOT EXISTS screenshots text[]`;
+      // Per-platform installer links. Each holds a complete public MEGA share
+      // link, so it is a credential and must never be logged — see
+      // api/_lib/download-links.js for the validation and the redaction helper.
+      await sql`ALTER TABLE verified_projects ADD COLUMN IF NOT EXISTS android_download_url text`;
+      await sql`ALTER TABLE verified_projects ADD COLUMN IF NOT EXISTS windows_download_url text`;
+      await sql`ALTER TABLE verified_projects ADD COLUMN IF NOT EXISTS download_details jsonb`;
+      await sql`ALTER TABLE verified_projects ADD COLUMN IF NOT EXISTS github_releases_fallback boolean DEFAULT false NOT NULL`;
     } catch (error) {
       verifiedProjectSchemaReady = null;
       throw error;
@@ -156,6 +164,10 @@ const mapProject = (p) => ({
   requirements: p.requirements,
   releaseNotes: p.release_notes,
   screenshots: p.screenshots,
+  androidDownloadUrl: p.android_download_url,
+  windowsDownloadUrl: p.windows_download_url,
+  downloadDetails: p.download_details,
+  githubReleasesFallback: p.github_releases_fallback ?? false,
   isActive: p.is_active,
   sortOrder: p.sort_order,
   createdAt: p.created_at,
@@ -739,6 +751,10 @@ function buildAdminRouter() {
       requirements: pick(data, 'requirements'),
       release_notes: pick(data, 'releaseNotes', 'release_notes'),
       screenshots: pick(data, 'screenshots'),
+      android_download_url: pick(data, 'androidDownloadUrl', 'android_download_url'),
+      windows_download_url: pick(data, 'windowsDownloadUrl', 'windows_download_url'),
+      download_details: pick(data, 'downloadDetails', 'download_details'),
+      github_releases_fallback: pick(data, 'githubReleasesFallback', 'github_releases_fallback'),
       is_active: pick(data, 'isActive', 'is_active'),
       sort_order: pick(data, 'sortOrder', 'sort_order'),
     };
@@ -750,7 +766,17 @@ function buildAdminRouter() {
   router.post('/api/admin/verified-projects', requireRole('moderator'), async (req, res) => {
     try {
       await ensureVerifiedProjectSchema();
-      const cols = toColumns(req.body || {});
+
+      // Installer links are validated here, not only in the form. A rejected
+      // link is an error rather than a silent drop: storing the previous value
+      // while reporting success is how a broken installer survives unnoticed.
+      // The message never repeats the link, because the link is the credential.
+      const downloads = validateDownloadFields(req.body || {});
+      if (downloads.problem) {
+        return res.status(400).json({ message: downloads.problem });
+      }
+
+      const cols = toColumns({ ...(req.body || {}), ...downloads });
       if (cols.is_active === undefined) cols.is_active = true;
       if (cols.sort_order === undefined) cols.sort_order = 0;
       const rows = await sql`INSERT INTO verified_projects ${sql(cols)} RETURNING *`;
@@ -764,7 +790,13 @@ function buildAdminRouter() {
   router.put('/api/admin/verified-projects/:id', requireRole('moderator'), async (req, res) => {
     try {
       await ensureVerifiedProjectSchema();
-      const cols = toColumns(req.body || {});
+
+      const downloads = validateDownloadFields(req.body || {});
+      if (downloads.problem) {
+        return res.status(400).json({ message: downloads.problem });
+      }
+
+      const cols = toColumns({ ...(req.body || {}), ...downloads });
       if (Object.keys(cols).length === 0) {
         return res.status(400).json({ message: 'No fields to update' });
       }
