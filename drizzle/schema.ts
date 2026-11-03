@@ -60,6 +60,18 @@ export const verifiedProjects = pgTable('verified_projects', {
   requirements: text('requirements').array(),
   releaseNotes: text('release_notes'),
   screenshots: text('screenshots').array(),
+  // Per-platform installer links. Each is a complete public MEGA share link,
+  // decryption key included, and each is optional: the detail page shows a
+  // download button for a platform only when its link is set.
+  androidDownloadUrl: text('android_download_url'),
+  windowsDownloadUrl: text('windows_download_url'),
+  // Per-platform package facts (name, version, size, release date, SHA-256)
+  // shown in the download dialog. jsonb rather than a column per fact so a
+  // platform can carry facts the others do not without a migration.
+  downloadDetails: jsonb('download_details'),
+  // Opt-in only. GitHub Releases used to be an implicit fallback, which made an
+  // app with no installer still offer a download button.
+  githubReleasesFallback: boolean('github_releases_fallback').default(false).notNull(),
   isActive: boolean('is_active').default(true).notNull(),
   sortOrder: integer('sort_order').default(0).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),

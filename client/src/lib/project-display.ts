@@ -20,6 +20,8 @@ export interface ProjectDisplayInput {
   releaseNotes?: string | null;
   screenshots?: string[] | null;
   technologies?: string[] | null;
+  androidDownloadUrl?: string | null;
+  windowsDownloadUrl?: string | null;
 }
 
 /**
@@ -27,12 +29,18 @@ export interface ProjectDisplayInput {
  * carries app metadata. A plain "utility" with no download, size or platform
  * information would otherwise get an application page with nothing in it, so it
  * falls back to the ordinary project layout.
+ *
+ * A per-platform installer link counts as app metadata: an app whose only
+ * metadata is "here is the Android build" is exactly the case this layout is
+ * for.
  */
 export function hasAppMetadata(project: ProjectDisplayInput | null | undefined): boolean {
   if (!project) return false;
   return Boolean(
     project.appVersion ||
       project.appSize ||
+      project.androidDownloadUrl ||
+      project.windowsDownloadUrl ||
       (project.platforms && project.platforms.length > 0) ||
       (project.requirements && project.requirements.length > 0) ||
       project.releaseNotes ||
@@ -77,32 +85,6 @@ export function compareVersions(a: string | null | undefined, b: string | null |
     if (diff !== 0) return diff < 0 ? -1 : 1;
   }
   return 0;
-}
-
-/**
- * A GitHub Releases download URL for an APK asset.
- *
- * The "latest" alias resolves to the newest non-prerelease release and needs no
- * API call, which keeps the detail page a plain link instead of a fetch that
- * would hit the unauthenticated rate limit.
- */
-export function githubLatestReleaseUrl(githubUrl: string | null | undefined): string | null {
-  const base = repoUrl(githubUrl);
-  return base ? `${base}/releases/latest` : null;
-}
-
-/**
- * Label for the primary install action, derived from the target platform so a
- * Windows or desktop build does not read "Download for Android".
- */
-export function installLabel(project: ProjectDisplayInput | null | undefined): string {
-  const platforms = nonEmpty(project?.platforms).join(" ").toLowerCase();
-  if (/windows|win32/.test(platforms)) return "Download for Windows";
-  if (/macos|mac os|darwin/.test(platforms)) return "Download for macOS";
-  if (/linux|ubuntu|debian|fedora|arch|centos|rhel/.test(platforms)) return "Download for Linux";
-  if (/android/.test(platforms)) return "Download for Android";
-  if (/ios|iphone|ipad/.test(platforms)) return "Download for iOS";
-  return "Download";
 }
 
 /** Normalises a GitHub repo URL to `https://github.com/owner/repo`, or null. */

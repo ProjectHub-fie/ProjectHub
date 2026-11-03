@@ -41,8 +41,22 @@ jobs:
     runs-on: ubuntu-latest
     # The suite writes real rows to a throwaway database and reads a session
     # secret; both are supplied fresh for this run, never from production.
+    #
+    # DISCORD_BOT_TOKEN is here for interpolation, not for the suite. The
+    # compose `bot` service declares it as `${DISCORD_BOT_TOKEN:?...}`, and
+    # compose interpolates every service in the file before it will run any
+    # one of them — so `docker compose config --services` (the "Show what will
+    # run" step) and `docker compose run tests` both fail with
+    # "required variable DISCORD_BOT_TOKEN is missing a value" when it is
+    # unset, even though the tests service never receives it.
+    #
+    # A fixed placeholder is used rather than a secret on purpose. No test in
+    # this job reads the variable, and the tests service has no bot dependency,
+    # so a real token would be a live credential in a job with no use for one —
+    # and offering a `DISCORD_BOT_TOKEN_CI` secret would invite exactly that.
     env:
       SESSION_SECRET: ${{ secrets.SESSION_SECRET_CI != '' && secrets.SESSION_SECRET_CI || format('ci-secret-{0}', github.run_id) }}
+      DISCORD_BOT_TOKEN: 'ci-interpolation-only'
       ADMIN_PIN: ${{ secrets.ADMIN_PIN_CI != '' && secrets.ADMIN_PIN_CI || '' }}
       ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD_CI != '' && secrets.ADMIN_PASSWORD_CI || '' }}
     timeout-minutes: 15
@@ -55,6 +69,11 @@ jobs:
           echo "compose project: ${{ github.event.repository.name }}"
           echo "tests service command is defined in docker-compose.yml, not in this workflow"
           echo "docker compose config --services"
+          # Belt and braces: the job env above already supplies these, but this
+          # step is the first compose call in the job and a missing value fails
+          # here rather than with a confusing message later. Nothing is echoed.
+          export SESSION_SECRET="${SESSION_SECRET:-ci-secret-interpolation}"
+          export DISCORD_BOT_TOKEN="${DISCORD_BOT_TOKEN:-ci-interpolation-only}"
           docker compose config --services
 
       - name: Run the tests compose service and capture TAP output

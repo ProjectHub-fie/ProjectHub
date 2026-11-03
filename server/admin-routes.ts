@@ -9,6 +9,7 @@ import { buildBotRouter } from "../api/_lib/bot-routes.js";
 import { buildRobloxRouter } from "../api/_lib/roblox-routes.js";
 import { buildTestRouter } from "../api/_lib/suite-runner.js";
 import { createMailNotifications } from "../api/_lib/mail-store.js";
+import { validateDownloadFields } from "../api/_lib/download-links.js";
 
 declare module "express-session" {
   interface SessionData {
@@ -554,7 +555,12 @@ export async function registerAdminRoutes(app: Express): Promise<Server> {
 
   app.post('/api/admin/verified-projects', requireRole('moderator'), async (req: Request, res: any) => {
     try {
-      const project = await adminStorage.createVerifiedProject(req.body);
+      // Same rule as the serverless function: installer links are validated
+      // here too, because the dev server is a second entry point and a link is
+      // the one field that sends a visitor's browser to fetch an executable.
+      const downloads = validateDownloadFields(req.body || {});
+      if (downloads.problem) return res.status(400).json({ message: downloads.problem });
+      const project = await adminStorage.createVerifiedProject({ ...req.body, ...downloads });
       res.status(201).json(project);
     } catch (error: any) {
       console.error('Error creating verified project:', error);
@@ -564,7 +570,9 @@ export async function registerAdminRoutes(app: Express): Promise<Server> {
 
   app.put('/api/admin/verified-projects/:id', requireRole('moderator'), async (req: Request, res: any) => {
     try {
-      const updated = await adminStorage.updateVerifiedProject(req.params.id, req.body);
+      const downloads = validateDownloadFields(req.body || {});
+      if (downloads.problem) return res.status(400).json({ message: downloads.problem });
+      const updated = await adminStorage.updateVerifiedProject(req.params.id, { ...req.body, ...downloads });
       if (!updated) return res.status(404).json({ message: "Project not found" });
       res.json(updated);
     } catch (error: any) {

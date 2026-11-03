@@ -106,6 +106,43 @@ docker compose build
 docker compose run --rm tests        # the suite, against the compose db
 ```
 
+The `tests` service must declare its own `build: .`, not only `image:`. `docker
+compose run --build tests` builds that service's own build block; with just an
+`image:` there is nothing to build and compose falls back to *pulling*
+`projecthub:local` from a registry, which fails with "pull access denied for
+projecthub, repository does not exist". That is invisible on a developer machine
+where the image already exists, and fatal on a cold CI runner.
+
+Its command bootstraps the schema before it runs the suite:
+
+```yaml
+command:
+  - sh
+  - -c
+  - |
+    set -e
+    node scripts/db-bootstrap.mjs
+    node --test --test-force-exit tests/*.test.mjs
+```
+
+The bootstrap is not optional. A fresh compose volume has no tables, and nothing
+else creates them: the service depends on `db` only, and `server/index.ts` never
+starts, so its `ensure*Schema` helpers never run. Without the bootstrap the
+database-backed tests fail with `relation "users" does not exist` — eleven
+misleading assertion failures instead of one clear setup error. `set -e` makes a
+failed bootstrap stop the run rather than let the suite report on a schema-less
+database.
+
+`docker-tests.yml` runs that same service, so it is subject to the same two
+rules. The workflow job also has to supply every variable compose declares with
+`${VAR:?}` — `SESSION_SECRET` and `DISCORD_BOT_TOKEN` today. Compose interpolates
+the whole file before it runs *any* service, so the `bot` service's required
+token fails `docker compose config --services` and `docker compose run tests`
+alike even though the tests service never receives it. The workflow passes a
+fixed literal for the bot token rather than a secret, because no test in that job
+reads it and a real token would be a live credential in a job with no use for
+one. `tests/admin-test-runner.test.mjs` asserts both properties.
+
 Node 24 rejects a bare directory as a test target — it tries to import it and dies
 with `Cannot find module /app/tests` — so the compose `tests` service target is
 the glob `tests/*.test.mjs`, the same set `npm test` runs. The workflow only
@@ -124,6 +161,55 @@ and against the newest bundle — `dist/public/assets/` accumulates one
 `animate-in`/`slide-in-from-*` work, and `.duration-*` is emitted for both
 `animation-duration` and `transition-duration`, so it overrides the .15s default
 that `.animate-in` sets.
+
+## Installable utility projects and their downloads
+
+A `verified_projects` row in the `utilities` category may carry application
+metadata (`app_version`, `app_size`, `platforms`, `requirements`,
+`release_notes`, `screenshots`) and, since the MEGA change, a per-platform
+installer: `android_download_url`, `windows_download_url` and a `download_details`
+jsonb blob keyed by platform (`package_name`, `version`, `size`, `sha256`,
+`notes`). `github_releases_fallback` opts a project into the GitHub Releases link
+as an *explicit* fallback; it is no longer assumed.
+
+`isInstallableApp` in `client/src/lib/project-display.ts` is the single switch
+between the ordinary project layout and the store-style `app-detail.tsx`. It is
+true only for `utilities`, and only when `hasAppMetadata` is true — which now
+includes "a per-platform installer link is set", because an app whose only
+metadata is a download link is exactly the case the store layout exists for.
+`project.tsx` must keep selecting the layout through that helper rather than an
+inline category check, and `tests/app-detail.test.mjs` pins it.
+
+### A MEGA link is a credential, so it is validated and never echoed
+
+A MEGA share link carries its decryption key in the URL **fragment**
+(`https://mega.nz/file/<id>#<key>`). The link is therefore a secret, and three
+rules follow:
+
+- **Validate on the server, not only in the form.** The browser is trivially
+  bypassed. `api/_lib/download-links.js` is the boundary; `client/src/lib/download-links.ts`
+  is the same logic for fast feedback. They cannot share an import (one is
+  TypeScript under `client/`, which is not in the serverless bundle), so
+  `tests/download-links.test.mjs` drives both with the same table and fails on any
+  disagreement — including the reason string.
+- **Never echo the link into a message.** Every rejection reason is a literal
+  built from constants; one written as a template literal would publish the key
+  into a toast and a log line. `redactDownloadUrl` drops the fragment for any
+  diagnostic that must name the link.
+- **Require the fragment.** A bare `https://mega.nz/file/<id>` is refused as
+  incomplete: it cannot be decrypted by anyone, so storing it produces a download
+  button that fails for every visitor.
+
+The trusted-host check is an exact hostname match against `mega.nz`, `www.mega.nz`,
+`mega.io` and `mega.co.nz`. A suffix or prefix lookalike (`mega.nz.evil.example`,
+`notmega.nz`) must not pass; `isTrustedMegaHost` is compared byte for byte on
+both sides.
+
+Both entry points validate: the serverless function and the dev server
+(`server/admin-routes.ts`) each call `validateDownloadFields` on **POST and PUT**,
+because an update is how a bad link gets in later. An absent field is omitted from
+the result rather than set to null, so an edit that does not mention the link
+leaves the stored value alone; an explicit `null` is how the dashboard clears one.
 
 ## Auth architecture
 

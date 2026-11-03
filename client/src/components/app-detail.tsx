@@ -1,10 +1,18 @@
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import {
   ArrowLeft,
   Download,
   Github,
-  ExternalLink,
   Star,
   ShieldCheck,
   Share2,
@@ -15,26 +23,40 @@ import {
   ListChecks,
   Images,
   ScrollText,
+  Smartphone,
+  Monitor,
+  Calendar,
+  Hash,
+  Package as PackageIcon,
 } from "lucide-react";
 import { useLocation } from "wouter";
 import { ProjectInteractions } from "@/components/project-interactions";
 import {
   nonEmpty,
-  githubLatestReleaseUrl,
   repoUrl,
-  installLabel as appInstallLabel,
   type ProjectCategory,
 } from "@/lib/project-display";
+import {
+  downloadCards,
+  githubReleasesFallbackUrl,
+  type DownloadCard,
+  type DownloadPlatform,
+} from "@/lib/download-links";
 
 /**
  * Application-store style detail page for installable utilities.
  *
- * The web/bot layout leads with prose and an action button; an app page leads
- * with identity (icon, name, developer), then install facts (version, size,
- * platforms, rating), then a screenshot gallery, then "what's new" and the
- * permission/requirements list — the order a store listing uses. Rendered only
- * when `isInstallableApp()` is true, so utilities without app metadata keep the
- * ordinary layout.
+ * The web/bot layout leads with prose and a single action button; an app page
+ * leads with identity (icon, name, developer), then install facts, then a
+ * screenshot gallery, then "what's new" and the requirements list — the order a
+ * store listing uses. Rendered only when `isInstallableApp()` is true, so
+ * utilities without app metadata keep the ordinary layout.
+ *
+ * Downloads are per platform. Each button exists only because a link is set for
+ * that platform, so a missing Windows build cannot render an Android button's
+ * label, and there is never a disabled "Download" that goes nowhere. The
+ * project's `liveUrl` is deliberately not used as an installer: a website's own
+ * address is not a package, and offering it as one is what this page used to do.
  */
 export interface AppDetailProject {
   id: string;
@@ -62,6 +84,10 @@ export interface AppDetailProject {
   requirements?: string[] | null;
   releaseNotes?: string | null;
   screenshots?: string[] | null;
+  androidDownloadUrl?: string | null;
+  windowsDownloadUrl?: string | null;
+  downloadDetails?: Record<string, Record<string, string>> | null;
+  githubReleasesFallback?: boolean | null;
 }
 
 interface AppDetailProps {
@@ -98,8 +124,27 @@ function Fact({ icon, label, value }: { icon: React.ReactNode; label: string; va
   );
 }
 
+/** One label/value row inside the download dialog. */
+function DetailRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-baseline justify-between gap-4 py-2 border-b border-border/50 last:border-0">
+      <span className="text-xs uppercase tracking-wide text-muted-foreground shrink-0">{label}</span>
+      <span className="font-medium text-right break-all">{value}</span>
+    </div>
+  );
+}
+
+function PlatformIcon({ platform, className }: { platform: DownloadPlatform; className?: string }) {
+  return platform === "windows" ? (
+    <Monitor className={className} />
+  ) : (
+    <Smartphone className={className} />
+  );
+}
+
 export default function AppDetail({ project }: AppDetailProps) {
   const [, setLocation] = useLocation();
+  const [pending, setPending] = useState<DownloadCard | null>(null);
 
   const screenshots = nonEmpty(project.screenshots);
   const platforms = nonEmpty(project.platforms);
@@ -108,10 +153,30 @@ export default function AppDetail({ project }: AppDetailProps) {
   const highlights = nonEmpty(project.highlights);
   const technologies = nonEmpty(project.technologies);
 
-  const releaseUrl = githubLatestReleaseUrl(project.githubUrl);
+  const cards = downloadCards(project);
+  const releasesUrl = githubReleasesFallbackUrl(project);
   const sourceUrl = repoUrl(project.githubUrl);
-  const installUrl = project.liveUrl || releaseUrl;
-  const installLabel = project.liveUrl ? "Open in browser" : appInstallLabel(project);
+
+  // A per-platform card carries its own facts; the strip falls back to the
+  // project-wide value so a project that only set the top-level fields still
+  // shows something useful.
+  const primaryCard = cards[0] || null;
+  const version = project.appVersion || primaryCard?.version || null;
+  const size = project.appSize || primaryCard?.size || null;
+  const releaseDate = primaryCard?.releaseDate || null;
+  const checksums = cards.filter((card) => card.sha256);
+
+  const openDownload = (card: DownloadCard) => {
+    setPending(card);
+  };
+
+  const confirmDownload = () => {
+    if (!pending) return;
+    // `noopener` because the target is a third-party origin: without it the
+    // opened page can reach back through `window.opener`.
+    window.open(pending.url, "_blank", "noopener,noreferrer");
+    setPending(null);
+  };
 
   return (
     <div className="min-h-screen bg-background py-8">
@@ -126,7 +191,7 @@ export default function AppDetail({ project }: AppDetailProps) {
           Back to Projects
         </Button>
 
-        {/* Store header: icon, name, developer, install facts, primary action */}
+        {/* Store header: icon, name, developer, install facts, primary actions */}
         <div className="flex flex-col md:flex-row md:items-start gap-6 md:gap-8 mb-10">
           <div className="shrink-0">
             <img
@@ -168,22 +233,39 @@ export default function AppDetail({ project }: AppDetailProps) {
               </div>
             )}
 
-            <div className="flex flex-col sm:flex-row gap-3">
-              <Button
-                size="lg"
-                className="sm:w-auto"
-                onClick={() => { if (installUrl) window.open(installUrl, "_blank"); }}
-                disabled={!installUrl}
-                data-testid="button-app-install"
-              >
-                <Download className="w-4 h-4 mr-2" />
-                {installLabel}
-              </Button>
+            {/* One button per configured platform, plus the source link. A
+                platform with no link contributes no button at all. */}
+            <div className="flex flex-col sm:flex-row flex-wrap gap-3">
+              {cards.map((card) => (
+                <Button
+                  key={card.platform}
+                  size="lg"
+                  className="sm:w-auto"
+                  onClick={() => openDownload(card)}
+                  data-testid={`button-download-${card.platform}`}
+                >
+                  <Download className="w-4 h-4 mr-2" />
+                  {card.label}
+                </Button>
+              ))}
+
+              {cards.length === 0 && releasesUrl && (
+                <Button
+                  size="lg"
+                  className="sm:w-auto"
+                  onClick={() => window.open(releasesUrl, "_blank", "noopener,noreferrer")}
+                  data-testid="button-download-github-releases"
+                >
+                  <Download className="w-4 h-4 mr-2" />
+                  Download from GitHub Releases
+                </Button>
+              )}
+
               {sourceUrl && (
                 <Button
                   size="lg"
                   variant="outline"
-                  onClick={() => window.open(sourceUrl, "_blank")}
+                  onClick={() => window.open(sourceUrl, "_blank", "noopener,noreferrer")}
                   data-testid="button-app-source"
                 >
                   <Github className="w-4 h-4 mr-2" />
@@ -191,9 +273,10 @@ export default function AppDetail({ project }: AppDetailProps) {
                 </Button>
               )}
             </div>
-            {!project.liveUrl && releaseUrl && (
-              <p className="text-xs text-muted-foreground mt-2">
-                Downloads the latest release APK from GitHub Releases.
+
+            {cards.length === 0 && !releasesUrl && (
+              <p className="text-xs text-muted-foreground mt-3" data-testid="text-no-download">
+                No installer is published for this app yet.
               </p>
             )}
           </div>
@@ -201,23 +284,89 @@ export default function AppDetail({ project }: AppDetailProps) {
 
         {/* Install facts strip */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-6 p-6 rounded-2xl border bg-card mb-10" data-testid="app-facts">
-          {project.appVersion && (
-            <Fact icon={<Tag className="w-4 h-4" />} label="Version" value={project.appVersion} />
+          {version && (
+            <Fact icon={<Tag className="w-4 h-4" />} label="Version" value={version} />
           )}
-          {project.appSize && (
-            <Fact icon={<HardDrive className="w-4 h-4" />} label="Size" value={project.appSize} />
+          {size && (
+            <Fact icon={<HardDrive className="w-4 h-4" />} label="Package size" value={size} />
           )}
           <Fact
             icon={<Cpu className="w-4 h-4" />}
-            label="Platforms"
+            label="Supported OS"
             value={platforms.length > 0 ? platforms.join(", ") : "Not specified"}
           />
-          <Fact
-            icon={<ShieldCheck className="w-4 h-4" />}
-            label="Updated"
-            value={project.timeline || "Ongoing"}
-          />
+          {releaseDate ? (
+            <Fact icon={<Calendar className="w-4 h-4" />} label="Release date" value={releaseDate} />
+          ) : (
+            <Fact
+              icon={<Calendar className="w-4 h-4" />}
+              label="Updated"
+              value={project.timeline || "Ongoing"}
+            />
+          )}
         </div>
+
+        {/* Per-platform download cards. Rendered from the same list as the
+            header buttons, so the two can never disagree about availability. */}
+        {cards.length > 0 && (
+          <section className="mb-12" data-testid="app-download-cards">
+            <h2 className="text-2xl font-bold mb-4">Downloads</h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              {cards.map((card) => (
+                <div
+                  key={card.platform}
+                  className="flex flex-col p-6 rounded-2xl border bg-card hover:border-primary/40 transition-colors"
+                  data-testid={`card-download-${card.platform}`}
+                >
+                  <div className="flex items-center gap-3 mb-4">
+                    <div className="w-11 h-11 rounded-xl bg-primary/10 text-primary flex items-center justify-center shrink-0">
+                      <PlatformIcon platform={card.platform} className="w-5 h-5" />
+                    </div>
+                    <div className="min-w-0">
+                      <div className="font-semibold">{card.platform === "windows" ? "Windows" : "Android"}</div>
+                      <div className="text-xs text-muted-foreground truncate">
+                        {card.packageName || "Installer package"}
+                      </div>
+                    </div>
+                  </div>
+
+                  <dl className="space-y-2 text-sm mb-5">
+                    {card.version && (
+                      <div className="flex justify-between gap-3">
+                        <dt className="text-muted-foreground">Version</dt>
+                        <dd className="font-medium">{card.version}</dd>
+                      </div>
+                    )}
+                    {card.size && (
+                      <div className="flex justify-between gap-3">
+                        <dt className="text-muted-foreground">Size</dt>
+                        <dd className="font-medium">{card.size}</dd>
+                      </div>
+                    )}
+                    {card.releaseDate && (
+                      <div className="flex justify-between gap-3">
+                        <dt className="text-muted-foreground">Released</dt>
+                        <dd className="font-medium">{card.releaseDate}</dd>
+                      </div>
+                    )}
+                  </dl>
+
+                  <Button
+                    className="mt-auto w-full"
+                    onClick={() => openDownload(card)}
+                    data-testid={`button-card-download-${card.platform}`}
+                  >
+                    <Download className="w-4 h-4 mr-2" />
+                    {card.label}
+                  </Button>
+                </div>
+              ))}
+            </div>
+            <p className="text-xs text-muted-foreground mt-3">
+              Installers are hosted on MEGA. The download opens in a new tab.
+            </p>
+          </section>
+        )}
 
         {/* Screenshot gallery */}
         {screenshots.length > 0 && (
@@ -325,6 +474,28 @@ export default function AppDetail({ project }: AppDetailProps) {
               </section>
             )}
 
+            {checksums.length > 0 && (
+              <section className="p-6 rounded-2xl border bg-card" data-testid="app-checksums">
+                <h3 className="text-lg font-bold mb-3 flex items-center gap-2">
+                  <Hash className="w-4 h-4 text-muted-foreground" />
+                  Checksums
+                </h3>
+                <p className="text-xs text-muted-foreground mb-3">
+                  Verify a download before running it.
+                </p>
+                {checksums.map((card) => (
+                  <div key={card.platform} className="mb-3 last:mb-0">
+                    <div className="text-xs font-semibold mb-1">
+                      {card.platform === "windows" ? "Windows" : "Android"} · SHA-256
+                    </div>
+                    <code className="block text-[11px] leading-relaxed break-all font-mono text-muted-foreground bg-secondary/40 rounded-lg p-2">
+                      {card.sha256}
+                    </code>
+                  </div>
+                ))}
+              </section>
+            )}
+
             {project.architecture && (
               <section className="p-6 rounded-2xl border bg-secondary/20">
                 <h3 className="text-lg font-bold mb-3">Architecture</h3>
@@ -342,17 +513,20 @@ export default function AppDetail({ project }: AppDetailProps) {
         </div>
 
         {/* Footer actions + interactions */}
-        <div className="flex flex-col sm:flex-row gap-4 mt-12 pt-8 border-t border-border/50">
-          <Button
-            className="flex-1"
-            onClick={() => { if (installUrl) window.open(installUrl, "_blank"); }}
-            disabled={!installUrl}
-          >
-            <Download className="w-4 h-4 mr-2" />
-            {installLabel}
-          </Button>
+        <div className="flex flex-col sm:flex-row flex-wrap gap-4 mt-12 pt-8 border-t border-border/50">
+          {cards.map((card) => (
+            <Button
+              key={card.platform}
+              className="flex-1 min-w-[12rem]"
+              onClick={() => openDownload(card)}
+              data-testid={`button-footer-download-${card.platform}`}
+            >
+              <Download className="w-4 h-4 mr-2" />
+              {card.label}
+            </Button>
+          ))}
           {sourceUrl && (
-            <Button variant="outline" onClick={() => window.open(sourceUrl, "_blank")}>
+            <Button variant="outline" onClick={() => window.open(sourceUrl, "_blank", "noopener,noreferrer")}>
               <Github className="w-4 h-4 mr-2" />
               View Source Code
             </Button>
@@ -379,6 +553,65 @@ export default function AppDetail({ project }: AppDetailProps) {
           <ProjectInteractions projectId={project.id} size="lg" />
         </div>
       </div>
+
+      {/* Download details / confirmation. The link itself is never rendered:
+          it carries the MEGA decryption key, and putting it on screen would
+          leak the credential to anyone looking over a shoulder or over a
+          screen share. Only the package facts are shown. */}
+      <Dialog open={pending !== null} onOpenChange={(open) => { if (!open) setPending(null); }}>
+        <DialogContent className="max-w-md" data-testid="app-download-dialog">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              {pending && <PlatformIcon platform={pending.platform} className="w-5 h-5 text-primary" />}
+              {pending ? `Download for ${pending.platform === "windows" ? "Windows" : "Android"}` : "Download"}
+            </DialogTitle>
+            <DialogDescription>
+              You are about to download {project.title} from MEGA. The file opens in a new tab.
+            </DialogDescription>
+          </DialogHeader>
+
+          {pending && (
+            <div className="py-2" data-testid="app-download-details">
+              <DetailRow
+                label="Platform"
+                value={pending.platform === "windows" ? "Windows" : "Android"}
+              />
+              {pending.packageName && (
+                <div data-testid="app-download-dialog-package">
+                  <DetailRow label="Package" value={pending.packageName} />
+                </div>
+              )}
+              {pending.version && <DetailRow label="Version" value={pending.version} />}
+              {pending.size && <DetailRow label="Size" value={pending.size} />}
+              {pending.releaseDate && <DetailRow label="Released" value={pending.releaseDate} />}
+              {pending.sha256 && (
+                <div className="pt-3">
+                  <div className="text-xs uppercase tracking-wide text-muted-foreground mb-1">
+                    SHA-256
+                  </div>
+                  <code className="block text-[11px] leading-relaxed break-all font-mono text-muted-foreground bg-secondary/40 rounded-lg p-2">
+                    {pending.sha256}
+                  </code>
+                </div>
+              )}
+              <p className="text-xs text-muted-foreground mt-4 flex items-start gap-2">
+                <PackageIcon className="w-3.5 h-3.5 mt-0.5 shrink-0" />
+                Hosted on MEGA by the developer. Only download if you trust the source.
+              </p>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={() => setPending(null)} data-testid="button-download-cancel">
+              Cancel
+            </Button>
+            <Button onClick={confirmDownload} data-testid="button-download-confirm">
+              <Download className="w-4 h-4 mr-2" />
+              Continue to MEGA
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
