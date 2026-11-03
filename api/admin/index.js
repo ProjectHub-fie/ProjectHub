@@ -74,6 +74,32 @@ const ensureAdminSchema = () => {
   return schemaReady;
 };
 
+/**
+ * App-store metadata for installable utilities (ClearCut and anything like it).
+ *
+ * Added after `verified_projects` shipped, so an existing deployment gains the
+ * columns here. `verified_projects` itself is created by the public API's
+ * storage layer; these columns are only written from the dashboard, so the
+ * ensure lives with the routes that use them. Cached like `ensureAdminSchema`.
+ */
+let verifiedProjectSchemaReady = null;
+const ensureVerifiedProjectSchema = () => {
+  verifiedProjectSchemaReady ||= (async () => {
+    try {
+      await sql`ALTER TABLE verified_projects ADD COLUMN IF NOT EXISTS app_version text`;
+      await sql`ALTER TABLE verified_projects ADD COLUMN IF NOT EXISTS app_size text`;
+      await sql`ALTER TABLE verified_projects ADD COLUMN IF NOT EXISTS platforms text[]`;
+      await sql`ALTER TABLE verified_projects ADD COLUMN IF NOT EXISTS requirements text[]`;
+      await sql`ALTER TABLE verified_projects ADD COLUMN IF NOT EXISTS release_notes text`;
+      await sql`ALTER TABLE verified_projects ADD COLUMN IF NOT EXISTS screenshots text[]`;
+    } catch (error) {
+      verifiedProjectSchemaReady = null;
+      throw error;
+    }
+  })();
+  return verifiedProjectSchemaReady;
+};
+
 const getAdminByPin = async (pin) => {
   await ensureAdminSchema();
   const rows = await sql`SELECT * FROM admin_credentials WHERE pin = ${pin} LIMIT 1`;
@@ -124,6 +150,12 @@ const mapProject = (p) => ({
   timeline: p.timeline,
   teamSize: p.team_size,
   userCount: p.user_count,
+  appVersion: p.app_version,
+  appSize: p.app_size,
+  platforms: p.platforms,
+  requirements: p.requirements,
+  releaseNotes: p.release_notes,
+  screenshots: p.screenshots,
   isActive: p.is_active,
   sortOrder: p.sort_order,
   createdAt: p.created_at,
@@ -657,6 +689,7 @@ function buildAdminRouter() {
 
   router.get('/api/admin/verified-projects', requireAuth, async (_req, res) => {
     try {
+      await ensureVerifiedProjectSchema();
       const rows = await sql`SELECT * FROM verified_projects ORDER BY sort_order, created_at`;
       res.json(rows.map(mapProject));
     } catch (error) {
@@ -665,30 +698,49 @@ function buildAdminRouter() {
     }
   });
 
+  // A field that is present is authoritative, including an explicit `null`,
+  // which is how the dashboard clears an optional column. `??` was used here
+  // before and it made "cleared" indistinguishable from "not sent": a null
+  // value fell through to the snake_case fallback (undefined), was filtered
+  // out, and the UPDATE omitted the column — so the old value survived. That
+  // is why a GitHub URL could not be removed from a project.
+  const pick = (data, ...keys) => {
+    for (const key of keys) {
+      if (Object.prototype.hasOwnProperty.call(data, key)) return data[key];
+    }
+    return undefined;
+  };
+
   // Drops undefined keys so a partial update only rewrites the fields the
   // dashboard actually sent; postgres.js rejects undefined parameter values.
   const toColumns = (data) => {
     const columns = {
-      slug: data.slug,
-      title: data.title,
-      description: data.description,
-      long_description: data.longDescription ?? data.long_description,
-      image_url: data.imageUrl ?? data.image_url,
-      category: data.category,
-      technologies: data.technologies,
-      features: data.features,
-      highlights: data.highlights,
-      live_url: data.liveUrl ?? data.live_url,
-      github_url: data.githubUrl ?? data.github_url,
-      status: data.status,
-      author_name: data.authorName ?? data.author_name,
-      author_avatar: data.authorAvatar ?? data.author_avatar,
-      architecture: data.architecture,
-      timeline: data.timeline,
-      team_size: data.teamSize ?? data.team_size,
-      user_count: data.userCount ?? data.user_count,
-      is_active: data.isActive ?? data.is_active,
-      sort_order: data.sortOrder ?? data.sort_order,
+      slug: pick(data, 'slug'),
+      title: pick(data, 'title'),
+      description: pick(data, 'description'),
+      long_description: pick(data, 'longDescription', 'long_description'),
+      image_url: pick(data, 'imageUrl', 'image_url'),
+      category: pick(data, 'category'),
+      technologies: pick(data, 'technologies'),
+      features: pick(data, 'features'),
+      highlights: pick(data, 'highlights'),
+      live_url: pick(data, 'liveUrl', 'live_url'),
+      github_url: pick(data, 'githubUrl', 'github_url'),
+      status: pick(data, 'status'),
+      author_name: pick(data, 'authorName', 'author_name'),
+      author_avatar: pick(data, 'authorAvatar', 'author_avatar'),
+      architecture: pick(data, 'architecture'),
+      timeline: pick(data, 'timeline'),
+      team_size: pick(data, 'teamSize', 'team_size'),
+      user_count: pick(data, 'userCount', 'user_count'),
+      app_version: pick(data, 'appVersion', 'app_version'),
+      app_size: pick(data, 'appSize', 'app_size'),
+      platforms: pick(data, 'platforms'),
+      requirements: pick(data, 'requirements'),
+      release_notes: pick(data, 'releaseNotes', 'release_notes'),
+      screenshots: pick(data, 'screenshots'),
+      is_active: pick(data, 'isActive', 'is_active'),
+      sort_order: pick(data, 'sortOrder', 'sort_order'),
     };
     return Object.fromEntries(
       Object.entries(columns).filter(([, value]) => value !== undefined),
@@ -697,6 +749,7 @@ function buildAdminRouter() {
 
   router.post('/api/admin/verified-projects', requireRole('moderator'), async (req, res) => {
     try {
+      await ensureVerifiedProjectSchema();
       const cols = toColumns(req.body || {});
       if (cols.is_active === undefined) cols.is_active = true;
       if (cols.sort_order === undefined) cols.sort_order = 0;
@@ -710,6 +763,7 @@ function buildAdminRouter() {
 
   router.put('/api/admin/verified-projects/:id', requireRole('moderator'), async (req, res) => {
     try {
+      await ensureVerifiedProjectSchema();
       const cols = toColumns(req.body || {});
       if (Object.keys(cols).length === 0) {
         return res.status(400).json({ message: 'No fields to update' });

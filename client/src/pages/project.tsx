@@ -1,13 +1,15 @@
 import { useState, useEffect } from "react";
 import { useLocation, useParams } from "wouter";
 import ProjectDetail from "@/components/project-detail";
+import AppDetail from "@/components/app-detail";
 import { Skeleton } from "@/components/ui/skeleton";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { ArrowLeft } from "lucide-react";
-import { ProjectDetailSkeleton } from "@/components/project-skeletons";
+import { AppDetailSkeleton, ProjectDetailSkeleton } from "@/components/project-skeletons";
+import { isInstallableApp } from "@/lib/project-display";
 
 interface Project {
   id: string;
@@ -29,6 +31,12 @@ interface Project {
   timeline: string;
   teamSize?: string;
   userCount?: string;
+  appVersion?: string | null;
+  appSize?: string | null;
+  platforms?: string[] | null;
+  requirements?: string[] | null;
+  releaseNotes?: string | null;
+  screenshots?: string[] | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -37,7 +45,16 @@ export default function ProjectDetailPage() {
   const [, setLocation] = useLocation();
   const params = useParams<{ slug: string }>();
   const { toast } = useToast();
+  const queryClient = useQueryClient();
   const slug = params.slug;
+
+  // The projects list is cached under this key, so clicking through from
+  // /projects already tells us the category and the matching skeleton can be
+  // shown. On a direct visit the cache is empty and the generic detail
+  // skeleton is used instead, since the category is not known yet.
+  const cachedList = queryClient.getQueryData<Project[]>(["/api/projects"]);
+  const cachedProject = cachedList?.find((entry) => entry.slug === slug);
+  const showAppSkeleton = isInstallableApp(cachedProject);
 
   // Fetch project details from API with enhanced error handling
   const { data: project, isLoading, error, refetch } = useQuery<Project, Error>({
@@ -84,6 +101,17 @@ export default function ProjectDetailPage() {
   }, [error, toast]);
 
   if (isLoading) {
+    if (showAppSkeleton) {
+      return (
+        <div className="min-h-screen bg-background py-8">
+          <div className="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8">
+            <Skeleton className="h-9 w-40 mb-8" />
+            <AppDetailSkeleton />
+          </div>
+        </div>
+      );
+    }
+
     return (
       <div className="min-h-screen bg-background pt-20 px-4 pb-20">
         <div className="max-w-4xl mx-auto">
@@ -118,6 +146,13 @@ export default function ProjectDetailPage() {
         </div>
       </div>
     );
+  }
+
+  // Installable utilities (ClearCut) get the application-store layout; the
+  // helper falls back to the web/bot layout when a utility carries no app
+  // metadata, so this only diverts genuine app pages.
+  if (isInstallableApp(project)) {
+    return <AppDetail project={project} />;
   }
 
   return (

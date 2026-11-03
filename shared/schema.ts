@@ -90,6 +90,13 @@ export type InsertVerifiedProjectInput = {
   timeline?: string | null;
   teamSize?: string | null;
   userCount?: string | null;
+  // App-store metadata for installable utilities (Android/Windows/desktop).
+  appVersion?: string | null;
+  appSize?: string | null;
+  platforms?: string[] | null;
+  requirements?: string[] | null;
+  releaseNotes?: string | null;
+  screenshots?: string[] | null;
   isActive?: boolean;
   sortOrder?: number;
 };

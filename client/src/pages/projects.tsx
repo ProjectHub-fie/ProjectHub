@@ -3,6 +3,7 @@ import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ExternalLink, Bot, Download, ArrowLeft, Github, Network, User } from "lucide-react";
+import { isInstallableApp, githubLatestReleaseUrl } from "@/lib/project-display";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -20,6 +21,10 @@ interface Project {
   technologies: string[];
   liveUrl?: string;
   githubUrl?: string;
+  appVersion?: string | null;
+  appSize?: string | null;
+  platforms?: string[] | null;
+  releaseNotes?: string | null;
   status: string;
   authorName?: string;
   architecture?: string;
@@ -166,7 +171,14 @@ export default function ProjectsPage() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-          {filteredProjects.map((project) => (
+          {filteredProjects.map((project) => {
+            // An installable utility installs from its GitHub release, so the
+            // Download action needs that fallback; other categories keep
+            // requiring a live URL.
+            const actionUrl = project.liveUrl
+              || (isInstallableApp(project) ? githubLatestReleaseUrl(project.githubUrl) : null);
+
+            return (
             <div
               key={project.id}
               className="group relative bg-card rounded-2xl overflow-hidden border border-border/50 hover:border-primary/50 transition-all duration-300 hover:shadow-2xl hover:shadow-primary/5 cursor-pointer"
@@ -258,11 +270,11 @@ export default function ProjectsPage() {
                     className="w-full"
                     onClick={(e) => {
                       e.stopPropagation();
-                      if (project.liveUrl) {
-                        window.open(project.liveUrl, '_blank');
+                      if (actionUrl) {
+                        window.open(actionUrl, '_blank');
                       }
                     }}
-                    disabled={!project.liveUrl}
+                    disabled={!actionUrl}
                   >
                     {getActionIcon(project.category)}
                     {getActionText(project.category)}
@@ -270,7 +282,8 @@ export default function ProjectsPage() {
                 </div>
               </div>
             </div>
-          ))}
+            );
+          })}
         </div>
 
         {filteredProjects.length === 0 && (

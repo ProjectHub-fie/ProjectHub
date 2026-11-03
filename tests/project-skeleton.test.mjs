@@ -50,7 +50,7 @@ test('every project surface consumes the shared skeleton loader', () => {
 
   assert.match(
     projectDetail,
-    /import \{ ProjectDetailSkeleton \} from "@\/components\/project-skeletons"/,
+    /import \{[^}]*\bProjectDetailSkeleton\b[^}]*\} from "@\/components\/project-skeletons"/,
     'the project detail page must import the shared skeleton',
   );
   assert.match(projectDetail, /<ProjectDetailSkeleton \/>/,

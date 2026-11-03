@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="108" height="108" viewBox="0 0 108 108" role="img" aria-label="ClearCut">
+  <!-- ClearCut launcher icon, taken from the app's own adaptive icon
+       (app/src/main/res/drawable/ic_launcher_foreground.xml) over the
+       background colour from values/colors.xml. -->
+  <rect width="108" height="108" rx="24" fill="#16181D" />
+  <!-- Audio waveform bars -->
+  <path fill="#5F6DF0" d="M24,60 L28,60 L28,48 L32,48 L32,66 L36,66 L36,42 L40,42 L40,70 L44,70 L44,48 L48,48 L48,60 Z" />
+  <path fill="#5F6DF0" d="M60,60 L64,60 L64,50 L68,50 L68,64 L72,64 L72,44 L76,44 L76,66 L80,66 L80,52 L84,52 L84,60 Z" />
+  <!-- Scissor blades -->
+  <path fill="none" stroke="#E6E9F2" stroke-width="3" d="M52,44 L50,54 L46,60 L50,66 L52,76 Z" />
+  <path fill="none" stroke="#E6E9F2" stroke-width="3" d="M52,44 L56,54 L60,60 L56,66 L52,76 Z" />
+  <!-- Cut line -->
+  <path fill="none" stroke="#E6E9F2" stroke-width="2.5" stroke-linecap="round" d="M54,44 L54,76" />
+</svg>

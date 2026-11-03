@@ -51,6 +51,12 @@ type FormData = {
   timeline: string;
   teamSize: string;
   userCount: string;
+  appVersion: string;
+  appSize: string;
+  platforms: string;
+  requirements: string;
+  releaseNotes: string;
+  screenshots: string;
   isActive: boolean;
   sortOrder: number;
 };
@@ -74,6 +80,12 @@ const emptyForm: FormData = {
   timeline: "",
   teamSize: "",
   userCount: "",
+  appVersion: "",
+  appSize: "",
+  platforms: "",
+  requirements: "",
+  releaseNotes: "",
+  screenshots: "",
   isActive: true,
   sortOrder: 0,
 };
@@ -108,6 +120,12 @@ function projectToForm(p: VerifiedProject): FormData {
     timeline: p.timeline || "",
     teamSize: p.teamSize || "",
     userCount: p.userCount || "",
+    appVersion: p.appVersion || "",
+    appSize: p.appSize || "",
+    platforms: fromArrayField(p.platforms),
+    requirements: fromArrayField(p.requirements),
+    releaseNotes: p.releaseNotes || "",
+    screenshots: fromArrayField(p.screenshots),
     isActive: p.isActive,
     sortOrder: p.sortOrder,
   };
@@ -133,6 +151,12 @@ function formToPayload(f: FormData) {
     timeline: f.timeline || null,
     teamSize: f.teamSize || null,
     userCount: f.userCount || null,
+    appVersion: f.appVersion || null,
+    appSize: f.appSize || null,
+    platforms: toArrayField(f.platforms),
+    requirements: toArrayField(f.requirements),
+    releaseNotes: f.releaseNotes || null,
+    screenshots: toArrayField(f.screenshots),
     isActive: f.isActive,
     sortOrder: f.sortOrder,
   };
@@ -611,6 +635,43 @@ export default function VerifiedProjectsPage() {
             <div className="space-y-1 sm:col-span-2">
               <Label htmlFor="vp-architecture">Architecture / Notes</Label>
               <Textarea id="vp-architecture" value={form.architecture} onChange={e => setForm(f => ({ ...f, architecture: e.target.value }))} placeholder="Architecture details..." rows={2} data-testid="input-project-architecture" />
+            </div>
+
+            {/* App-store metadata. Only used by installable utilities, where
+                the detail page renders an application-style layout. */}
+            <div className="sm:col-span-2 pt-2 border-t">
+              <h4 className="text-sm font-semibold">App details (installable utilities)</h4>
+              <p className="text-xs text-muted-foreground">Shown on the application-style detail page for utilities.</p>
+            </div>
+
+            <div className="space-y-1">
+              <Label htmlFor="vp-app-version">App Version</Label>
+              <Input id="vp-app-version" value={form.appVersion} onChange={e => setForm(f => ({ ...f, appVersion: e.target.value }))} placeholder="1.1.0" data-testid="input-project-app-version" />
+            </div>
+
+            <div className="space-y-1">
+              <Label htmlFor="vp-app-size">App Size</Label>
+              <Input id="vp-app-size" value={form.appSize} onChange={e => setForm(f => ({ ...f, appSize: e.target.value }))} placeholder="3.3 MB" data-testid="input-project-app-size" />
+            </div>
+
+            <div className="space-y-1 sm:col-span-2">
+              <Label htmlFor="vp-platforms">Platforms (comma-separated)</Label>
+              <Input id="vp-platforms" value={form.platforms} onChange={e => setForm(f => ({ ...f, platforms: e.target.value }))} placeholder="Android 8.0+, Windows 10+" data-testid="input-project-platforms" />
+            </div>
+
+            <div className="space-y-1 sm:col-span-2">
+              <Label htmlFor="vp-requirements">Requirements (comma-separated)</Label>
+              <Input id="vp-requirements" value={form.requirements} onChange={e => setForm(f => ({ ...f, requirements: e.target.value }))} placeholder="Android 8.0 (API 26) or newer, 100 MB free space" data-testid="input-project-requirements" />
+            </div>
+
+            <div className="space-y-1 sm:col-span-2">
+              <Label htmlFor="vp-release-notes">Release Notes / What's New</Label>
+              <Textarea id="vp-release-notes" value={form.releaseNotes} onChange={e => setForm(f => ({ ...f, releaseNotes: e.target.value }))} placeholder="What changed in this version..." rows={3} data-testid="input-project-release-notes" />
+            </div>
+
+            <div className="space-y-1 sm:col-span-2">
+              <Label htmlFor="vp-screenshots">Screenshots (comma-separated image URLs)</Label>
+              <Input id="vp-screenshots" value={form.screenshots} onChange={e => setForm(f => ({ ...f, screenshots: e.target.value }))} placeholder="https://..., https://..." data-testid="input-project-screenshots" />
             </div>
 
             <div className="flex items-center gap-2 sm:col-span-2">

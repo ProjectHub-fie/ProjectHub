@@ -64,6 +64,15 @@ export const verifiedProjects = pgTable('verified_projects', {
   timeline: text('timeline'),
   teamSize: text('team_size'),
   userCount: text('user_count'),
+  // App-store metadata for installable utilities (Android/Windows/desktop).
+  // Only populated for `category = 'utilities'`; the detail page renders an
+  // application-style layout when any of these is present.
+  appVersion: text('app_version'),
+  appSize: text('app_size'),
+  platforms: text('platforms').array(),
+  requirements: text('requirements').array(),
+  releaseNotes: text('release_notes'),
+  screenshots: text('screenshots').array(),
   isActive: boolean('is_active').default(true).notNull(),
   sortOrder: integer('sort_order').default(0).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),

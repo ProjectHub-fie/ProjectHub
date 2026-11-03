@@ -51,6 +51,56 @@ export function ProjectsGridSkeleton({ count = 6 }: { count?: number }) {
   );
 }
 
+/**
+ * Loading placeholder for the application-style (utilities) detail page.
+ *
+ * It mirrors the store layout — icon beside the title block, an install-facts
+ * strip, a screenshot row, then two content columns — so the page does not jump
+ * when the real content arrives.
+ */
+export function AppDetailSkeleton() {
+  return (
+    <div className="space-y-10" data-testid="app-detail-loading-skeleton" aria-hidden="true">
+      <div className="flex flex-col md:flex-row md:items-start gap-6 md:gap-8">
+        <Skeleton className="w-28 h-28 md:w-36 md:h-36 rounded-3xl shrink-0" />
+        <div className="flex-1 space-y-3">
+          <Skeleton className="h-10 w-2/3" />
+          <Skeleton className="h-4 w-40" />
+          <Skeleton className="h-5 w-full" />
+          <Skeleton className="h-5 w-5/6" />
+          <div className="flex gap-2 pt-1">
+            <Skeleton className="h-6 w-20 rounded-full" />
+            <Skeleton className="h-6 w-24 rounded-full" />
+          </div>
+          <div className="flex flex-col sm:flex-row gap-3 pt-2">
+            <Skeleton className="h-11 w-full sm:w-56 rounded-lg" />
+            <Skeleton className="h-11 w-full sm:w-40 rounded-lg" />
+          </div>
+        </div>
+      </div>
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-6 p-6 rounded-2xl border bg-card">
+        {Array.from({ length: 4 }, (_, i) => (
+          <div key={i} className="space-y-2">
+            <Skeleton className="h-3 w-16" />
+            <Skeleton className="h-5 w-24" />
+          </div>
+        ))}
+      </div>
+      <div className="flex gap-4 overflow-hidden">
+        {Array.from({ length: 3 }, (_, i) => (
+          <Skeleton key={i} className="h-72 w-40 rounded-2xl shrink-0" />
+        ))}
+      </div>
+      <div className="space-y-3">
+        <Skeleton className="h-6 w-40" />
+        <Skeleton className="h-4 w-full" />
+        <Skeleton className="h-4 w-5/6" />
+        <Skeleton className="h-4 w-4/6" />
+      </div>
+    </div>
+  );
+}
+
 export function ProjectDetailSkeleton() {
   return (
     <div className="space-y-12">
