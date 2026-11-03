@@ -17,15 +17,32 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
+import { deflateRawSync } from 'node:zlib';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const root = resolve(here, '..');
 const source = (relative) => readFileSync(resolve(root, relative), 'utf8');
 
+/** CRC-32, which a ZIP entry header carries. `zlib` exposes no plain crc32. */
+const CRC_TABLE = Array.from({ length: 256 }, (_, n) => {
+  let c = n;
+  for (let k = 0; k < 8; k += 1) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+  return c >>> 0;
+});
+function crc32(buffer) {
+  let crc = 0xffffffff;
+  for (const byte of buffer) crc = CRC_TABLE[(crc ^ byte) & 0xff] ^ (crc >>> 8);
+  return (crc ^ 0xffffffff) >>> 0;
+}
+
 const {
   getConfig,
   buildTestRouter,
   cancelRun,
+  parseTap,
+  capOutput,
+  readZipEntry,
+  stripLogTimestamps,
   __test,
 } = await import('../api/_lib/suite-runner.js');
 
@@ -584,4 +601,306 @@ test('the tests service keeps the DB-free suite free of admin secrets', () => {
   const service = testsService();
   assert.match(service, /ADMIN_PIN:\s*\$\{ADMIN_PIN:-\}/);
   assert.match(service, /ADMIN_PASSWORD:\s*\$\{ADMIN_PASSWORD:-\}/);
+});
+
+
+/* ------------------------------------------- reading a finished run's results */
+
+test('parseTap reads the spec reporter and the TAP reporter alike', () => {
+  // The compose service runs `node --test`, whose default spec reporter prints
+  // U+2139. The workflow uploads a TAP-reporter stream, which prints '#'. Both
+  // must produce the same numbers: a reporter switch must not blank the page.
+  const spec = [
+    '\u2714 passing one (1.2ms)',
+    '\u2716 failing one (0.8ms)',
+    '\u2139 tests 12',
+    '\u2139 suites 0',
+    '\u2139 pass 10',
+    '\u2139 fail 1',
+    '\u2139 skipped 1',
+    '\u2139 duration_ms 456.7',
+    '',
+    '\u2716 failing tests:',
+    '\u2716 failing one (0.8ms)',
+  ].join('\n');
+
+  const tap = [
+    'TAP version 13',
+    'ok 1 - passing one',
+    'not ok 2 - failing one',
+    '  ---',
+    '  duration_ms: 0.8',
+    '  ...',
+    '1..12',
+    '# tests 12',
+    '# pass 10',
+    '# fail 1',
+    '# skipped 1',
+  ].join('\n');
+
+  const fromSpec = parseTap(spec);
+  const fromTap = parseTap(tap);
+
+  for (const [name, parsed] of [['spec', fromSpec], ['tap', fromTap]]) {
+    assert.equal(parsed.tests, 12, name + ' must read the test count');
+    assert.equal(parsed.pass, 10, name + ' must read the pass count');
+    assert.equal(parsed.fail, 1, name + ' must read the fail count');
+    assert.equal(parsed.skipped, 1, name + ' must read the skipped count');
+    assert.deepEqual(parsed.failures, ['failing one'], name + ' must name the failure once');
+  }
+
+  assert.equal(fromSpec.durationMs, 456.7);
+});
+
+test('parseTap reports unknown rather than guessing when there is no summary', () => {
+  // A job that died before the suite reported, or a log with no summary line,
+  // must read as "no results" and not as a green zero-failure run.
+  for (const input of ['', null, undefined, 'some output with no summary', 'ok 1 - a test']) {
+    const parsed = parseTap(input);
+    assert.equal(parsed.tests, null, 'a missing count must stay null');
+    assert.equal(parsed.pass, null);
+    assert.equal(parsed.fail, null);
+    assert.equal(parsed.skipped, null);
+    assert.deepEqual(parsed.failures, []);
+  }
+});
+
+test('capOutput keeps both ends of a long stream and says what it dropped', () => {
+  const long = 'A'.repeat(1000) + 'MIDDLE' + 'B'.repeat(1000);
+  const capped = capOutput(long, 200);
+
+  assert.ok(capped.length < long.length, 'a long stream must be trimmed');
+  assert.match(capped, /characters omitted/, 'the trimmed stream must say what was dropped');
+  assert.ok(capped.startsWith('A'), 'the head must survive');
+  assert.ok(capped.endsWith('B'), 'the tail must survive');
+  assert.ok(!capped.includes('MIDDLE'), 'the middle must be the part dropped');
+
+  // A stream under the cap is returned untouched, so a short run reads exactly
+  // as the runner printed it.
+  assert.equal(capOutput('short output', 200), 'short output');
+});
+
+test('stripLogTimestamps removes the job-log prefix without touching the line', () => {
+  // GitHub prefixes every job-log line with an ISO timestamp. The summary line
+  // `tests 456` arrives as `2026-...Z tests 456`, which an anchored parser
+  // would miss.
+  const log = [
+    '2026-11-02T17:06:56.3444299Z \u2714 a test (1.2ms)',
+    '2026-11-02T17:06:56.3444299Z \u2139 tests 456',
+    '2026-11-02T17:06:56.3444299Z \u2139 pass 452',
+    '2026-11-02T17:06:56.3444299Z \u2139 fail 0',
+  ].join('\n');
+
+  const parsed = parseTap(stripLogTimestamps(log));
+  assert.equal(parsed.tests, 456);
+  assert.equal(parsed.pass, 452);
+  assert.equal(parsed.fail, 0);
+
+  // A line with no timestamp is untouched, so a mixed stream still parses.
+  assert.equal(stripLogTimestamps('\u2139 tests 1'), '\u2139 tests 1');
+  assert.equal(stripLogTimestamps(''), '');
+  assert.equal(stripLogTimestamps(null), '');
+});
+
+/** Builds a real ZIP archive in memory, so the reader is tested on real bytes. */
+function buildZip(entries) {
+  const locals = [];
+  const centrals = [];
+  let offset = 0;
+
+  for (const { name, data, method } of entries) {
+    const nameBuf = Buffer.from(name, 'utf8');
+    const body = method === 8 ? deflateRawSync(data) : data;
+    const crc = crc32(data);
+
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt16LE(20, 4);
+    local.writeUInt16LE(method, 8);
+    local.writeUInt32LE(crc, 14);
+    local.writeUInt32LE(body.length, 18);
+    local.writeUInt32LE(data.length, 22);
+    local.writeUInt16LE(nameBuf.length, 26);
+    local.writeUInt16LE(0, 28);
+    locals.push(local, nameBuf, body);
+
+    const central = Buffer.alloc(46);
+    central.writeUInt32LE(0x02014b50, 0);
+    central.writeUInt16LE(20, 4);
+    central.writeUInt16LE(20, 6);
+    central.writeUInt16LE(method, 10);
+    central.writeUInt32LE(crc, 16);
+    central.writeUInt32LE(body.length, 20);
+    central.writeUInt32LE(data.length, 24);
+    central.writeUInt16LE(nameBuf.length, 28);
+    central.writeUInt32LE(offset, 42);
+    centrals.push(central, nameBuf);
+
+    offset += local.length + nameBuf.length + body.length;
+  }
+
+  const centralBuf = Buffer.concat(centrals);
+  const eocd = Buffer.alloc(22);
+  eocd.writeUInt32LE(0x06054b50, 0);
+  eocd.writeUInt16LE(entries.length, 8);
+  eocd.writeUInt16LE(entries.length, 10);
+  eocd.writeUInt32LE(centralBuf.length, 12);
+  eocd.writeUInt32LE(offset, 16);
+
+  return Buffer.concat([...locals, centralBuf, eocd]);
+}
+
+test('readZipEntry reads a real archive, both stored and deflated', () => {
+  // A ZIP is built here rather than mocked: the reader is the piece that turns a
+  // downloaded artifact into text, and a hand-written fixture that did not match
+  // the real byte layout would pass while the real artifact failed.
+  const payload = Buffer.from('\u2139 tests 3\n\u2139 pass 3\n', 'utf8');
+  const nested = 'artifact/tap-output.tap';
+
+  for (const method of [0, 8]) {
+    const zip = buildZip([{ name: nested, data: payload, method }]);
+    const found = readZipEntry(zip, (name) => name.endsWith('tap-output.tap'));
+    assert.ok(found, 'method ' + method + ' must be read');
+    assert.equal(found.toString('utf8'), payload.toString('utf8'), 'method ' + method + ' must round-trip');
+    assert.equal(parseTap(found.toString('utf8')).tests, 3);
+  }
+
+  // A name that is not in the archive, and a truncated archive, return null
+  // rather than throwing, so a broken artifact degrades to "no results".
+  const zip = buildZip([{ name: nested, data: payload, method: 8 }]);
+  assert.equal(readZipEntry(zip, 'missing.txt'), null);
+  assert.equal(readZipEntry(zip.subarray(0, 10), (n) => n.endsWith('.tap')), null);
+  assert.equal(readZipEntry(Buffer.from('not a zip'), (n) => n.endsWith('.tap')), null);
+});
+
+test('a completed run reads its summary from the artifact, and status reports it', async () => {
+  // This is the bug: the run completed, the page showed a success headline, and
+  // every tile read "-" because nothing ever read the suite's own summary.
+  resetHarness({});
+  const tap = Buffer.from('# tests 7\n# pass 6\n# fail 1\nnot ok 3 - broken thing\n', 'utf8');
+  const zip = buildZip([{ name: 'tap-output.tap', data: tap, method: 8 }]);
+
+  __test.setFetcher(async (url, options) => {
+    if (options.method === 'POST' && /dispatches$/.test(url)) return ghResponse({ status: 204 });
+    if (url.endsWith('/artifacts')) {
+      return ghResponse({
+        body: {
+          artifacts: [
+            { id: 99, name: 'docker-tests-tap', expired: false, created_at: '2026-11-03T13:40:00Z' },
+          ],
+        },
+      });
+    }
+    if (/\/actions\/artifacts\/99\/zip$/.test(url)) {
+      return {
+        status: 200,
+        ok: true,
+        async arrayBuffer() {
+          return zip.buffer.slice(zip.byteOffset, zip.byteOffset + zip.byteLength);
+        },
+        async json() {
+          return {};
+        },
+      };
+    }
+    if (/\/jobs$/.test(url)) {
+      return ghResponse({ body: { jobs: [{ id: 5, status: 'completed', conclusion: 'failure' }] } });
+    }
+    return ghResponse({
+      body: {
+        total_count: 1,
+        workflow_runs: [
+          fakeRun({ display_title: 'Docker tests (' + (__test.lastDispatchedId || 'none') + ')', id: 77, conclusion: 'failure' }),
+        ],
+      },
+    });
+  });
+
+  const router = buildTestRouter({
+    requireAuth: (_req, _res, next) => next(),
+    requireRole: () => (_req, _res, next) => next(),
+  });
+  const runLayer = router.stack.find((layer) => layer.route?.path === '/api/admin/tests/run');
+  const runHandler = runLayer.route.stack[runLayer.route.stack.length - 1].handle;
+  const runRes = { json: (body) => (runRes.body = body), status: () => runRes };
+  await runHandler({}, runRes);
+
+  const statusLayer = router.stack.find((layer) => layer.route?.path === '/api/admin/tests/status');
+  const statusHandler = statusLayer.route.stack[statusLayer.route.stack.length - 1].handle;
+  const statusRes = { json: (body) => (statusRes.body = body), status: () => statusRes };
+  await statusHandler({}, statusRes);
+
+  const run = statusRes.body.lastRun || statusRes.body.activeRun;
+  assert.ok(run, 'the status route must report the run');
+  assert.equal(run.completed, true);
+  assert.equal(run.summary.tests, 7, 'the summary must come from the artifact');
+  assert.equal(run.summary.pass, 6);
+  assert.equal(run.summary.fail, 1);
+  assert.deepEqual(run.failures, ['broken thing']);
+  assert.equal(run.resultsUnavailable, false, 'a read summary is available');
+  assert.match(run.output, /tests 7/);
+});
+
+test('a completed run with no readable artifact says so instead of showing empty tiles', async () => {
+  // A failed suite uploads no artifact, and an expired one is gone. The page
+  // must say the results are unavailable rather than showing a success headline
+  // over four empty tiles, which is what made the bug look like "no results".
+  resetHarness({});
+  __test.setFetcher(async (url, options) => {
+    if (options.method === 'POST' && /dispatches$/.test(url)) return ghResponse({ status: 204 });
+    if (url.endsWith('/artifacts')) return ghResponse({ body: { artifacts: [] } });
+    if (/\/jobs$/.test(url)) return ghResponse({ body: { jobs: [{ id: 5, status: 'completed', conclusion: 'failure' }] } });
+    if (/\/logs$/.test(url)) return { status: 200, ok: true, async text() { return 'no tap here\n'; } };
+    return ghResponse({
+      body: {
+        total_count: 1,
+        workflow_runs: [
+          fakeRun({ display_title: 'Docker tests (' + (__test.lastDispatchedId || 'none') + ')', id: 78, conclusion: 'failure' }),
+        ],
+      },
+    });
+  });
+
+  const router = buildTestRouter({
+    requireAuth: (_req, _res, next) => next(),
+    requireRole: () => (_req, _res, next) => next(),
+  });
+  const runLayer = router.stack.find((layer) => layer.route?.path === '/api/admin/tests/run');
+  const runHandler = runLayer.route.stack[runLayer.route.stack.length - 1].handle;
+  const runRes = { json: (body) => (runRes.body = body), status: () => runRes };
+  await runHandler({}, runRes);
+
+  const statusLayer = router.stack.find((layer) => layer.route?.path === '/api/admin/tests/status');
+  const statusHandler = statusLayer.route.stack[statusLayer.route.stack.length - 1].handle;
+  const statusRes = { json: (body) => (statusRes.body = body), status: () => statusRes };
+  await statusHandler({}, statusRes);
+
+  const run = statusRes.body.lastRun || statusRes.body.activeRun;
+  assert.ok(run);
+  assert.equal(run.completed, true);
+  assert.equal(run.summary.tests, null, 'no artifact means no count');
+  assert.equal(run.resultsUnavailable, true, 'the page must be told the results are unavailable');
+});
+
+test('the result read is bounded, so a run with no artifact is not re-asked forever', () => {
+  // The status route retries a terminal run whose summary has not been read,
+  // because GitHub marks a run complete a moment before its artifact is
+  // downloadable. Without a cap, a suite that never uploads one would re-ask on
+  // every page refresh indefinitely.
+  const module = source('api/_lib/suite-runner.js');
+  assert.match(module, /MAX_RESULT_ATTEMPTS/, 'the attempt cap must exist');
+  assert.match(module, /resultsAttempts >= MAX_RESULT_ATTEMPTS/, 'the cap must be enforced');
+  assert.match(module, /withTimeout\(fetchArtifactResults\(this\.id/, 'the artifact read must be time-bounded');
+  assert.match(module, /withTimeout\(fetchJobLogResults\(this\.id/, 'the log read must be time-bounded');
+});
+
+test('the artifact is read from the workflow upload, and the workflow uploads it', () => {
+  // The reader and the workflow have to agree on the file name. If the upload
+  // step were renamed, the reader would silently find nothing and the page would
+  // go back to showing no results.
+  const module = source('api/_lib/suite-runner.js');
+  assert.match(module, /tap-output\.tap/, 'the reader must look for the uploaded file');
+
+  const workflow = source('.github/workflows/docker-tests.yml');
+  assert.match(workflow, /tap-output\.tap/, 'the workflow must upload the file the reader looks for');
 });

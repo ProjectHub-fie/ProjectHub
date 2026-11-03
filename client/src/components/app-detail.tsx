@@ -27,6 +27,8 @@ import {
   Monitor,
   Calendar,
   Hash,
+  History,
+  ChevronDown,
   Package as PackageIcon,
 } from "lucide-react";
 import { useLocation } from "wouter";
@@ -39,8 +41,10 @@ import {
 import {
   downloadCards,
   githubReleasesFallbackUrl,
+  previousVersionsFor,
   type DownloadCard,
   type DownloadPlatform,
+  type PreviousVersion,
 } from "@/lib/download-links";
 
 /**
@@ -86,7 +90,7 @@ export interface AppDetailProject {
   screenshots?: string[] | null;
   androidDownloadUrl?: string | null;
   windowsDownloadUrl?: string | null;
-  downloadDetails?: Record<string, Record<string, string>> | null;
+  downloadDetails?: Record<string, Record<string, unknown>> | null;
   githubReleasesFallback?: boolean | null;
 }
 
@@ -134,6 +138,89 @@ function DetailRow({ label, value }: { label: string; value: string }) {
   );
 }
 
+/**
+ * What the confirmation dialog is about to open.
+ *
+ * A current installer and an archived one both reduce to this, so one dialog
+ * serves both and the confirmation, the "opens on MEGA" wording and the checksum
+ * block cannot diverge between the two paths.
+ */
+type PendingDownload = {
+  platform: DownloadPlatform;
+  label: string;
+  url: string;
+  packageName: string | null;
+  version: string | null;
+  size: string | null;
+  releaseDate: string | null;
+  sha256: string | null;
+  /** True for an archived build, which the dialog labels as such. */
+  archived: boolean;
+};
+
+/**
+ * The superseded builds of one platform, collapsed by default.
+ *
+ * Collapsed because the current installer is what almost every visitor wants;
+ * the archive is for the case the current build broke something. It renders
+ * nothing at all when there are none, so a project without an archive looks
+ * exactly as it did before this existed.
+ *
+ * The list is `<details>` rather than a controlled dialog: it is a disclosure,
+ * not a modal, and the browser gives keyboard access and the open/closed state
+ * for free. The link itself is never rendered — it carries the MEGA decryption
+ * key — so a row is a button that opens the same confirmation dialog the current
+ * installer uses.
+ */
+function PreviousVersions({
+  platform,
+  versions,
+  onSelect,
+}: {
+  platform: DownloadPlatform;
+  versions: PreviousVersion[];
+  onSelect: (entry: PreviousVersion) => void;
+}) {
+  if (versions.length === 0) return null;
+
+  return (
+    <details
+      className="mt-4 border-t pt-3 group"
+      data-testid={`previous-versions-${platform}`}
+    >
+      <summary className="flex cursor-pointer list-none items-center gap-2 text-xs font-medium text-muted-foreground hover:text-foreground">
+        <History className="w-3.5 h-3.5" />
+        Previous versions ({versions.length})
+        <ChevronDown className="w-3.5 h-3.5 ml-auto transition-transform group-open:rotate-180" />
+      </summary>
+      <ul className="mt-3 space-y-1.5">
+        {versions.map((entry, index) => (
+          <li key={`${entry.version}-${index}`}>
+            <button
+              type="button"
+              onClick={() => onSelect(entry)}
+              className="flex w-full items-center justify-between gap-3 rounded-lg border border-border/60 px-3 py-2 text-left text-xs hover:border-primary/40 hover:bg-secondary/40 transition-colors"
+              data-testid={`button-previous-version-${platform}-${index}`}
+            >
+              <span className="min-w-0">
+                <span className="block font-medium truncate">v{entry.version}</span>
+                <span className="block text-[11px] text-muted-foreground truncate">
+                  {[entry.releaseDate, entry.size, entry.packageName].filter(Boolean).join(" · ") ||
+                    "Archived build"}
+                </span>
+              </span>
+              <Download className="w-3.5 h-3.5 shrink-0 text-muted-foreground" />
+            </button>
+          </li>
+        ))}
+      </ul>
+      <p className="mt-2 text-[11px] text-muted-foreground">
+        Older builds are kept for compatibility. The current release is recommended.
+      </p>
+    </details>
+  );
+}
+
 function PlatformIcon({ platform, className }: { platform: DownloadPlatform; className?: string }) {
   return platform === "windows" ? (
     <Monitor className={className} />
@@ -144,7 +231,10 @@ function PlatformIcon({ platform, className }: { platform: DownloadPlatform; cla
 
 export default function AppDetail({ project }: AppDetailProps) {
   const [, setLocation] = useLocation();
-  const [pending, setPending] = useState<DownloadCard | null>(null);
+  // What the confirmation dialog is about to open. A current installer and an
+  // archived one are the same shape to the dialog: a platform, a MEGA link and
+  // the facts to show above the button.
+  const [pending, setPending] = useState<PendingDownload | null>(null);
 
   const screenshots = nonEmpty(project.screenshots);
   const platforms = nonEmpty(project.platforms);
@@ -167,7 +257,27 @@ export default function AppDetail({ project }: AppDetailProps) {
   const checksums = cards.filter((card) => card.sha256);
 
   const openDownload = (card: DownloadCard) => {
-    setPending(card);
+    setPending({ ...card, archived: false });
+  };
+
+  /**
+   * Opens the dialog for an archived build of a platform.
+   *
+   * The platform and the label come from the card the archive belongs to, so the
+   * dialog names the same platform the button sat under.
+   */
+  const openArchivedDownload = (card: DownloadCard, entry: PreviousVersion) => {
+    setPending({
+      platform: card.platform,
+      label: `Download for ${card.platform === "windows" ? "Windows" : "Android"}`,
+      url: entry.url,
+      packageName: entry.packageName ?? null,
+      version: entry.version,
+      size: entry.size ?? null,
+      releaseDate: entry.releaseDate ?? null,
+      sha256: entry.sha256 ?? null,
+      archived: true,
+    });
   };
 
   const confirmDownload = () => {
@@ -359,6 +469,12 @@ export default function AppDetail({ project }: AppDetailProps) {
                     <Download className="w-4 h-4 mr-2" />
                     {card.label}
                   </Button>
+
+                  <PreviousVersions
+                    platform={card.platform}
+                    versions={previousVersionsFor(project, card.platform)}
+                    onSelect={(entry) => openArchivedDownload(card, entry)}
+                  />
                 </div>
               ))}
             </div>
@@ -566,7 +682,9 @@ export default function AppDetail({ project }: AppDetailProps) {
               {pending ? `Download for ${pending.platform === "windows" ? "Windows" : "Android"}` : "Download"}
             </DialogTitle>
             <DialogDescription>
-              You are about to download {project.title} from MEGA. The file opens in a new tab.
+              {pending?.archived
+                ? `You are about to download an older build of ${project.title} from MEGA. The file opens in a new tab.`
+                : `You are about to download ${project.title} from MEGA. The file opens in a new tab.`}
             </DialogDescription>
           </DialogHeader>
 
@@ -576,6 +694,7 @@ export default function AppDetail({ project }: AppDetailProps) {
                 label="Platform"
                 value={pending.platform === "windows" ? "Windows" : "Android"}
               />
+              {pending.archived && <DetailRow label="Release" value="Previous version" />}
               {pending.packageName && (
                 <div data-testid="app-download-dialog-package">
                   <DetailRow label="Package" value={pending.packageName} />

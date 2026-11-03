@@ -37,7 +37,29 @@ export interface PlatformDownloadDetail {
   size?: string | null;
   releaseDate?: string | null;
   sha256?: string | null;
+  /** Older builds of the same platform, newest first. */
+  previousVersions?: PreviousVersion[] | null;
 }
+
+/**
+ * One superseded build of a platform.
+ *
+ * The URL is required — a version entry with no link cannot be downloaded, so it
+ * is not a version entry. It is a MEGA share link, which means it carries its own
+ * decryption key and is a credential in exactly the way the current link is: it
+ * is validated on the server and never interpolated into a message or a log.
+ */
+export interface PreviousVersion {
+  version: string;
+  url: string;
+  packageName?: string | null;
+  size?: string | null;
+  releaseDate?: string | null;
+  sha256?: string | null;
+}
+
+/** Upper bound on stored previous versions per platform, so the blob stays bounded. */
+export const MAX_PREVIOUS_VERSIONS = 20;
 
 export type DownloadDetails = Partial<Record<DownloadPlatform, PlatformDownloadDetail>>;
 
@@ -166,6 +188,11 @@ export function sha256Problem(value: unknown): string | null {
  * An unrecognised platform key is discarded rather than stored: the shape is
  * written by the dashboard and read by the detail page, and anything else is
  * either a typo or a payload that was never meant to round-trip.
+ *
+ * A previous version is kept only when it has both a version label and a valid
+ * MEGA link. That is the same rule the server enforces, and it is what stops a
+ * half-filled row (a version with no file, or a file with no version to name it)
+ * from reaching the detail page and rendering as a dead download.
  */
 export function normalizeDownloadDetails(value: unknown): DownloadDetails {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
@@ -192,7 +219,54 @@ export function normalizeDownloadDetails(value: unknown): DownloadDetails {
       detail.sha256 = checksum.trim().toLowerCase();
     }
 
+    const previous = normalizePreviousVersions(raw.previousVersions);
+    if (previous.length > 0) detail.previousVersions = previous;
+
     if (Object.keys(detail).length > 0) result[platform] = detail;
+  }
+
+  return result;
+}
+
+/**
+ * Keeps the previous-version entries that are complete, in order, capped.
+ *
+ * A URL that fails validation drops the whole entry rather than being stored
+ * empty: the entry exists to be downloaded, so an unusable link makes it noise.
+ * Order is preserved (the form and the page both treat index 0 as newest), and
+ * the cap keeps a runaway paste from bloating the row.
+ */
+export function normalizePreviousVersions(value: unknown): PreviousVersion[] {
+  if (!Array.isArray(value)) return [];
+
+  const result: PreviousVersion[] = [];
+
+  for (const entry of value) {
+    if (result.length >= MAX_PREVIOUS_VERSIONS) break;
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
+
+    const raw = entry as Record<string, unknown>;
+    const version = typeof raw.version === "string" ? raw.version.trim() : "";
+    if (!version) continue;
+
+    const link = validateMegaDownloadUrl(raw.url);
+    if (!link.valid || !link.url) continue;
+
+    const item: PreviousVersion = { version, url: link.url };
+
+    for (const field of ["packageName", "size", "releaseDate"] as const) {
+      const fieldValue = raw[field];
+      if (typeof fieldValue !== "string") continue;
+      const trimmed = fieldValue.trim();
+      if (trimmed) item[field] = trimmed;
+    }
+
+    const checksum = raw.sha256;
+    if (typeof checksum === "string" && !sha256Problem(checksum)) {
+      item.sha256 = checksum.trim().toLowerCase();
+    }
+
+    result.push(item);
   }
 
   return result;
@@ -222,6 +296,49 @@ export function platformDetail(
 ): PlatformDownloadDetail | null {
   const details = normalizeDownloadDetails(project?.downloadDetails);
   return details[platform] || null;
+}
+
+/**
+ * The usable previous versions for one platform, newest first.
+ *
+ * Reads through the same normaliser the server uses, so a hand-edited row or an
+ * older stored blob cannot put an entry on the page that the current rules would
+ * have rejected — an unusable link is dropped here too.
+ */
+export function previousVersionsFor(
+  project: DownloadProjectInput | null | undefined,
+  platform: DownloadPlatform,
+): PreviousVersion[] {
+  const detail = platformDetail(project, platform);
+  return normalizePreviousVersions(detail?.previousVersions);
+}
+
+/**
+ * The current build plus every superseded one, newest first.
+ *
+ * A previous version is only offered for a platform that has a current link: the
+ * archive of an app that is no longer distributed is not a download the page
+ * should advertise, and this keeps the "is this project installable" answer the
+ * same as before.
+ */
+export function allPlatformVersions(
+  project: DownloadProjectInput | null | undefined,
+  platform: DownloadPlatform,
+): PreviousVersion[] {
+  const current = platformDownloadUrl(project, platform);
+  if (!current) return [];
+  const detail = platformDetail(project, platform) || {};
+  return [
+    {
+      version: detail.version || "Current",
+      url: current,
+      packageName: detail.packageName ?? null,
+      size: detail.size ?? null,
+      releaseDate: detail.releaseDate ?? null,
+      sha256: detail.sha256 ?? null,
+    },
+    ...previousVersionsFor(project, platform),
+  ];
 }
 
 /**

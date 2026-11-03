@@ -34,6 +34,7 @@
  */
 import express from 'express';
 import crypto from 'node:crypto';
+import { inflateRawSync } from 'node:zlib';
 import { fileURLToPath } from 'node:url';
 import { dirname } from 'node:path';
 
@@ -90,6 +91,236 @@ const STATUS_COMMON = {
   /** The workflow uses the repo's own compose defaults for its Postgres. */
   usesComposeDb: true,
 };
+
+/** How much raw TAP output is kept for the dashboard's "Raw output" panel. */
+const MAX_OUTPUT_CHARS = 60_000;
+
+/** How many times a completed run's artifact/log is read before giving up. */
+const MAX_RESULT_ATTEMPTS = 3;
+
+/* ------------------------------------------------------------ result parsing */
+
+/**
+ * Parses the test summary out of the suite's output.
+ *
+ * The compose `tests` service runs `node --test`, whose default spec reporter
+ * prints `ℹ tests 10`, `ℹ pass 9`, `ℹ fail 1`, `ℹ skipped 1` (U+2139). The TAP
+ * reporter prints the older `# tests 10` form, and `--test-reporter=tap` is what
+ * the workflow's artifact carries, so both are accepted — a reporter switch must
+ * not silently blank the summary.
+ *
+ * Anything the pattern does not match stays `null` rather than being guessed at,
+ * so a reporter change reads as "unknown" instead of a wrong number. Failures
+ * are collected from the spec reporter's `✖ name` lines and the TAP reporter's
+ * `not ok N - name` lines.
+ */
+export function parseTap(output) {
+  if (typeof output !== 'string' || !output) {
+    return { tests: null, pass: null, fail: null, skipped: null, durationMs: null, failures: [] };
+  }
+
+  const summary = {};
+  const counters = /^(?:#|ℹ|\u2139)\s*(tests|pass|fail|skipped|todo|cancelled|duration_ms)\s+([\d.]+)/gm;
+  for (const [, key, value] of output.matchAll(counters)) {
+    summary[key] = Number(value);
+  }
+
+  const failures = [];
+  const seen = new Set();
+  const addFailure = (name) => {
+    const trimmed = String(name).trim();
+    if (!trimmed || seen.has(trimmed)) return;
+    // The spec reporter prints a `✖ failing tests:` section header before it
+    // lists them, and the header is not a test. Only that header is skipped: a
+    // test whose name ends in a colon is still reported.
+    if (/^failing tests?:?$/i.test(trimmed)) return;
+    seen.add(trimmed);
+    failures.push(trimmed);
+  };
+
+  // TAP reporter: `not ok 3 - the thing works`.
+  for (const [, name] of output.matchAll(/^\s*not ok \d+ - (.*)$/gm)) addFailure(name);
+  // Spec reporter: `✖ failing one (0.82ms)`. Only the leading summary block and
+  // the trailing "failing tests" list carry this; both name the same tests, and
+  // the dedupe above keeps one entry per name.
+  for (const [, name] of output.matchAll(/^\s*✖\s+(.*?)(?:\s+\(\d[\d.]*ms\))?$/gm)) addFailure(name);
+
+  return {
+    tests: summary.tests ?? null,
+    pass: summary.pass ?? null,
+    fail: summary.fail ?? null,
+    skipped: summary.skipped ?? null,
+    durationMs: summary.duration_ms ?? null,
+    failures,
+  };
+}
+
+/** Trims the middle out of over-long output, keeping both ends readable. */
+export function capOutput(text, max = MAX_OUTPUT_CHARS) {
+  if (typeof text !== 'string') return '';
+  if (text.length <= max) return text;
+  const head = Math.floor(max * 0.6);
+  const tail = max - head;
+  return `${text.slice(0, head)}\n\n… ${text.length - max} characters omitted …\n\n${text.slice(-tail)}`;
+}
+
+/**
+ * Reads one entry out of a ZIP archive, in memory.
+ *
+ * The workflow uploads the TAP stream as a build artifact, and an artifact is
+ * always a ZIP. Only the two things this needs are implemented: the central
+ * directory is scanned for the entry by name, and that entry's local header is
+ * used to locate and inflate the bytes. Stored (method 0) and deflated (method
+ * 8) entries are both handled, because GitHub re-zips an already-compressed file
+ * as stored.
+ *
+ * No dependency is added for this: the artifact is one small text file, the
+ * archive is fully in memory, and `zlib` already ships with Node. A malformed or
+ * truncated archive returns null rather than throwing, so a broken artifact
+ * degrades to "no results" instead of a 500.
+ */
+export function readZipEntry(buffer, entryName) {
+  if (!Buffer.isBuffer(buffer) || buffer.length < 22) return null;
+  const matches = typeof entryName === 'function' ? entryName : (name) => name === entryName;
+  if (buffer.readUInt32LE(0) !== 0x04034b50 && !buffer.includes(Buffer.from('PK\x05\x06', 'binary'))) {
+    return null;
+  }
+
+  const EOCD = 0x06054b50;
+  const MAX_COMMENT = 0xffff;
+  let eocd = -1;
+  const scanFrom = Math.max(0, buffer.length - (MAX_COMMENT + 22));
+  for (let i = buffer.length - 22; i >= scanFrom; i -= 1) {
+    if (buffer.readUInt32LE(i) === EOCD) {
+      eocd = i;
+      break;
+    }
+  }
+  if (eocd < 0) return null;
+
+  const entryCount = buffer.readUInt16LE(eocd + 10);
+  let offset = buffer.readUInt32LE(eocd + 16);
+  const CENTRAL = 0x02014b50;
+
+  for (let n = 0; n < entryCount; n += 1) {
+    if (offset + 46 > buffer.length || buffer.readUInt32LE(offset) !== CENTRAL) return null;
+
+    const method = buffer.readUInt16LE(offset + 10);
+    const compressedSize = buffer.readUInt32LE(offset + 20);
+    const nameLength = buffer.readUInt16LE(offset + 28);
+    const extraLength = buffer.readUInt16LE(offset + 30);
+    const commentLength = buffer.readUInt16LE(offset + 32);
+    const localOffset = buffer.readUInt32LE(offset + 42);
+    const name = buffer.toString('utf8', offset + 46, offset + 46 + nameLength);
+
+    if (matches(name)) {
+      if (localOffset + 30 > buffer.length) return null;
+      if (buffer.readUInt32LE(localOffset) !== 0x04034b50) return null;
+      // The local header repeats the name and extra fields, and its lengths can
+      // differ from the central directory's, so the data offset is computed from
+      // the local header rather than reused.
+      const localNameLength = buffer.readUInt16LE(localOffset + 26);
+      const localExtraLength = buffer.readUInt16LE(localOffset + 28);
+      const dataStart = localOffset + 30 + localNameLength + localExtraLength;
+      const data = buffer.subarray(dataStart, dataStart + compressedSize);
+      try {
+        if (method === 0) return Buffer.from(data);
+        if (method === 8) return inflateRawSync(data);
+      } catch {
+        return null;
+      }
+      return null;
+    }
+
+    offset += 46 + nameLength + extraLength + commentLength;
+  }
+
+  return null;
+}
+
+/**
+ * Fetches the TAP artifact of a finished run and parses the summary from it.
+ *
+ * This is the step that was missing: a completed GitHub run carries its result
+ * only in its artifact and its job log, so a run that adopted the GitHub
+ * metadata alone reported "Passed" with every tile reading "—". The workflow
+ * uploads `tap-output.tap` (see `.github/workflows/docker-tests.yml`), so that
+ * artifact is listed, downloaded as a ZIP and read in memory.
+ *
+ * Best effort by design: a missing or expired artifact, or a GitHub error, must
+ * not fail the status route. The caller falls back to the job log.
+ */
+async function fetchArtifactResults(runId, { signal } = {}) {
+  const { repository } = getConfig();
+  const listUrl = `https://api.github.com/repos/${repository}/actions/runs/${runId}/artifacts`;
+
+  const listResponse = await githubFetch(listUrl, { headers: apiHeaders(), signal });
+  if (!listResponse.ok) return null;
+  const list = await listResponse.json();
+  const artifacts = Array.isArray(list?.artifacts) ? list.artifacts : [];
+  // Newest first, so a rerun's artifact wins over an earlier one. Anything not
+  // expired is still downloadable.
+  const artifact = artifacts
+    .filter((entry) => !entry.expired)
+    .sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0))[0];
+  if (!artifact) return null;
+
+  const zipResponse = await githubFetch(
+    `https://api.github.com/repos/${repository}/actions/artifacts/${artifact.id}/zip`,
+    { headers: apiHeaders(), signal },
+  );
+  if (!zipResponse.ok) return null;
+  const buffer = Buffer.from(await zipResponse.arrayBuffer());
+  // GitHub nests the upload path, so the entry name carries directories. Match
+  // on the basename rather than the full path.
+  const tap = readZipEntry(buffer, (name) => name.endsWith('tap-output.tap') || name.endsWith('.tap'));
+  if (!tap) return null;
+  return tap.toString('utf8');
+}
+
+/**
+ * Fetches the raw job log of a finished run, as a fallback for the artifact.
+ *
+ * Artifacts expire (90 days by default) and are absent when the upload step
+ * found no file, but the log is retained with the run. It is the same TAP
+ * stream, prefixed by the runner's step banners, which `parseTap` ignores.
+ */
+async function fetchJobLogResults(runId, { signal } = {}) {
+  const { repository } = getConfig();
+  const jobsResponse = await githubFetch(
+    `https://api.github.com/repos/${repository}/actions/runs/${runId}/jobs`,
+    { headers: apiHeaders(), signal },
+  );
+  if (!jobsResponse.ok) return null;
+  const body = await jobsResponse.json();
+  const jobs = Array.isArray(body?.jobs) ? body.jobs : [];
+  const job = jobs.find((entry) => entry.conclusion || entry.status === 'completed') || jobs[0];
+  if (!job?.id) return null;
+
+  const logResponse = await githubFetch(
+    `https://api.github.com/repos/${repository}/actions/jobs/${job.id}/logs`,
+    { headers: { ...apiHeaders(), Accept: 'application/vnd.github+json' }, signal },
+  );
+  if (!logResponse.ok) return null;
+  // The endpoint answers 302 to a short-lived signed URL, which fetch follows.
+  const text = await logResponse.text();
+  return stripLogTimestamps(text);
+}
+
+/**
+ * Removes the timestamp GitHub puts in front of every job-log line.
+ *
+ * A job log reads `2026-11-02T17:06:56.3444299Z <the real line>`, so a summary
+ * line that is `ℹ tests 456` in the artifact arrives as
+ * `2026-11-02T17:06:56.3444299Z ℹ tests 456` here. `parseTap` anchors its
+ * patterns at the start of a line, so the prefix is removed before parsing
+ * rather than loosening every pattern. Only a leading ISO timestamp is touched;
+ * the rest of the line is preserved byte-for-byte.
+ */
+export function stripLogTimestamps(text) {
+  if (typeof text !== 'string') return '';
+  return text.replace(/^\d{4}-\d{2}-\d{2}T[\d:.]+Z ?/gm, '');
+}
 
 /* ------------------------------------------------------------ GitHub client */
 
@@ -230,6 +461,20 @@ export function buildTestRouter({ requireAuth, requireRole }) {
       active = store.current ? store.current.running : false;
     }
 
+    // A run can reach `completed` a moment before its artifact is downloadable,
+    // and the page stops polling once the run is terminal. Retrying the read here
+    // closes that window on the next status request; the run's own attempt cap
+    // bounds it, so a suite that never uploads an artifact is asked about a fixed
+    // number of times and no more.
+    const last = store.last;
+    if (!store.current && last && last.completed && !last.resultsLoaded) {
+      try {
+        await withTimeout(last.loadResults(), 8_000);
+      } catch {
+        // Same contract as the poll above: a GitHub hiccup must not fail status.
+      }
+    }
+
     res.json({
       ...STATUS_COMMON,
       available: Boolean(token),
@@ -331,6 +576,26 @@ class GithubRun {
   failures = [];
   output = '';
 
+  /**
+   * Whether the artifact/log read has been attempted for a terminal run.
+   *
+   * The read is the only expensive part of a poll (three GitHub calls plus a ZIP
+   * download), and a terminal run never changes its results, so it happens once
+   * per completed run. Without this a page refresh would re-download the
+   * artifact on every status request.
+   */
+  resultsLoaded = false;
+
+  /**
+   * How many times the result read has been tried.
+   *
+   * GitHub marks a run `completed` a moment before its artifact is downloadable,
+   * so the first attempt can legitimately find nothing. Bounded retries across
+   * later polls close that window; the cap stops a run whose artifact never
+   * appears (a failed suite uploads none) from re-asking GitHub forever.
+   */
+  resultsAttempts = 0;
+
   /** Whether the workflow has been sent to GitHub. */
   get dispatched() {
     return Boolean(this.dispatchAt);
@@ -400,10 +665,77 @@ class GithubRun {
     if (run) this.adopt(run);
     // A terminal run becomes the dashboard's last-known result and frees the
     // single-run slot so the next dispatch is allowed.
+    if (this.completed && !this.resultsLoaded) {
+      // Read the results *before* releasing the slot, so the run that lands in
+      // `lastRun` already carries its summary. A failure here is swallowed: the
+      // conclusion is still reported, and a later poll retries while the attempt
+      // cap lasts.
+      await this.loadResults();
+    }
     if (this.completed && store.current === this) {
       store.current = null;
       store.last = this;
     }
+  }
+
+  /**
+   * Reads the suite's own numbers for a terminal run.
+   *
+   * The GitHub run carries a conclusion but not a test count, so the summary has
+   * to come from the artifact the workflow uploads, or from the job log when the
+   * artifact is gone. Without this the page showed "Passed" above four tiles
+   * reading "—", which is what made a successful run look like it had no result.
+   */
+  async loadResults() {
+    if (this.resultsLoaded || !this.id) return;
+    if (this.resultsAttempts >= MAX_RESULT_ATTEMPTS) return;
+    this.resultsAttempts += 1;
+
+    let text = null;
+    try {
+      text = await withTimeout(fetchArtifactResults(this.id, {}), 8_000);
+    } catch {
+      text = null;
+    }
+    if (!text) {
+      try {
+        text = await withTimeout(fetchJobLogResults(this.id, {}), 8_000);
+      } catch {
+        text = null;
+      }
+    }
+
+    if (!text) return;
+
+    const parsed = parseTap(text);
+    // A log without a summary line (a job that died before the suite reported)
+    // is not a result. Leaving `resultsLoaded` false lets a later poll retry
+    // while the attempt cap still bounds the work.
+    if (parsed.tests == null && parsed.failures.length === 0) return;
+
+    this.resultsLoaded = true;
+    this.summary = {
+      tests: parsed.tests,
+      pass: parsed.pass,
+      fail: parsed.fail,
+      skipped: parsed.skipped,
+    };
+    this.failures = parsed.failures;
+    this.output = capOutput(text);
+    // The suite's own duration is more useful than the runner's wall clock,
+    // which includes image build and checkout time. Only used when GitHub did
+    // not supply start/finish timestamps.
+    if (this.durationMs == null && parsed.durationMs != null) this.durationMs = parsed.durationMs;
+  }
+
+  /**
+   * Whether the run finished but its numbers could not be read.
+   *
+   * The page uses this to say "results unavailable" instead of showing a
+   * success headline over empty tiles.
+   */
+  get resultsUnavailable() {
+    return this.completed && this.summary.tests == null;
   }
 
   /** Whether a run is still waiting on GitHub and not yet terminal. */
@@ -430,6 +762,7 @@ class GithubRun {
       summary: this.summary,
       failures: this.failures,
       output: this.output,
+      resultsUnavailable: this.resultsUnavailable,
       poll: { intervalMs: getConfig().pollIntervalMs, timeoutMs: getConfig().timeoutMs },
     };
   }

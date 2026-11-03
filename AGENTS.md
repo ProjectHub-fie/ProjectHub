@@ -98,6 +98,26 @@ every few seconds; the status handler refreshes the active run from GitHub in
 the workflow uses `set -o pipefail` and no `continue-on-error`, and the
 dashboard reads the run's `conclusion`.
 
+The run's conclusion and its test counts arrive separately, and reading only the
+former is why a successful run once displayed no results. GitHub reports
+`completed`/`success` but never a test count, so `loadResults()` reads the
+`tap-output.tap` artifact the workflow uploads: it lists the run's artifacts,
+downloads the ZIP and inflates the entry in memory with `readZipEntry` (an
+artifact is always a ZIP; only stored and deflated entries are handled, and a
+malformed archive returns null rather than throwing). When the artifact has
+expired or the suite uploaded none, it falls back to the job log, whose every
+line carries an ISO timestamp that `stripLogTimestamps` removes first. `parseTap`
+accepts both reporters — the spec form (`ℹ tests 10`, U+2139) and the TAP form
+(`# tests 10`) — and leaves a count `null` rather than guessing when the pattern
+does not match, so a reporter change reads as "unknown", not as a wrong number.
+
+A run is marked `completed` a moment before its artifact is downloadable, so the
+read is retried on later status polls, bounded by `MAX_RESULT_ATTEMPTS` so a
+suite that never uploads an artifact is not re-asked on every page refresh. A
+terminal run whose summary still could not be read reports
+`resultsUnavailable: true`, and the page says the results are unavailable instead
+of showing a success headline over four tiles reading "—".
+
 The compose file carries the app, the bot and a `db`, plus a `tests` service behind
 the `tests` profile that runs the suite on demand:
 
@@ -210,6 +230,37 @@ Both entry points validate: the serverless function and the dev server
 because an update is how a bad link gets in later. An absent field is omitted from
 the result rather than set to null, so an edit that does not mention the link
 leaves the stored value alone; an explicit `null` is how the dashboard clears one.
+
+### Previous versions are the same credential, one row at a time
+
+A platform's `download_details` entry may carry `previousVersions`: an ordered
+list (newest first, capped at `MAX_PREVIOUS_VERSIONS`) of superseded builds, each
+`{ version, url, packageName?, size?, releaseDate?, sha256? }`. The `url` is a
+MEGA share link and is therefore the same credential as the current one, so it
+follows every rule above.
+
+The shape is enforced in three places that must agree:
+
+- `normalizePreviousVersions` keeps a row only when it has **both** a version
+  label and a link that passes `validateMegaDownloadUrl`. A row with a label and
+  no file, or a file and no label, is dropped — it would otherwise render as a
+  dead download on the detail page. The server refuses a *present but invalid*
+  link outright (`previousVersionProblem`) rather than dropping it, because a
+  silent drop leaves the administrator believing the old build was saved; an
+  entirely blank row is not an error, since that is what the form's "Add version"
+  button inserts.
+- The admin form (`DownloadPlatformFields` in `verified-projects-page.tsx`) edits
+  rows and only posts the complete ones, and the page marks an incomplete row as
+  "not saved" while it is being typed.
+- `app-detail.tsx` renders the list through `previousVersionsFor`, never from the
+  raw blob, so a stored row the current rules would reject cannot appear. The list
+  is a collapsed `<details>` and renders nothing when empty, so a project without
+  an archive looks exactly as it did before the feature. A version is offered only
+  for a platform that has a current link — `allPlatformVersions` encodes that — and
+  the link is only ever opened, never rendered as text.
+
+`tests/download-links.test.mjs` drives both mirrors with the same table, so a
+change to one that is not made to the other fails.
 
 ## Auth architecture
 
