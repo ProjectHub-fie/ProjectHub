@@ -49,6 +49,12 @@ async function runMigration() {
         timeline text,
         team_size text,
         user_count text,
+        app_version text,
+        app_size text,
+        platforms text[],
+        requirements text[],
+        release_notes text,
+        screenshots text[],
         is_active boolean DEFAULT true NOT NULL,
         sort_order integer DEFAULT 0 NOT NULL,
         created_at timestamp DEFAULT now() NOT NULL,
@@ -57,6 +63,16 @@ async function runMigration() {
       )
     `;
     console.log('✅ verified_projects table created');
+
+    // App-store metadata for installable utilities, added after the table
+    // shipped so a pre-existing deployment gains the columns.
+    await client`ALTER TABLE verified_projects ADD COLUMN IF NOT EXISTS app_version text`;
+    await client`ALTER TABLE verified_projects ADD COLUMN IF NOT EXISTS app_size text`;
+    await client`ALTER TABLE verified_projects ADD COLUMN IF NOT EXISTS platforms text[]`;
+    await client`ALTER TABLE verified_projects ADD COLUMN IF NOT EXISTS requirements text[]`;
+    await client`ALTER TABLE verified_projects ADD COLUMN IF NOT EXISTS release_notes text`;
+    await client`ALTER TABLE verified_projects ADD COLUMN IF NOT EXISTS screenshots text[]`;
+    console.log('✅ verified_projects app columns');
 
     // Also patch users table
     await client`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_blocked boolean DEFAULT false NOT NULL`;

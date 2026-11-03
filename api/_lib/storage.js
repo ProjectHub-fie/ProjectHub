@@ -168,6 +168,12 @@ async function ensureTableAndSeed() {
         timeline text,
         team_size text,
         user_count text,
+        app_version text,
+        app_size text,
+        platforms text[],
+        requirements text[],
+        release_notes text,
+        screenshots text[],
         is_active boolean DEFAULT true NOT NULL,
         sort_order integer DEFAULT 0 NOT NULL,
         created_at timestamp DEFAULT now() NOT NULL,
@@ -175,6 +181,16 @@ async function ensureTableAndSeed() {
         CONSTRAINT verified_projects_slug_unique UNIQUE(slug)
       )
     `);
+
+    // App-store metadata for installable utilities. Added after the table
+    // shipped, so an existing deployment gains the columns here rather than
+    // failing on the first read that selects them.
+    await db.execute(sql`ALTER TABLE verified_projects ADD COLUMN IF NOT EXISTS app_version text`);
+    await db.execute(sql`ALTER TABLE verified_projects ADD COLUMN IF NOT EXISTS app_size text`);
+    await db.execute(sql`ALTER TABLE verified_projects ADD COLUMN IF NOT EXISTS platforms text[]`);
+    await db.execute(sql`ALTER TABLE verified_projects ADD COLUMN IF NOT EXISTS requirements text[]`);
+    await db.execute(sql`ALTER TABLE verified_projects ADD COLUMN IF NOT EXISTS release_notes text`);
+    await db.execute(sql`ALTER TABLE verified_projects ADD COLUMN IF NOT EXISTS screenshots text[]`);
 
     // Check if empty and seed if so
     const count = await db.execute(sql`SELECT COUNT(*) as cnt FROM verified_projects`);
