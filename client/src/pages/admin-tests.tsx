@@ -57,6 +57,7 @@ type TestRun = {
   summary: { tests: number | null; pass: number | null; fail: number | null; skipped: number | null };
   failures: string[];
   output: string;
+  resultsUnavailable?: boolean;
   poll: { intervalMs: number; timeoutMs: number };
 };
 
@@ -125,11 +126,18 @@ export default function AdminTestsPage() {
       }
       return body;
     },
-    // While a run is active the page polls; otherwise a status refresh is cheap
-    // but polling it is waste.
+    // While a run is active the page polls; a run that is terminal but whose
+    // summary has not been read yet keeps polling too, because the artifact can
+    // appear a moment after the run completes. Once the results are in, polling
+    // stops.
     refetchInterval: (query) => {
       const active = query.state.data?.activeRun;
-      return active && !active.completed ? (active.poll.intervalMs || 4000) : false;
+      if (active && !active.completed) return active.poll.intervalMs || 4000;
+      const last = query.state.data?.lastRun;
+      if (!active && last?.completed && last.resultsUnavailable) {
+        return last.poll?.intervalMs || 4000;
+      }
+      return false;
     },
   });
 
@@ -274,11 +282,26 @@ export default function AdminTestsPage() {
             </div>
             <CardDescription>
               {shown.completed
-                ? `Node test runner finished with ${shown.conclusion ?? "unknown conclusion"}.`
+                ? shown.resultsUnavailable
+                  ? "The run finished, but its test summary could not be read from GitHub."
+                  : `Node test runner finished with ${shown.conclusion ?? "unknown conclusion"}.`
                 : "Docker execution runs on GitHub Actions; the dashboard polls until it finishes."}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">
+            {shown.resultsUnavailable && (
+              <div
+                className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-400"
+                data-testid="tests-results-unavailable"
+              >
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+                <span>
+                  The run's conclusion is above, but its per-test counts are not available. The
+                  TAP artifact may have expired, or the job log could not be read. Open the GitHub
+                  run for the full output.
+                </span>
+              </div>
+            )}
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <StatTile label="Tests" value={shown.summary.tests} tone="neutral" />
               <StatTile label="Passed" value={shown.summary.pass} tone="ok" />

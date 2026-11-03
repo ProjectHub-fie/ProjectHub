@@ -28,6 +28,9 @@ export const MEGA_DOWNLOAD_HOSTS = [
 
 export const DOWNLOAD_PLATFORMS = ["android", "windows"];
 
+/** Upper bound on stored previous versions per platform, so the blob stays bounded. */
+export const MAX_PREVIOUS_VERSIONS = 20;
+
 const MEGA_ID = "[A-Za-z0-9_-]{6,}";
 const MEGA_FILE_PATH = new RegExp(`^/(file|folder|embed)/${MEGA_ID}/?$`);
 const MEGA_LEGACY_HASH = new RegExp(`^#!${MEGA_ID}!${MEGA_ID}$`);
@@ -107,6 +110,9 @@ export function sha256Problem(value) {
  * Keeps only the fields and platforms this module understands, trimmed, with
  * empty strings dropped. An unrecognised platform key is discarded rather than
  * stored, so a payload cannot widen the shape the detail page reads.
+ *
+ * A previous version survives only with both a version label and a valid MEGA
+ * link, which is what stops a half-filled row from rendering as a dead download.
  */
 export function normalizeDownloadDetails(value) {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
@@ -131,7 +137,54 @@ export function normalizeDownloadDetails(value) {
       detail.sha256 = checksum.trim().toLowerCase();
     }
 
+    const previous = normalizePreviousVersions(entry.previousVersions);
+    if (previous.length > 0) detail.previousVersions = previous;
+
     if (Object.keys(detail).length > 0) result[platform] = detail;
+  }
+
+  return result;
+}
+
+/**
+ * Keeps the previous-version entries that are complete, in order, capped.
+ *
+ * A URL that fails validation drops the whole entry rather than being stored
+ * empty: the entry exists to be downloaded, so an unusable link makes it noise.
+ * The same rule is written in `client/src/lib/download-links.ts`, and
+ * `tests/download-links.test.mjs` drives both with one table so they cannot
+ * drift. No branch puts the input URL into a returned value.
+ */
+export function normalizePreviousVersions(value) {
+  if (!Array.isArray(value)) return [];
+
+  const result = [];
+
+  for (const entry of value) {
+    if (result.length >= MAX_PREVIOUS_VERSIONS) break;
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
+
+    const version = typeof entry.version === "string" ? entry.version.trim() : "";
+    if (!version) continue;
+
+    const link = validateMegaDownloadUrl(entry.url);
+    if (!link.valid || !link.url) continue;
+
+    const item = { version, url: link.url };
+
+    for (const field of ["packageName", "size", "releaseDate"]) {
+      const fieldValue = entry[field];
+      if (typeof fieldValue !== "string") continue;
+      const trimmed = fieldValue.trim();
+      if (trimmed) item[field] = trimmed;
+    }
+
+    const checksum = entry.sha256;
+    if (typeof checksum === "string" && !sha256Problem(checksum)) {
+      item.sha256 = checksum.trim().toLowerCase();
+    }
+
+    result.push(item);
   }
 
   return result;
@@ -154,6 +207,12 @@ export function validateDownloadFields(data) {
   const windowsProblem = downloadUrlProblem(data.windowsDownloadUrl);
   if (windowsProblem) return { problem: `Windows download link: ${windowsProblem}` };
 
+  // A previous version's link is checked with the same rule as the current one,
+  // and a bad one is reported rather than dropped. Silently discarding the row
+  // would leave the administrator believing the old build was saved.
+  const previousProblem = previousVersionProblem(data.downloadDetails);
+  if (previousProblem) return { problem: previousProblem };
+
   const result = {};
 
   if (Object.prototype.hasOwnProperty.call(data, "androidDownloadUrl")) {
@@ -169,6 +228,45 @@ export function validateDownloadFields(data) {
   }
 
   return result;
+}
+
+/**
+ * The first refused previous-version link, or null when all are acceptable.
+ *
+ * Only the link is refused here; a row with no version label is dropped by the
+ * normaliser, because that is an incomplete row rather than an unsafe one. The
+ * message names the platform and the position so the administrator can find the
+ * row, and never includes the URL — it carries a decryption key.
+ */
+export function previousVersionProblem(downloadDetails) {
+  if (!downloadDetails || typeof downloadDetails !== "object") return null;
+
+  for (const platform of DOWNLOAD_PLATFORMS) {
+    const entry = downloadDetails[platform];
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) continue;
+
+    const previous = entry.previousVersions;
+    if (!Array.isArray(previous)) continue;
+
+    for (let index = 0; index < previous.length; index += 1) {
+      const row = previous[index];
+      if (!row || typeof row !== "object" || Array.isArray(row)) continue;
+
+      // An entirely blank row is what the form adds before anything is typed,
+      // so it is not an error.
+      const label = typeof row.version === "string" ? row.version.trim() : "";
+      const rawUrl = typeof row.url === "string" ? row.url.trim() : "";
+      if (!label && !rawUrl) continue;
+
+      const reason = downloadUrlProblem(row.url);
+      if (reason) {
+        const name = platform === "windows" ? "Windows" : "Android";
+        return `${name} previous version ${index + 1}: ${reason}`;
+      }
+    }
+  }
+
+  return null;
 }
 
 /**

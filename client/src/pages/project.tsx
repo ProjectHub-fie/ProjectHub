@@ -39,7 +39,7 @@ interface Project {
   screenshots?: string[] | null;
   androidDownloadUrl?: string | null;
   windowsDownloadUrl?: string | null;
-  downloadDetails?: Record<string, Record<string, string>> | null;
+  downloadDetails?: Record<string, Record<string, unknown>> | null;
   githubReleasesFallback?: boolean | null;
   createdAt: string;
   updatedAt: string;

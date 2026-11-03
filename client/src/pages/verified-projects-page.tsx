@@ -14,7 +14,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Loader2, Plus, Trash2, Search, CheckCircle, Pencil, Globe, Github, Upload, X, ImageIcon, Smartphone, Monitor, AlertCircle } from "lucide-react";
-import { downloadUrlProblem, sha256Problem, MEGA_DOWNLOAD_HOSTS } from "@/lib/download-links";
+import { downloadUrlProblem, sha256Problem, MEGA_DOWNLOAD_HOSTS, MAX_PREVIOUS_VERSIONS } from "@/lib/download-links";
 
 const CATEGORIES = ["websites", "bots", "utilities"] as const;
 const STATUSES = ["active", "developing", "live", "beta", "archived"] as const;
@@ -66,9 +66,37 @@ type FormData = {
   windowsPackageName: string;
   windowsSha256: string;
   windowsReleaseDate: string;
+  /** Editable rows for the superseded builds of each platform. */
+  androidPreviousVersions: PreviousVersionRow[];
+  windowsPreviousVersions: PreviousVersionRow[];
   githubReleasesFallback: boolean;
   isActive: boolean;
   sortOrder: number;
+};
+
+/**
+ * One editable previous-version row.
+ *
+ * Every field is a string, including the ones the API stores as trimmed text, so
+ * the inputs stay controlled and a half-typed value is never coerced. The URL is
+ * held in state and validated on change; it is never rendered back to the page.
+ */
+type PreviousVersionRow = {
+  version: string;
+  url: string;
+  packageName: string;
+  size: string;
+  releaseDate: string;
+  sha256: string;
+};
+
+const emptyPreviousVersionRow: PreviousVersionRow = {
+  version: "",
+  url: "",
+  packageName: "",
+  size: "",
+  releaseDate: "",
+  sha256: "",
 };
 
 const emptyForm: FormData = {
@@ -104,6 +132,8 @@ const emptyForm: FormData = {
   windowsPackageName: "",
   windowsSha256: "",
   windowsReleaseDate: "",
+  androidPreviousVersions: [],
+  windowsPreviousVersions: [],
   githubReleasesFallback: false,
   isActive: true,
   sortOrder: 0,
@@ -138,26 +168,101 @@ function platformDetailField(
  * Only the platforms that have a link are written: facts for a platform with no
  * installer would never be shown, and keeping them would mean a stale package
  * name reappearing if the link is removed and added back.
+ *
+ * A previous-version row is written only when it is complete — a version label
+ * and a valid MEGA link. An incomplete row is dropped here rather than posted,
+ * because the server refuses a bad link outright and a blank row is not an error
+ * the administrator should see.
  */
-function buildDownloadDetails(f: FormData): Record<string, Record<string, string>> | null {
-  const details: Record<string, Record<string, string>> = {};
+function buildDownloadDetails(f: FormData): Record<string, unknown> | null {
+  const details: Record<string, unknown> = {};
 
-  const add = (platform: "android" | "windows", packageName: string, sha256: string, releaseDate: string) => {
-    const entry: Record<string, string> = {};
+  const add = (
+    platform: "android" | "windows",
+    packageName: string,
+    sha256: string,
+    releaseDate: string,
+    previous: PreviousVersionRow[],
+  ) => {
+    const entry: Record<string, unknown> = {};
     if (packageName.trim()) entry.packageName = packageName.trim();
     if (releaseDate.trim()) entry.releaseDate = releaseDate.trim();
     if (sha256.trim()) entry.sha256 = sha256.trim().toLowerCase();
+
+    const rows = previous
+      .filter((row) => row.version.trim() && downloadUrlProblem(row.url) === null && row.url.trim())
+      .map((row) => {
+        const item: Record<string, string> = {
+          version: row.version.trim(),
+          url: row.url.trim(),
+        };
+        if (row.packageName.trim()) item.packageName = row.packageName.trim();
+        if (row.size.trim()) item.size = row.size.trim();
+        if (row.releaseDate.trim()) item.releaseDate = row.releaseDate.trim();
+        if (row.sha256.trim()) item.sha256 = row.sha256.trim().toLowerCase();
+        return item;
+      });
+
+    if (rows.length > 0) entry.previousVersions = rows;
+
     if (Object.keys(entry).length > 0) details[platform] = entry;
   };
 
   if (f.androidDownloadUrl.trim()) {
-    add("android", f.androidPackageName, f.androidSha256, f.androidReleaseDate);
+    add(
+      "android",
+      f.androidPackageName,
+      f.androidSha256,
+      f.androidReleaseDate,
+      f.androidPreviousVersions,
+    );
   }
   if (f.windowsDownloadUrl.trim()) {
-    add("windows", f.windowsPackageName, f.windowsSha256, f.windowsReleaseDate);
+    add(
+      "windows",
+      f.windowsPackageName,
+      f.windowsSha256,
+      f.windowsReleaseDate,
+      f.windowsPreviousVersions,
+    );
   }
 
   return Object.keys(details).length > 0 ? details : null;
+}
+
+/**
+ * Reads the stored previous-version rows back into the form.
+ *
+ * Anything that is not a usable row is skipped rather than shown as an empty
+ * input, so the form shows what the detail page would show. The URL is read for
+ * editing only; it is never rendered as text.
+ */
+function previousVersionRows(p: VerifiedProject, platform: "android" | "windows"): PreviousVersionRow[] {
+  const details = p.downloadDetails;
+  if (!details || typeof details !== "object") return [];
+
+  const entry = (details as Record<string, Record<string, unknown>>)[platform];
+  const previous = entry?.previousVersions;
+  if (!Array.isArray(previous)) return [];
+
+  return previous.flatMap((row) => {
+    if (!row || typeof row !== "object" || Array.isArray(row)) return [];
+    const raw = row as Record<string, unknown>;
+    const version = typeof raw.version === "string" ? raw.version : "";
+    const url = typeof raw.url === "string" ? raw.url : "";
+    if (!version.trim() && !url.trim()) return [];
+    const text = (field: string) => (typeof raw[field] === "string" ? (raw[field] as string) : "");
+    return [
+      {
+        version,
+        url,
+        packageName: text("packageName"),
+        size: text("size"),
+        releaseDate: text("releaseDate"),
+        sha256: text("sha256"),
+      },
+    ];
+  });
 }
 
 function projectToForm(p: VerifiedProject): FormData {
@@ -197,6 +302,8 @@ function projectToForm(p: VerifiedProject): FormData {
     windowsPackageName: platformDetailField(p, "windows", "packageName"),
     windowsSha256: platformDetailField(p, "windows", "sha256"),
     windowsReleaseDate: platformDetailField(p, "windows", "releaseDate"),
+    androidPreviousVersions: previousVersionRows(p, "android"),
+    windowsPreviousVersions: previousVersionRows(p, "windows"),
     githubReleasesFallback: p.githubReleasesFallback === true,
     isActive: p.isActive,
     sortOrder: p.sortOrder,
@@ -259,6 +366,7 @@ function DownloadPlatformFields({
   packageName,
   sha256,
   releaseDate,
+  previousVersions,
   onChange,
 }: {
   platform: "android" | "windows";
@@ -267,6 +375,7 @@ function DownloadPlatformFields({
   packageName: string;
   sha256: string;
   releaseDate: string;
+  previousVersions: PreviousVersionRow[];
   onChange: (patch: Partial<FormData>) => void;
 }) {
   const label = platform === "windows" ? "Windows" : "Android";
@@ -279,7 +388,22 @@ function DownloadPlatformFields({
     packageName: platform === "windows" ? "windowsPackageName" : "androidPackageName",
     sha256: platform === "windows" ? "windowsSha256" : "androidSha256",
     releaseDate: platform === "windows" ? "windowsReleaseDate" : "androidReleaseDate",
+    previousVersions: platform === "windows" ? "windowsPreviousVersions" : "androidPreviousVersions",
   } as const;
+
+  const setRows = (rows: PreviousVersionRow[]) => {
+    onChange({ [fields.previousVersions]: rows } as Partial<FormData>);
+  };
+
+  const updateRow = (index: number, patch: Partial<PreviousVersionRow>) => {
+    setRows(previousVersions.map((row, i) => (i === index ? { ...row, ...patch } : row)));
+  };
+
+  const addRow = () => setRows([...previousVersions, { ...emptyPreviousVersionRow }]);
+
+  const removeRow = (index: number) => {
+    setRows(previousVersions.filter((_, i) => i !== index));
+  };
 
   return (
     <div
@@ -360,6 +484,163 @@ function DownloadPlatformFields({
             </p>
           )}
         </div>
+      </div>
+
+      {/* Previous versions. A row is complete only with a version label and a
+          valid MEGA link; an incomplete row is simply not saved, so a half-typed
+          row never becomes a dead download on the detail page. */}
+      <div className="space-y-2 border-t pt-3" data-testid={`section-previous-versions-${platform}`}>
+        <div className="flex items-center justify-between gap-2">
+          <Label className="text-xs font-semibold">Previous versions</Label>
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            className="h-7 text-xs"
+            onClick={addRow}
+            disabled={!url.trim() || previousVersions.length >= MAX_PREVIOUS_VERSIONS}
+            data-testid={`button-add-previous-version-${platform}`}
+          >
+            <Plus className="h-3 w-3 mr-1" />
+            Add version
+          </Button>
+        </div>
+
+        {!url.trim() ? (
+          <p className="text-xs text-muted-foreground">
+            Set the current {label} download link first — previous versions are only shown alongside it.
+          </p>
+        ) : previousVersions.length === 0 ? (
+          <p className="text-xs text-muted-foreground">
+            No older builds listed. Add one to keep an earlier release downloadable.
+          </p>
+        ) : (
+          <ul className="space-y-3">
+            {previousVersions.map((row, index) => {
+              const rowUrlProblem = row.url.trim() ? downloadUrlProblem(row.url) : null;
+              const rowChecksumProblem = row.sha256.trim() ? sha256Problem(row.sha256) : null;
+              const incomplete = !row.version.trim() || !row.url.trim();
+              return (
+                <li
+                  key={index}
+                  className="rounded-lg border p-3 space-y-2 bg-background"
+                  data-testid={`previous-version-row-${platform}-${index}`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-medium text-muted-foreground">
+                      Version {index + 1}
+                    </span>
+                    {incomplete && (
+                      <Badge variant="outline" className="text-[10px]">
+                        Incomplete — not saved
+                      </Badge>
+                    )}
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="ml-auto h-7 text-xs text-red-500"
+                      onClick={() => removeRow(index)}
+                      data-testid={`button-remove-previous-version-${platform}-${index}`}
+                    >
+                      <Trash2 className="h-3 w-3 mr-1" />
+                      Remove
+                    </Button>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <Label htmlFor={`vp-${platform}-prev-${index}-version`}>Version</Label>
+                      <Input
+                        id={`vp-${platform}-prev-${index}-version`}
+                        value={row.version}
+                        onChange={(e) => updateRow(index, { version: e.target.value })}
+                        placeholder="1.0.0"
+                        data-testid={`input-previous-version-${platform}-${index}-version`}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor={`vp-${platform}-prev-${index}-date`}>Release date</Label>
+                      <Input
+                        id={`vp-${platform}-prev-${index}-date`}
+                        value={row.releaseDate}
+                        onChange={(e) => updateRow(index, { releaseDate: e.target.value })}
+                        placeholder="2025-11-02"
+                        data-testid={`input-previous-version-${platform}-${index}-release-date`}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <Label htmlFor={`vp-${platform}-prev-${index}-url`}>MEGA download URL</Label>
+                    <Input
+                      id={`vp-${platform}-prev-${index}-url`}
+                      value={row.url}
+                      onChange={(e) => updateRow(index, { url: e.target.value })}
+                      placeholder={example}
+                      aria-invalid={rowUrlProblem ? true : undefined}
+                      className={rowUrlProblem ? "border-red-500 focus-visible:ring-red-500" : undefined}
+                      data-testid={`input-previous-version-${platform}-${index}-url`}
+                    />
+                    {rowUrlProblem && (
+                      <p
+                        className="text-xs text-red-500 flex items-center gap-1"
+                        data-testid={`error-previous-version-${platform}-${index}-url`}
+                      >
+                        <AlertCircle className="h-3 w-3" />
+                        {rowUrlProblem}
+                      </p>
+                    )}
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <div className="space-y-1">
+                      <Label htmlFor={`vp-${platform}-prev-${index}-package`}>Package name</Label>
+                      <Input
+                        id={`vp-${platform}-prev-${index}-package`}
+                        value={row.packageName}
+                        onChange={(e) => updateRow(index, { packageName: e.target.value })}
+                        placeholder={platform === "windows" ? "ClearCut-Setup-1.0.0.exe" : "clearcut-1.0.0.apk"}
+                        data-testid={`input-previous-version-${platform}-${index}-package-name`}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor={`vp-${platform}-prev-${index}-size`}>Size</Label>
+                      <Input
+                        id={`vp-${platform}-prev-${index}-size`}
+                        value={row.size}
+                        onChange={(e) => updateRow(index, { size: e.target.value })}
+                        placeholder="24.5 MB"
+                        data-testid={`input-previous-version-${platform}-${index}-size`}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor={`vp-${platform}-prev-${index}-sha256`}>SHA-256 checksum</Label>
+                      <Input
+                        id={`vp-${platform}-prev-${index}-sha256`}
+                        value={row.sha256}
+                        onChange={(e) => updateRow(index, { sha256: e.target.value })}
+                        placeholder="64 hex characters"
+                        aria-invalid={rowChecksumProblem ? true : undefined}
+                        className={rowChecksumProblem ? "border-red-500 focus-visible:ring-red-500" : undefined}
+                        data-testid={`input-previous-version-${platform}-${index}-sha256`}
+                      />
+                      {rowChecksumProblem && (
+                        <p
+                          className="text-xs text-red-500 flex items-center gap-1"
+                          data-testid={`error-previous-version-${platform}-${index}-sha256`}
+                        >
+                          <AlertCircle className="h-3 w-3" />
+                          {rowChecksumProblem}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </div>
     </div>
   );
@@ -923,6 +1204,7 @@ export default function VerifiedProjectsPage() {
               packageName={form.androidPackageName}
               sha256={form.androidSha256}
               releaseDate={form.androidReleaseDate}
+              previousVersions={form.androidPreviousVersions}
               onChange={(patch) => setForm(f => ({ ...f, ...patch }))}
             />
 
@@ -933,6 +1215,7 @@ export default function VerifiedProjectsPage() {
               packageName={form.windowsPackageName}
               sha256={form.windowsSha256}
               releaseDate={form.windowsReleaseDate}
+              previousVersions={form.windowsPreviousVersions}
               onChange={(patch) => setForm(f => ({ ...f, ...patch }))}
             />
 

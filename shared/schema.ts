@@ -103,8 +103,10 @@ export type InsertVerifiedProjectInput = {
   androidDownloadUrl?: string | null;
   windowsDownloadUrl?: string | null;
   // Per-platform package facts shown in the download dialog. Free-form because
-  // it is stored as jsonb and validated on write, not by this type.
-  downloadDetails?: Record<string, Record<string, string>> | null;
+  // it is stored as jsonb and validated on write, not by this type. A platform
+  // entry may also carry `previousVersions`, a list of superseded builds, each
+  // with its own MEGA link; `api/_lib/download-links.js` owns that shape.
+  downloadDetails?: Record<string, Record<string, unknown>> | null;
   // GitHub Releases is an opt-in fallback, never an implicit one.
   githubReleasesFallback?: boolean;
   isActive?: boolean;

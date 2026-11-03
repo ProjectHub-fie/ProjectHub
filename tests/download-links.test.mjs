@@ -321,3 +321,180 @@ test('the public read path is untouched by the new fields', () => {
     'the public handler must not filter project fields',
   );
 });
+
+/* ------------------------------------------------------- previous versions */
+
+/** A complete, valid previous-version row, with the marker key. */
+const prevRow = (version, overrides = {}) => ({
+  version,
+  url: `https://mega.nz/file/Old${version.replace(/\./g, '')}#${KEY}`,
+  packageName: `clearcut-${version}.apk`,
+  size: '2.1 MB',
+  releaseDate: '2025-01-05',
+  ...overrides,
+});
+
+test('previous versions are kept only when complete, and both mirrors agree', () => {
+  const input = {
+    android: {
+      packageName: 'current.apk',
+      previousVersions: [
+        prevRow('1.0.0'),
+        // No version label: an incomplete row, dropped by both.
+        { url: `https://mega.nz/file/NoLabel1#${KEY}` },
+        // Bad link: dropped by the normaliser (the API rejects it earlier).
+        { version: '0.9.0', url: 'https://evil.example/x' },
+        // A valid row with only the required fields.
+        { version: '0.8.0', url: `https://mega.nz/file/Minimal1#${KEY}` },
+        'not-an-object',
+        null,
+      ],
+    },
+  };
+
+  for (const [name, mod] of [['client', client], ['server', server]]) {
+    const details = mod.normalizeDownloadDetails(input);
+    const versions = details.android.previousVersions;
+    assert.equal(versions.length, 2, `${name} kept the wrong number of rows`);
+    assert.deepEqual(versions.map((v) => v.version), ['1.0.0', '0.8.0'], `${name} order must be preserved`);
+    assert.equal(versions[0].packageName, 'clearcut-1.0.0.apk', `${name} must keep the package name`);
+    assert.equal(versions[0].size, '2.1 MB');
+    assert.equal(versions[0].releaseDate, '2025-01-05');
+    assert.ok(!('packageName' in versions[1]), `${name} must not invent an absent field`);
+    // The bad URL never survives into the stored blob.
+    assert.ok(
+      !JSON.stringify(details).includes('evil.example'),
+      `${name} stored an unvalidated link`,
+    );
+  }
+});
+
+test('a previous version must carry a MEGA link, not just a version label', () => {
+  for (const [name, mod] of [['client', client], ['server', server]]) {
+    const details = mod.normalizeDownloadDetails({
+      windows: { previousVersions: [{ version: '1.0.0' }, { version: '2.0.0', url: '   ' }] },
+    });
+    assert.equal(
+      details.windows?.previousVersions,
+      undefined,
+      `${name} kept a version row with no downloadable link`,
+    );
+  }
+});
+
+test('previous versions are capped, and the cap is the same on both sides', () => {
+  assert.equal(client.MAX_PREVIOUS_VERSIONS, server.MAX_PREVIOUS_VERSIONS, 'the caps must not drift');
+
+  const many = Array.from({ length: client.MAX_PREVIOUS_VERSIONS + 5 }, (_, i) =>
+    prevRow(`1.0.${i}`, { url: `https://mega.nz/file/Row${i}abcd#${KEY}` }),
+  );
+
+  for (const [name, mod] of [['client', client], ['server', server]]) {
+    const details = mod.normalizeDownloadDetails({ android: { previousVersions: many } });
+    assert.equal(
+      details.android.previousVersions.length,
+      mod.MAX_PREVIOUS_VERSIONS,
+      `${name} must cap the stored list`,
+    );
+  }
+});
+
+test('the API refuses a bad previous-version link rather than dropping it silently', () => {
+  const good = `https://mega.nz/file/AbCdEf12#${KEY}`;
+
+  const bad = server.validateDownloadFields({
+    downloadDetails: { android: { previousVersions: [{ version: '1.0.0', url: 'https://evil.example/x' }] } },
+  });
+  assert.match(bad.problem, /^Android previous version 1:/, 'the problem must name the platform and position');
+  assert.ok(!bad.problem.includes('evil.example'), 'the problem must never echo the link');
+  assert.ok(!bad.problem.includes(KEY), 'the problem must never echo the decryption key');
+
+  const badWindows = server.validateDownloadFields({
+    downloadDetails: {
+      windows: { previousVersions: [{ version: '1.0.0', url: good }, { version: '0.9.0', url: 'http://mega.nz/file/x#y' }] },
+    },
+  });
+  assert.match(badWindows.problem, /^Windows previous version 2:/, 'the position must be one-based and accurate');
+
+  // A blank row is what the form adds before anything is typed, so it is not an
+  // error — otherwise "Add version" would block the save on its own.
+  const blank = server.validateDownloadFields({
+    downloadDetails: { android: { previousVersions: [{ version: '', url: '' }] } },
+  });
+  assert.equal(blank.problem, undefined);
+
+  const ok = server.validateDownloadFields({
+    downloadDetails: { android: { previousVersions: [prevRow('1.0.0')] } },
+  });
+  assert.equal(ok.problem, undefined);
+  assert.equal(ok.downloadDetails.android.previousVersions[0].url, prevRow('1.0.0').url);
+});
+
+test('a previous version survives a round trip through the API and the normaliser', () => {
+  // This is the shape the dashboard posts and the detail page reads. If the
+  // server dropped `previousVersions` on write, the page would silently show
+  // nothing and no test above would notice.
+  const row = prevRow('1.0.0');
+  const accepted = server.validateDownloadFields({
+    androidDownloadUrl: `https://mega.nz/file/Curr1abcd#${KEY}`,
+    downloadDetails: { android: { packageName: 'current.apk', previousVersions: [row] } },
+  });
+
+  assert.equal(accepted.problem, undefined);
+  const stored = accepted.downloadDetails.android;
+  assert.equal(stored.previousVersions.length, 1);
+  assert.equal(stored.previousVersions[0].version, '1.0.0');
+  assert.equal(stored.previousVersions[0].url, row.url);
+
+  // The client reads the stored blob back into the rows the form edits.
+  const detail = client.normalizeDownloadDetails(accepted.downloadDetails);
+  assert.equal(detail.android.previousVersions[0].version, '1.0.0');
+});
+
+test('the detail page shows an archive only for a platform that has a current link', () => {
+  const project = {
+    androidDownloadUrl: `https://mega.nz/file/Curr1abcd#${KEY}`,
+    downloadDetails: {
+      android: { previousVersions: [prevRow('1.0.0'), prevRow('0.9.0')] },
+      // No windows link, so the windows archive must not be offered.
+      windows: { previousVersions: [prevRow('2.0.0', { url: `https://mega.nz/file/Win11111#${KEY}` })] },
+    },
+  };
+
+  assert.equal(client.previousVersionsFor(project, 'android').length, 2);
+  assert.equal(client.previousVersionsFor(project, 'windows').length, 1, 'the helper reads the row itself');
+
+  // The page only renders the archive inside a card, and a card exists only for
+  // a platform with a link. `allPlatformVersions` encodes that rule.
+  assert.equal(client.allPlatformVersions(project, 'android').length, 3, 'current build plus two archives');
+  assert.equal(client.allPlatformVersions(project, 'windows').length, 0, 'no current link, no archive offered');
+});
+
+test('the admin form builds only complete previous-version rows', () => {
+  // The builder is read from source, the way `client-auth.test.mjs` reads page
+  // invariants, because the module is a page and has no DOM to render into.
+  const page = source('client/src/pages/verified-projects-page.tsx');
+
+  // A row is filtered on a version label, a non-empty URL and a passing link.
+  assert.match(page, /previousVersions: platform === "windows"/, 'the form must key rows by platform');
+  assert.match(
+    page,
+    /row\.version\.trim\(\) && downloadUrlProblem\(row\.url\) === null/,
+    'an incomplete row must be dropped before it is posted',
+  );
+  assert.match(page, /emptyPreviousVersionRow/, 'the Add button must start a blank row');
+});
+
+test('the detail page renders previous versions through the validated helper', () => {
+  const detail = source('client/src/components/app-detail.tsx');
+
+  // The list comes from the helper, never from the raw blob, so the page cannot
+  // show a row the current rules would reject.
+  assert.match(detail, /previousVersionsFor\(project, card\.platform\)/);
+  assert.match(detail, /data-testid=\{`previous-versions-\$\{platform\}`\}/);
+  // The link carries the decryption key, so it must be opened, never rendered.
+  assert.ok(
+    !/entry\.url\s*</.test(detail) && !/\{entry\.url\}/.test(detail),
+    'the archive link must not be rendered as text',
+  );
+});

@@ -99,7 +99,7 @@ const SEED_PROJECTS = [
     features: ["Real-time SQL query editor", "Schema explorer", "Data export"],
     highlights: ["Supports large-scale PostgreSQL instances", "Secure connection management"],
     liveUrl: null,
-    githubUrl: "https://github.com/ProjectHub-fie/Database-web",
+    githubUrl: "https://github.com/ProjectHub-fie/Database-dashboard",
     status: "developing",
     authorName: "Raj Roy",
     architecture: "Client-server architecture utilizing direct PostgreSQL connection protocols.",

@@ -158,7 +158,7 @@ const seedProjects = [
       "Optimized for high-concurrency database operations",
       "Secure connection management with encryption"
     ],
-    githubUrl: "https://github.com/ProjectHub-fie/Database-web",
+    githubUrl: "https://github.com/ProjectHub-fie/Database-dashboard",
     status: "developing",
     authorName: "Raj Roy",
     architecture: "Client-server architecture utilizing direct PostgreSQL connection protocols via secured tunneling for real-time data visualization.",
