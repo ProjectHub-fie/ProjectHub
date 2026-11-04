@@ -1,6 +1,6 @@
 /**
- * Admin route that runs the repository's test suite on GitHub Actions instead
- * of on the server that hosts this code.
+ * Admin route that runs a connected repository's test suite on GitHub Actions
+ * instead of on the server that hosts this code.
  *
  * ## Why GitHub Actions
  *
@@ -8,22 +8,24 @@
  * `docker run`. Vercel serverless functions cannot do either reliably:
  * `tests/` is listed in `.vercelignore` so it is absent from the deployed
  * bundle, there is no Docker daemon to use, and the function is capped at 30s by
- * `vercel.json`. The dashboard
- * now delegates the run to a GitHub Actions workflow
- * (`.github/workflows/docker-tests.yml`), which checks out the repository with
- * `tests/` present and runs the existing `docker compose --profile tests run
- * --rm --build tests` service. Vercel never builds images, never runs `docker`,
- * and never touches a Docker daemon.
+ * `vercel.json`. The dashboard now delegates the run to a GitHub Actions
+ * workflow on the target repository. ProjectHub uses its own
+ * `.github/workflows/docker-tests.yml`, which runs its existing
+ * `docker compose --profile tests run --rm --build tests` service. PrimeBot
+ * uses a plain Node workflow (`primebot-tests.yml`) whose runner installs
+ * dependencies and executes `npm test`. Vercel never builds images, never runs
+ * `docker`, and never touches a Docker daemon.
  *
  * ## What this endpoint can do
  *
- * It can dispatch exactly one workflow file from configuration and poll for the
- * run GitHub associates with it. No request field names a workflow, a branch, a
- * shell command or a test path: everything comes from `process.env` defaults in
- * this module. The `request_id` is generated server-side, sent as the workflow
- * input, and used to pick *this* run out of recent ones (the dispatch endpoint
- * answers 204 with no run id). Access is owner-only — the same class of guard as
- * the admin-management routes.
+ * It can dispatch one of the workflows listed in `REPOSITORY_PROFILES` and poll
+ * for the run GitHub associates with it. No request field names a workflow, a
+ * branch, a shell command or a test path: the owner selects a repository *id*
+ * from the fixed registry, and everything else (workflow file, branch, command)
+ * comes from this module. The `request_id` is generated server-side, sent as
+ * the workflow input, and used to pick *this* run out of recent ones (the
+ * dispatch endpoint answers 204 with no run id). Access is owner-only — the
+ * same class of guard as the admin-management routes.
  *
  * ## Why not a local process
  *
@@ -58,14 +60,60 @@ export function getConfig() {
   return {
     /** The token TTL is outside this module; the failure mode is a clear 403. */
     token: process.env.GITHUB_ACTIONS_TOKEN || process.env.GITHUB_TOKEN || '',
-    repository: process.env.GITHUB_REPOSITORY || 'ProjectHub-fie/ProjectHub',
-    workflowFile: process.env.GITHUB_WORKFLOW_FILE || 'docker-tests.yml',
+    // Repository profiles are picked by id (see REPOSITORY_PROFILES). The
+    // env-var overrides exist so a self-hosted dashboard, a test harness and
+    // the dev server can point at a single repository without editing this
+    // module; passing nothing selects the ProjectHub profile. The field is
+    // still called `repositoryId` and never `repository` so the request can
+    // never name a target repository on the wire.
+    repositoryId: process.env.TEST_REPO || 'projecthub',
     branch: process.env.GITHUB_WORKFLOW_BRANCH || 'main',
     /** How long the dashboard keeps polling before reporting a timeout. */
     timeoutMs: Number(process.env.TEST_RUN_TIMEOUT_MS || 15 * 60 * 1000),
     /** How often the status route is allowed as a poll. */
     pollIntervalMs: Number(process.env.TEST_RUN_POLL_MS || 3_000),
   };
+}
+
+/**
+ * The repositories the test console can run, kept in one place.
+ *
+ * Adding a repository is a code change in this module, never a request field.
+ * Each profile knows the GitHub repo, the workflow that runs the suite, the
+ * branch to dispatch against, whether that workflow lands on a Docker Tests
+ * run-name family, and the command the workflow effectively runs (shown on the
+ * dashboard and used as the poll-matching hint).
+ *
+ * Every profile is a "which repository to test" choice, not a command string:
+ * nothing from these field values is ever interpolated as shell, and no request
+ * can add a profile.
+ */
+export const REPOSITORY_PROFILES = {
+  /** The ProjectHub monorepo — its own Docker compose suite. */
+  projecthub: {
+    repository: 'ProjectHub-fie/ProjectHub',
+    workflowFile: 'docker-tests.yml',
+    displayName: 'ProjectHub',
+    testRunner: 'docker',
+    runName: 'Docker tests',
+    command: 'docker compose --profile tests run --rm --build tests',
+    suiteGlob: 'tests/*.test.mjs',
+  },
+  /** PrimeBot — pure Node test script, no Docker needed. */
+  primebot: {
+    repository: 'ProjectHub-fie/PrimeBot',
+    workflowFile: 'primebot-tests.yml',
+    displayName: 'PrimeBot',
+    testRunner: 'node',
+    runName: 'PrimeBot tests',
+    command: 'npm test',
+    suiteGlob: 'tests/*.test.js',
+  },
+};
+
+/** Resolves an env/request-safe repository id to its profile (or null). */
+export function profileFor(repositoryId) {
+  return REPOSITORY_PROFILES[repositoryId] || null;
 }
 
 /** Rejects if `promise` has not settled within `ms`, without cancelling it. */
@@ -86,11 +134,14 @@ function withTimeout(promise, ms) {
 }
 
 /** Fields a status response may include, with a safe fallback for partial data. */
-const STATUS_COMMON = {
-  runner: 'github-actions',
-  /** The workflow uses the repo's own compose defaults for its Postgres. */
-  usesComposeDb: true,
-};
+function statusCommon() {
+  const profile = profileFor(getConfig().repositoryId);
+  return {
+    runner: 'github-actions',
+    /** The ProjectHub workflow uses the compose database; PrimeBot's does not. */
+    usesComposeDb: profile?.testRunner === 'docker',
+  };
+}
 
 /** How much raw TAP output is kept for the dashboard's "Raw output" panel. */
 const MAX_OUTPUT_CHARS = 60_000;
@@ -250,9 +301,9 @@ export function readZipEntry(buffer, entryName) {
  * Best effort by design: a missing or expired artifact, or a GitHub error, must
  * not fail the status route. The caller falls back to the job log.
  */
-async function fetchArtifactResults(runId, { signal } = {}) {
-  const { repository } = getConfig();
-  const listUrl = `https://api.github.com/repos/${repository}/actions/runs/${runId}/artifacts`;
+async function fetchArtifactResults(runId, { signal } = {}, profile = profileFor(getConfig().repositoryId)) {
+  if (!profile) return null;
+  const listUrl = `https://api.github.com/repos/${profile.repository}/actions/runs/${runId}/artifacts`;
 
   const listResponse = await githubFetch(listUrl, { headers: apiHeaders(), signal });
   if (!listResponse.ok) return null;
@@ -266,7 +317,7 @@ async function fetchArtifactResults(runId, { signal } = {}) {
   if (!artifact) return null;
 
   const zipResponse = await githubFetch(
-    `https://api.github.com/repos/${repository}/actions/artifacts/${artifact.id}/zip`,
+    `https://api.github.com/repos/${profile.repository}/actions/artifacts/${artifact.id}/zip`,
     { headers: apiHeaders(), signal },
   );
   if (!zipResponse.ok) return null;
@@ -285,10 +336,10 @@ async function fetchArtifactResults(runId, { signal } = {}) {
  * found no file, but the log is retained with the run. It is the same TAP
  * stream, prefixed by the runner's step banners, which `parseTap` ignores.
  */
-async function fetchJobLogResults(runId, { signal } = {}) {
-  const { repository } = getConfig();
+async function fetchJobLogResults(runId, { signal } = {}, profile = profileFor(getConfig().repositoryId)) {
+  if (!profile) return null;
   const jobsResponse = await githubFetch(
-    `https://api.github.com/repos/${repository}/actions/runs/${runId}/jobs`,
+    `https://api.github.com/repos/${profile.repository}/actions/runs/${runId}/jobs`,
     { headers: apiHeaders(), signal },
   );
   if (!jobsResponse.ok) return null;
@@ -372,16 +423,16 @@ function shapeRun(raw) {
  *
  * `per_page` stays at 20 and the search walks at most five pages; the dashboard
  * is the only trigger, so the matching run is normally the newest. It stops
- * paging as soon as a page no longer contains Docker-tests runs.
+ * paging as soon as a page no longer contains this profile's run-name.
  */
-async function findRunByRequestId(requestId, { signal }) {
-  const { repository, workflowFile } = getConfig();
+async function findRunByRequestId(requestId, { signal }, profile = profileFor(getConfig().repositoryId)) {
+  if (!profile) return null;
   const params = new URLSearchParams({
     per_page: '20',
     event: 'workflow_dispatch',
   });
-  const workflow = encodeURIComponent(workflowFile);
-  const url = `https://api.github.com/repos/${repository}/actions/workflows/${workflow}/runs?${params}`;
+  const workflow = encodeURIComponent(profile.workflowFile);
+  const url = `https://api.github.com/repos/${profile.repository}/actions/workflows/${workflow}/runs?${params}`;
 
   for (let page = 1; page <= 5; page += 1) {
     const response = await githubFetch(`${url}&page=${page}`, { headers: apiHeaders(), signal });
@@ -402,9 +453,10 @@ async function findRunByRequestId(requestId, { signal }) {
     const runs = body.workflow_runs || [];
     const match = runs.find((run) => run.display_title && run.display_title.includes(requestId));
     if (match) return shapeRun(match);
-    // Stop paginating as soon as a page has no recent candidates left.
+    // Stop paginating as soon as a page has no recent candidates left: a page
+    // that no longer carries this profile's run-name is before the newest run.
     const oldest = runs[runs.length - 1];
-    if (runs.length < 20 || (oldest && !oldest.display_title.includes('Docker tests'))) break;
+    if (runs.length < 20 || (oldest && !oldest.display_title.includes(profile.runName))) break;
   }
   return null;
 }
@@ -434,6 +486,12 @@ const store = {
  * `requireAuth`/`requireRole` come from the caller, so the serverless function
  * and the Express dev server share one definition, the same way the mail, bot
  * and roblox routers do.
+ *
+ * Repository selection: the client sends its chosen `repositoryId` in the
+ * request body, which this router validates against REPOSITORY_PROFILES before
+ * any GitHub call. Validation happens twice — here, against a known stable id —
+ * and again inside GithubRun from the frozen value passed in. Nothing from the
+ * request ever names a workflow file, a branch or a shell command.
  */
 export function buildTestRouter({ requireAuth, requireRole }) {
   const router = express.Router();
@@ -445,7 +503,8 @@ export function buildTestRouter({ requireAuth, requireRole }) {
 
   /** What the page shows before/during a run, refreshing GitHub state on poll. */
   router.get('/api/admin/tests/status', requireAuth, requireOwner, async (_req, res) => {
-    const { token, repository, workflowFile, branch, timeoutMs } = getConfig();
+    const { token, branch, timeoutMs } = getConfig();
+    const profile = profileFor(getConfig().repositoryId);
     // Polling path: refresh the active run from GitHub before answering. A
     // status request is cheap anyway, and this is what lets the page track a
     // queued -> in_progress -> completed run without holding a Vercel instance.
@@ -476,15 +535,26 @@ export function buildTestRouter({ requireAuth, requireRole }) {
     }
 
     res.json({
-      ...STATUS_COMMON,
+      ...statusCommon(),
       available: Boolean(token),
       running: Boolean(active),
       configured: Boolean(token),
       mode: 'github-actions',
-      repository,
-      workflowFile,
+      // `profile` may be null when env pointed the dashboard somewhere unknown;
+      // the page then shows an empty picker and a friendly "not configured"
+      // message instead of crashing on `profile.repository`.
+      repository: profile?.repository ?? '',
+      workflowFile: profile?.workflowFile ?? '',
       workflowBranch: branch,
-      command: `docker compose --profile tests run --rm --build tests`,
+      command: profile?.command ?? '',
+      repositoryId: getConfig().repositoryId,
+      repositories: Object.entries(REPOSITORY_PROFILES).map(([id, p]) => ({
+        id,
+        name: p.displayName,
+        repository: p.repository,
+        testRunner: p.testRunner,
+        command: p.command,
+      })),
       timeoutMs,
       image: null, // this deployment never runs Docker locally
       ...(active ? { activeRun: store.current.toJSON() } : {}),
@@ -492,14 +562,23 @@ export function buildTestRouter({ requireAuth, requireRole }) {
     });
   });
 
-  router.post('/api/admin/tests/run', requireAuth, requireOwner, async (_req, res) => {
+  router.post('/api/admin/tests/run', requireAuth, requireOwner, async (req, res) => {
     const { token } = getConfig();
-    if (store.current && store.current.running) {
-      return res.status(409).json({ message: 'A test run is already in progress.' });
+    // The selected repository arrives in the body and is validated against the
+    // fixed profile registry before anything else. The old no-body call still
+    // works and means "the configured repository" (currently ProjectHub), so a
+    // deployment that has not shipped the picker keeps working.
+    const rawId = req.body && typeof req.body.repositoryId === 'string' ? req.body.repositoryId : getConfig().repositoryId;
+    const profile = profileFor(rawId);
+    if (!profile) {
+      return res.status(400).json({ message: `Unknown repository "${rawId}".` });
+    }
+    if (store.current && store.current.running && store.current.repositoryId === rawId) {
+      return res.status(409).json({ message: 'A test run is already in progress for this repository.' });
     }
     if (!token) {
       return res.status(503).json({
-        ...STATUS_COMMON,
+        ...statusCommon(),
         available: false,
         message: 'GitHub Actions is not configured on this deployment. Set GITHUB_ACTIONS_TOKEN.',
       });
@@ -511,7 +590,9 @@ export function buildTestRouter({ requireAuth, requireRole }) {
     }
 
     store.dispatching = true;
-    const run = new GithubRun();
+    // A run carries its own pinned profile so later polls keep hitting the
+    // repository it was dispatched against even if the dashboard env changes.
+    const run = new GithubRun(profile, rawId);
     store.current = run;
     let started = false;
 
@@ -547,8 +628,19 @@ export function buildTestRouter({ requireAuth, requireRole }) {
  * `output`, …) so the page keeps working, and adds the GitHub run identity and
  * URL the page links out to. It also holds the /status polling state: a stored
  * run can be `running`, `completed`, or left in its queued/in-progress status.
+ *
+ * A run pins the profile it was dispatched against so every later poll reads
+ * the same repository and workflow even if the dashboard's env selection
+ * changes mid-run.
  */
 class GithubRun {
+  constructor(profile, repositoryId = null) {
+    /** The frozen profile this run dispatches and polls against. */
+    this.profile = profile;
+    /** The stable id of the repo profile, echoed to the dashboard. */
+    this.repositoryId = repositoryId;
+  }
+
   /** Server-side correlation id, also passed to the workflow as its input. */
   requestId = crypto.randomUUID();
 
@@ -612,6 +704,8 @@ class GithubRun {
     this.updatedAt = raw.updatedAt;
     this.startedAt = raw.startedAt;
     this.completedAt = raw.completedAt;
+    this.headSha = raw.headSha || raw.head_sha || null;
+    this.branch = getConfig().branch;
     this.running = raw.status === 'queued' || raw.status === 'in_progress';
     this.completed = raw.status === 'completed';
     this.timedOut = raw.conclusion === 'timed_out';
@@ -623,8 +717,8 @@ class GithubRun {
 
   /** Sends the workflow-dispatch request. Returns nothing; the id is found later. */
   async dispatch() {
-    const { repository, workflowFile, branch } = getConfig();
-    const url = `https://api.github.com/repos/${repository}/actions/workflows/${encodeURIComponent(workflowFile)}/dispatches`;
+    const branch = getConfig().branch;
+    const url = `https://api.github.com/repos/${this.profile.repository}/actions/workflows/${encodeURIComponent(this.profile.workflowFile)}/dispatches`;
     const response = await githubFetch(url, {
       method: 'POST',
       headers: { ...apiHeaders(), 'Content-Type': 'application/json' },
@@ -655,13 +749,13 @@ class GithubRun {
     this.dispatchAt = new Date();
     this.running = true;
     this.status = 'queued';
-    __test.lastDispatchedId = this.requestId;
+    __test.lastDispatched = { requestId: this.requestId, repositoryId: this.repositoryId };
   }
 
   /** One poll against the /status route: refreshes GitHub's state if it is done. */
   async poll() {
     if (!this.dispatched) return;
-    const run = await findRunByRequestId(this.requestId, {});
+    const run = await findRunByRequestId(this.requestId, {}, this.profile);
     if (run) this.adopt(run);
     // A terminal run becomes the dashboard's last-known result and frees the
     // single-run slot so the next dispatch is allowed.
@@ -693,13 +787,13 @@ class GithubRun {
 
     let text = null;
     try {
-      text = await withTimeout(fetchArtifactResults(this.id, {}), 8_000);
+      text = await withTimeout(fetchArtifactResults(this.id, {}, this.profile), 8_000);
     } catch {
       text = null;
     }
     if (!text) {
       try {
-        text = await withTimeout(fetchJobLogResults(this.id, {}), 8_000);
+        text = await withTimeout(fetchJobLogResults(this.id, {}, this.profile), 8_000);
       } catch {
         text = null;
       }
@@ -748,6 +842,10 @@ class GithubRun {
     return {
       requestId: this.requestId,
       runId: this.id,
+      repositoryId: this.repositoryId,
+      repository: this.profile ? this.profile.repository : null,
+      branch: this.branch,
+      headSha: this.headSha,
       status: this.status,
       conclusion: this.conclusion,
       running: this.running,
@@ -774,7 +872,7 @@ export async function cancelRun() {
   if (!run || !run.id) return { cancelled: false, message: 'No active run to cancel.' };
   try {
     await githubFetch(
-      `https://api.github.com/repos/${getConfig().repository}/actions/runs/${run.id}/cancel`,
+      `https://api.github.com/repos/${run.profile.repository}/actions/runs/${run.id}/cancel`,
       { method: 'POST', headers: apiHeaders() },
     );
     run.conclusion = 'cancelled';
@@ -807,8 +905,12 @@ export const __test = {
     globalThis.__testFetcher = fn;
     return previous;
   },
-  /** The request id the last dispatch used, so a mock run list can match it. */
-  lastDispatchedId: null,
+  /** The last dispatch's request id and repository id, so mocks can match them. */
+  lastDispatched: null,
+  /** Backwards-compatible accessor used by older tests. */
+  get lastDispatchedId() {
+    return this.lastDispatched ? this.lastDispatched.requestId : null;
+  },
   get currentRun() {
     return store.current;
   },

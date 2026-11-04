@@ -43,26 +43,26 @@ const {
   capOutput,
   readZipEntry,
   stripLogTimestamps,
+  REPOSITORY_PROFILES,
   __test,
 } = await import('../api/_lib/suite-runner.js');
 
 /** Resets env and the mock fetcher between tests. */
-function resetHarness({ token = 'stub-token', repo = 'ProjectHub-fie/ProjectHub' } = {}) {
+function resetHarness({ token = 'stub-token', repoId = null } = {}) {
   __test.resetStore();
   __test.setFetcher(null);
   for (const key of [
     'GITHUB_ACTIONS_TOKEN',
     'GITHUB_TOKEN',
-    'GITHUB_REPOSITORY',
-    'GITHUB_WORKFLOW_FILE',
     'GITHUB_WORKFLOW_BRANCH',
+    'TEST_REPO',
     'TEST_RUN_TIMEOUT_MS',
     'TEST_RUN_POLL_MS',
   ]) {
     delete process.env[key];
   }
   if (token) process.env.GITHUB_ACTIONS_TOKEN = token;
-  if (repo) process.env.GITHUB_REPOSITORY = repo;
+  if (repoId) process.env.TEST_REPO = repoId;
 }
 
 /** Builds a fake Response for the GitHub API. */
@@ -96,27 +96,37 @@ function fakeRun(overrides = {}) {
 
 /* ------------------------------------------------------------------- config */
 
-test('config defaults point at the ProjectHub repository and docker-tests workflow', () => {
+test('config defaults point at the ProjectHub profile and docker-tests workflow', () => {
   resetHarness({ token: 'abc' });
   const config = getConfig();
-  assert.equal(config.repository, 'ProjectHub-fie/ProjectHub');
-  assert.equal(config.workflowFile, 'docker-tests.yml');
+  assert.equal(config.repositoryId, 'projecthub');
+  assert.equal(REPOSITORY_PROFILES[config.repositoryId].repository, 'ProjectHub-fie/ProjectHub');
+  assert.equal(REPOSITORY_PROFILES[config.repositoryId].workflowFile, 'docker-tests.yml');
   assert.equal(config.branch, 'main');
   assert.equal(config.token, 'abc');
   assert.ok(config.timeoutMs > 0);
 });
 
-test('config is read from the environment', () => {
+test('config repository selection is read from the environment', () => {
   resetHarness({});
-  process.env.GITHUB_REPOSITORY = 'someone/else';
-  process.env.GITHUB_WORKFLOW_FILE = 'other.yml';
+  process.env.TEST_REPO = 'primebot';
   process.env.GITHUB_WORKFLOW_BRANCH = 'dev';
   process.env.GITHUB_ACTIONS_TOKEN = 'token-2';
   const config = getConfig();
-  assert.equal(config.repository, 'someone/else');
-  assert.equal(config.workflowFile, 'other.yml');
+  assert.equal(config.repositoryId, 'primebot');
+  assert.equal(REPOSITORY_PROFILES['primebot'].repository, 'ProjectHub-fie/PrimeBot');
+  assert.equal(REPOSITORY_PROFILES['primebot'].workflowFile, 'primebot-tests.yml');
+  assert.equal(REPOSITORY_PROFILES['primebot'].testRunner, 'node');
   assert.equal(config.branch, 'dev');
   assert.equal(config.token, 'token-2');
+});
+
+test('the repository registry lists the supported repositories with their runner metadata', () => {
+  const profile = REPOSITORY_PROFILES.projecthub;
+  assert.equal(profile.repository, 'ProjectHub-fie/ProjectHub');
+  assert.equal(profile.workflowFile, 'docker-tests.yml');
+  assert.equal(profile.testRunner, 'docker');
+  assert.equal(profile.runName, 'Docker tests');
 });
 
 /* ------------------------------------------------------------ dispatch body */
@@ -141,17 +151,74 @@ test('dispatch posts a fixed workflow, branch and a server-generated request id'
   await handler({}, res);
 
   assert.ok(called, 'dispatch POST was made');
-  assert.match(called.url, /actions\/workflows\/docker-tests\.yml\/dispatches$/);
+  assert.match(called.url, /ProjectHub-fie\/ProjectHub\/actions\/workflows\/docker-tests\.yml\/dispatches$/);
   const sent = JSON.parse(called.options.body);
   assert.equal(sent.ref, 'main');
   assert.match(sent.inputs.request_id, /^[0-9a-f-]{36}$/i, 'request_id is a server-side uuid');
   assert.match(called.options.headers.Authorization, /Bearer stub-token/);
 });
 
-test('the request id is never taken from the request', () => {
+test('the selected repository in the request body picks which repository is dispatched', async () => {
+  resetHarness({ repoId: 'projecthub' });
+  let called = null;
+  __test.setFetcher(async (url, options) => {
+    called = { url, options };
+    return ghResponse({ status: 204 });
+  });
+
+  const router = buildTestRouter({
+    requireAuth: (_req, _res, next) => next(),
+    requireRole: () => (_req, _res, next) => next(),
+  });
+  const postLayer = router.stack.find((layer) => layer.route?.path === '/api/admin/tests/run');
+  const handler = postLayer.route.stack[postLayer.route.stack.length - 1].handle;
+
+  // Dispatch against PrimeBot by passing its registry id in the body.
+  const res = { json: (body) => (res.body = body), status: () => res };
+  await handler({ body: { repositoryId: 'primebot' } }, res);
+
+  assert.ok(called, 'dispatch POST was made');
+  assert.match(called.url, /ProjectHub-fie\/PrimeBot\/actions\/workflows\/primebot-tests\.yml\/dispatches$/);
+  const sent = JSON.parse(called.options.body);
+  assert.equal(sent.ref, 'main');
+  assert.equal(res.body.repositoryId, 'primebot');
+  assert.equal(res.body.repository, 'ProjectHub-fie/PrimeBot');
+});
+
+test('an unknown repository id in the body is rejected without any GitHub call', async () => {
+  resetHarness({});
+  let apiCalls = 0;
+  __test.setFetcher(async () => {
+    apiCalls += 1;
+    return ghResponse({ status: 204 });
+  });
+
+  const router = buildTestRouter({
+    requireAuth: (_req, _res, next) => next(),
+    requireRole: () => (_req, _res, next) => next(),
+  });
+  const postLayer = router.stack.find((layer) => layer.route?.path === '/api/admin/tests/run');
+  const handler = postLayer.route.stack[postLayer.route.stack.length - 1].handle;
+
+  const res = { json: (body) => (res.body = body), status: (code) => (res.statusCode = code) && res };
+  await handler({ body: { repositoryId: 'sneaky-repo' } }, res);
+
+  assert.equal(res.statusCode, 400);
+  assert.match(res.body.message, /Unknown repository/);
+  assert.equal(apiCalls, 0, 'an invalid selection never reaches the GitHub API');
+  assert.ok(!__test.currentRun, 'no run is stored for an unknown repository');
+});
+
+test('the request id and workflow file are never taken from the request', () => {
   const routes = source('api/_lib/suite-runner.js');
-  // No request field reads anywhere: body, query or params.
-  assert.doesNotMatch(routes, /req\.body/);
+  // The chosen repository *id* is read from the body and validated against the
+  // fixed registry, but never the request id, workflow, branch, command or
+  // repository name itself.
+  assert.match(routes, /req\.body/); // repository selection is allowed
+  // Only the documented `repositoryId` field is read — never a free-form
+  // repository name, workflow, branch or command (the \b excludes repositoryId).
+  assert.doesNotMatch(routes, /req\.body\.repository\b/);
+  assert.doesNotMatch(routes, /request_id.*req\.|req\..*request_id/);
   assert.doesNotMatch(routes, /req\.query/);
   assert.doesNotMatch(routes, /req\.params/);
 });
@@ -407,14 +474,17 @@ test('Vercel never runs docker locally: the module has no docker or process impo
   assert.doesNotMatch(routes, /docker version|docker build|--network/);
 });
 
-test('the workflow file, branch and target are never validated from the request', () => {
+test('the workflow file, branch and target come from the registry, never the request', () => {
   const routes = source('api/_lib/suite-runner.js');
-  // The only workflow / branch source is the environment.
-  assert.match(routes, /GITHUB_WORKFLOW_FILE/);
+  // Branch is the only env-read leftover; workflow file and repository come
+  // from the REPOSITORY_PROFILES registry, which is never the request.
   assert.match(routes, /GITHUB_WORKFLOW_BRANCH/);
-  assert.match(routes, /GITHUB_REPOSITORY/);
-  // No path or shell metacharacter interpolation from request data.
-  assert.doesNotMatch(routes, /req\.params|req\.query|req\.body/);
+  assert.match(routes, /REPOSITORY_PROFILES/);
+  assert.doesNotMatch(routes, /GITHUB_REPOSITORY/);
+  // The registry is a static object literal: no file reads, no overrides.
+  assert.doesNotMatch(routes, /REPOSITORY_PROFILES\s*=\s*process\.env/);
+  assert.doesNotMatch(routes, /\.repository\s*=\s*req\./);
+  assert.doesNotMatch(routes, /\.workflowFile\s*=\s*req\./);
 });
 
 /* --------------------------------------------------------------- the wiring */
@@ -903,4 +973,133 @@ test('the artifact is read from the workflow upload, and the workflow uploads it
 
   const workflow = source('.github/workflows/docker-tests.yml');
   assert.match(workflow, /tap-output\.tap/, 'the workflow must upload the file the reader looks for');
+});
+
+/* -------------------------------------------------------------- PrimeBot repo */
+
+test('the PrimeBot profile targets the PrimeBot repository with a Node workflow', () => {
+  const primebot = REPOSITORY_PROFILES.primebot;
+  assert.equal(primebot.repository, 'ProjectHub-fie/PrimeBot');
+  assert.equal(primebot.workflowFile, 'primebot-tests.yml');
+  assert.equal(primebot.testRunner, 'node');
+  assert.equal(primebot.runName, 'PrimeBot tests');
+  assert.match(primebot.command, /npm test/);
+  assert.doesNotMatch(primebot.command, /docker/);
+});
+
+test('the PrimeBot workflow is checked in next to the ProjectHub workflow', async () => {
+  const { readFile } = await import('node:fs/promises');
+  const wf = await readFile(new URL('../.github/workflows/primebot-tests.yml', import.meta.url), 'utf8');
+  assert.match(wf, /workflow_dispatch/);
+  assert.doesNotMatch(wf, /push:|pull_request:/);
+  assert.match(wf, /run-name: PrimeBot tests/);
+  assert.match(wf, /request_id/);
+  assert.match(wf, /npm test/);
+  assert.doesNotMatch(wf, /docker compose/);
+});
+
+test('the PrimeBot workflow checks out the selected repository and runs Node tests', () => {
+  const wf = source('.github/workflows/primebot-tests.yml');
+  // Checkout + Node + the repo's own test script.
+  assert.match(wf, /actions\/checkout@v4/);
+  assert.match(wf, /actions\/setup-node@v4/);
+  assert.match(wf, /npm test/);
+  // A Node script, not a compose service: no `docker`, no Test service.
+  assert.doesNotMatch(wf, /docker/);
+  assert.doesNotMatch(wf, /--profile tests/);
+  // The artifact must land where the dashboard's reader looks for it, and the
+  // suite's exit code must not be swallowed by the `tee`.
+  assert.match(wf, /tap-output\.tap/);
+  assert.match(wf, /set -o pipefail/);
+  assert.match(wf, /if: always\(\)/);
+  assert.doesNotMatch(wf, /continue-on-error:\s*true/);
+});
+
+test('the PrimeBot workflow installs npm dependencies reproducibly', () => {
+  const wf = source('.github/workflows/primebot-tests.yml');
+  // `npm ci` when a lockfile exists is the required first choice; `npm install`
+  // is only the fallback for repos without one.
+  assert.match(wf, /npm ci/);
+  assert.match(wf, /npm install/);
+  assert.match(wf, /package-lock\.json/);
+});
+
+test('the status response advertises both repositories to the page', async () => {
+  resetHarness({});
+  __test.setFetcher(async () => ghResponse({ status: 204 }));
+
+  const router = buildTestRouter({
+    requireAuth: (_req, _res, next) => next(),
+    requireRole: () => (_req, _res, next) => next(),
+  });
+  const statusLayer = router.stack.find((layer) => layer.route?.path === '/api/admin/tests/status');
+  const handler = statusLayer.route.stack[statusLayer.route.stack.length - 1].handle;
+
+  const res = { json: (body) => (res.body = body), status: () => res };
+  await handler({}, res);
+
+  assert.ok(Array.isArray(res.body.repositories), 'the status payload lists repositories');
+  const ids = res.body.repositories.map((r) => r.id);
+  assert.ok(ids.includes('projecthub'), 'ProjectHub must be selectable');
+  assert.ok(ids.includes('primebot'), 'PrimeBot must be selectable');
+  const primebot = res.body.repositories.find((r) => r.id === 'primebot');
+  assert.equal(primebot.repository, 'ProjectHub-fie/PrimeBot');
+  assert.equal(primebot.testRunner, 'node');
+  assert.equal(primebot.command, 'npm test');
+  // The status for the default profile still exposes the single-run fields.
+  assert.equal(res.body.repository, 'ProjectHub-fie/ProjectHub');
+  assert.equal(res.body.workflowFile, 'docker-tests.yml');
+});
+
+test('a run dispatched for PrimeBot keeps its profile identity through polling', async () => {
+  resetHarness({ repoId: 'projecthub' });
+  let runListUrl = null;
+  __test.setFetcher(async (url, options = {}) => {
+    if (options.method === 'POST') return ghResponse({ status: 204 });
+    if (url.includes('/actions/workflows/')) {
+      // Only the workflows/:file/runs page identifies *this* run.
+      runListUrl = url;
+      return ghResponse({
+        status: 200,
+        json: {
+          workflow_runs: [
+            fakeRun({
+              id: 900,
+              display_title: `PrimeBot tests (${__test.lastDispatched.requestId})`,
+              conclusion: 'success',
+            }),
+          ],
+        },
+      });
+    }
+    // Artifact/log reads are best-effort; empty is fine for this test.
+    if (url.endsWith('/artifacts')) return ghResponse({ status: 200, json: { artifacts: [] } });
+    if (url.endsWith('/jobs')) return ghResponse({ status: 200, json: { jobs: [] } });
+    return ghResponse({ status: 200, json: { workflow_runs: [] } });
+  });
+
+  const router = buildTestRouter({
+    requireAuth: (_req, _res, next) => next(),
+    requireRole: () => (_req, _res, next) => next(),
+  });
+  const postLayer = router.stack.find((layer) => layer.route?.path === '/api/admin/tests/run');
+  const postHandler = postLayer.route.stack[postLayer.route.stack.length - 1].handle;
+  const statusLayer = router.stack.find((layer) => layer.route?.path === '/api/admin/tests/status');
+  const statusHandler = statusLayer.route.stack[statusLayer.route.stack.length - 1].handle;
+
+  // Dispatch PrimeBot, then poll status and confirm the metadata travels.
+  const runRes = { json: (body) => (runRes.body = body), status: () => runRes };
+  await postHandler({ body: { repositoryId: 'primebot' } }, runRes);
+  assert.equal(runRes.body.repositoryId, 'primebot');
+  assert.equal(runRes.body.repository, 'ProjectHub-fie/PrimeBot');
+
+  const statusRes = { json: (body) => (statusRes.body = body), status: () => statusRes };
+  await statusHandler({}, statusRes);
+
+  assert.match(runListUrl, /ProjectHub-fie\/PrimeBot\/actions\/workflows\/primebot-tests\.yml\/runs/);
+  const run = statusRes.body.activeRun || statusRes.body.lastRun;
+  assert.ok(run, 'the polled run must be reported');
+  assert.equal(run.repositoryId, 'primebot');
+  assert.equal(run.repository, 'ProjectHub-fie/PrimeBot');
+  assert.equal(run.conclusion, 'success');
 });
