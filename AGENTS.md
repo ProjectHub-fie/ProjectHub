@@ -59,10 +59,12 @@ that a helper under `api/` must not be named `test*` whatever the ignore file sa
   also grep `api/index.js` and `server/routes.ts` to assert the backends carry
   the same validators, because the form is not a security boundary.
 - `admin-test-runner.test.mjs` — the GitHub Actions dispatch, run matching by
-  request id, polling/state transitions, dispatch errors, single-flight, and the
-  source guardrails on the route that can trigger CI (no request fields, token
-  never exposed, no local Docker/process imports). It exercises the router with a
-  mocked GitHub API; no real workflow is ever dispatched during tests.
+  request id, polling/state transitions, dispatch errors, single-flight, the
+  multi-repository registry (ProjectHub + PrimeBot), the repository selector
+  endpoint, and the source guardrails on the route that can trigger CI (no
+  request fields beyond a registry-checked `repositoryId`, token never exposed,
+  no local Docker/process imports). It exercises the router with a mocked
+  GitHub API; no real workflow is ever dispatched during tests.
 - `profile-command.test.mjs` — the `&profile` / `&pr` rename, that `&dev` is
   gone, the link-status words, the date/age formatting, and the profile embed
   shape (static author icon, real avatar as the image, relative footer
@@ -70,26 +72,36 @@ that a helper under `api/` must not be named `test*` whatever the ignore file sa
 
 ### The test-runner console
 
-`/pbad/tests` (owner only) runs the repository's `tests/` folder and shows the
+`/pbad/tests` (owner only) runs a connected repository's test suite and shows the
 workflow's progress and outcome. It is the one dashboard route that triggers
-external execution, and it does so on **GitHub Actions**, never on Vercel:
-`api/_lib/suite-runner.js` dispatches `.github/workflows/docker-tests.yml` via
-the GitHub REST API (a `request_id` it generates server-side is passed as a
-workflow input), then polls `GET /actions/workflows/{file}/runs` for the run
-whose `display_title` carries that id. The request accepts no input fields at
-all; workflow, branch and token all come from process environment defaults.
+external execution, and it does so on **GitHub Actions**, never on Vercel.
+`api/_lib/suite-runner.js` keeps a fixed `REPOSITORY_PROFILES` registry — one
+profile per selectable repository. The owner picks a repository on the page; the
+request body carries only that registry id, and the router validates it before
+any GitHub call. Each profile owns its repository, workflow file, branch and
+command: ProjectHub runs its own `.github/workflows/docker-tests.yml`, PrimeBot
+(ProjectHub-fie/PrimeBot) runs a plain Node workflow
+(`primebot-tests.yml`, checked in both here and in the PrimeBot repo — GitHub
+only runs a workflow that exists in the repo it is dispatched against).
+A `request_id` generated server-side is passed as a workflow input, and the
+console polls `GET /actions/workflows/{file}/runs` for the run whose
+`display_title` carries that id.
 
 `tests/` is in `.vercelignore`, so it is not deployed to the serverless function.
-The workflow checks out the repository (which includes `tests/`) on a
-GitHub-hosted runner and runs the existing `tests` compose service against the
-compose database. The image is built with the repository's own `Dockerfile`
-via `--build`, so the suite runs in exactly the environment a long-lived host
-would use. A `DATABASE_URL_CI` repository variable overrides the integration's
-default compose DB URL; `SESSION_SECRET_CI`, `ADMIN_PIN_CI`/`ADMIN_PASSWORD_CI`
-secrets override those for the worker (the defaults let the auth/mail tests run
-without them). The web deployment itself needs one secret:
+For **ProjectHub**, the workflow checks out the repository (which includes
+`tests/`) on a GitHub-hosted runner and runs the existing `tests` compose
+service against the compose database. The image is built with the repository's
+own `Dockerfile` via `--build`, so the suite runs in exactly the environment a
+long-lived host would use. A `DATABASE_URL_CI` repository variable overrides the
+integration's default compose DB URL; `SESSION_SECRET_CI`, `ADMIN_PIN_CI`/
+`ADMIN_PASSWORD_CI` secrets override those for the worker (the defaults let the
+auth/mail tests run without them). For **PrimeBot**, the workflow installs npm
+dependencies (`npm ci` when a lockfile exists, else `npm install`) and runs
+`npm test`; no Docker is involved and no test fixtures need secrets (the suite
+defaults its env in-test). The web deployment itself needs one secret:
 `GITHUB_ACTIONS_TOKEN`, scoped to `workflow` dispatch and `actions` read on
-`ProjectHub-fie/ProjectHub`.
+every repository in the registry (`ProjectHub-fie/ProjectHub` and
+`ProjectHub-fie/PrimeBot`).
 
 The endpoint leans on Vercel's 30s `maxDuration` only for the dispatch call —
 it never waits for the suite. The dashboard polls `/api/admin/tests/status`

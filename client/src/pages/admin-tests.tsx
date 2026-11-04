@@ -24,6 +24,14 @@ import {
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Label } from "@/components/ui/label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 
 type TestStatus = {
@@ -35,6 +43,14 @@ type TestStatus = {
   workflowFile: string;
   workflowBranch: string;
   command: string;
+  repositoryId: string;
+  repositories: Array<{
+    id: string;
+    name: string;
+    repository: string;
+    testRunner: string;
+    command: string;
+  }>;
   timeoutMs: number;
   pollIntervalMs: number;
   activeRun?: TestRun;
@@ -44,6 +60,10 @@ type TestStatus = {
 type TestRun = {
   requestId: string;
   runId: number | null;
+  repositoryId: string | null;
+  repository: string | null;
+  branch: string | null;
+  headSha: string | null;
   status: "queued" | "in_progress" | "completed" | string;
   conclusion: "success" | "failure" | "neutral" | "cancelled" | "timed_out" | string | null;
   running: boolean;
@@ -141,11 +161,23 @@ export default function AdminTestsPage() {
     },
   });
 
+  // The repository the next run dispatches against. Defaults to the server's
+  // configured profile; the selector below overrides it before dispatch.
+  const [selectedRepoId, setSelectedRepoId] = useState<string | null>(null);
+  const activeRepoId =
+    status?.activeRun?.repositoryId ||
+    status?.lastRun?.repositoryId ||
+    status?.repositoryId ||
+    null;
+  const repositoryId = selectedRepoId || activeRepoId || status?.repositories?.[0]?.id || "projecthub";
+
   const runMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (repoId: string) => {
       const response = await fetch("/api/admin/tests/run", {
         method: "POST",
         credentials: "include",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ repositoryId: repoId }),
       });
       const body = await response.json().catch(() => ({}));
       if (!response.ok) {
@@ -193,11 +225,11 @@ export default function AdminTestsPage() {
             Tests
           </h1>
           <p className="text-muted-foreground">
-            Run the repository's test suite on GitHub Actions.
+            Run a connected repository's test suite on GitHub Actions.
           </p>
         </div>
         <Button
-          onClick={() => runMutation.mutate()}
+          onClick={() => runMutation.mutate(repositoryId)}
           disabled={runMutation.isPending || !status?.available || Boolean(status?.activeRun)}
           data-testid="button-run-tests"
         >
@@ -210,8 +242,37 @@ export default function AdminTestsPage() {
         </Button>
       </div>
 
-      {/* The exact command the GitHub runner fragments. The workflow's tests
-          service runs the same command with no inputs from this page. */}
+      {/* Repository selection, driven by the server's profile registry. The
+          chosen repository is the only thing the page sends; workflow, branch
+          and command all come from the server profile. */}
+      {Array.isArray(status?.repositories) && status.repositories.length > 1 && (
+        <div className="grid gap-1.5" data-testid="repository-selector">
+          <Label htmlFor="test-repository" className="text-sm font-medium">
+            Repository
+          </Label>
+          <Select
+            value={repositoryId}
+            onValueChange={(id) => setSelectedRepoId(id)}
+            disabled={Boolean(status.activeRun) || runMutation.isPending}
+          >
+            <SelectTrigger id="test-repository" className="w-full sm:w-80 md:max-w-xs">
+              <SelectValue placeholder="Choose a repository" />
+            </SelectTrigger>
+            <SelectContent>
+              {status.repositories.map((repo) => (
+                <SelectItem key={repo.id} value={repo.id}>
+                  {repo.name}
+                  <span className="ml-1 font-mono text-muted-foreground">({repo.repository})</span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      )}
+
+      {/* The exact command the GitHub runner fragments. The workflow runs the
+          same command with no inputs from this page, other than the selected
+          repository id. */}
       <div className="rounded-md border bg-muted/40 p-3">
         <p className="text-xs text-muted-foreground">
           Runs exactly this on a GitHub-hosted runner, with no arguments from this page:
@@ -225,10 +286,9 @@ export default function AdminTestsPage() {
         <div className="flex items-start gap-2 rounded-md border border-sky-500/40 bg-sky-500/10 p-3 text-sm text-sky-700 dark:text-sky-400">
           <FlaskConical className="mt-0.5 h-4 w-4 shrink-0" />
           <span>
-            Docker execution happens on <strong>GitHub Actions</strong>, not on Vercel.
-            The workflow <code>{status.workflowFile}</code> checks out the repository and runs
-            the <code>tests</code> compose service against the compose database on{" "}
-            <code>{status.repository}</code> (<code>{status.workflowBranch}</code>).
+            Execution happens on <strong>GitHub Actions</strong>, not on Vercel. The workflow{" "}
+            <code>{status.workflowFile}</code> checks out <code>{status.repository}</code>{" "}
+            ({status.workflowBranch}) and runs the command above.
           </span>
         </div>
       )}
@@ -284,11 +344,24 @@ export default function AdminTestsPage() {
               {shown.completed
                 ? shown.resultsUnavailable
                   ? "The run finished, but its test summary could not be read from GitHub."
-                  : `Node test runner finished with ${shown.conclusion ?? "unknown conclusion"}.`
-                : "Docker execution runs on GitHub Actions; the dashboard polls until it finishes."}
+                  : `Test runner finished with ${shown.conclusion ?? "unknown conclusion"}.`
+                : "The suite runs on GitHub Actions; the dashboard polls until it finishes."}
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-5">
+            {/* Run identity: repository, branch, commit SHA, and the GitHub link. */}
+            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
+              <span className="font-medium text-foreground" data-testid="run-repository">
+                {shown.repositoryId ? shown.repository : (status?.repository ?? "repository")}
+              </span>
+              {shown.branch && (
+                <Badge variant="outline" className="font-mono">branch {shown.branch}</Badge>
+              )}
+              {shown.headSha && (
+                <span className="font-mono" data-testid="run-commit-sha">{shown.headSha.slice(0, 7)}</span>
+              )}
+              <span>{new Date(shown.createdAt || Date.now()).toLocaleString()}</span>
+            </div>
             {shown.resultsUnavailable && (
               <div
                 className="flex items-start gap-2 rounded-md border border-amber-500/40 bg-amber-500/10 p-3 text-sm text-amber-700 dark:text-amber-400"
