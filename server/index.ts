@@ -14,9 +14,14 @@ const app = express();
 // Trust proxy for Vercel/production environments
 app.set('trust proxy', 1);
 
-// Body parsing middleware
-app.use(express.json({ limit: '10mb' }));
-app.use(express.urlencoded({ extended: true, limit: '10mb' }));
+// Body parsing middleware. The raw bytes are captured alongside the parsed body
+// so the GitHub webhook receiver can verify its HMAC-SHA256 signature over
+// exactly what GitHub sent; a re-serialized body would not match the digest.
+const captureRawBody = (req: Request, _res: Response, buf: Buffer) => {
+  if (buf?.length) (req as any).rawBody = buf;
+};
+app.use(express.json({ limit: '10mb', verify: captureRawBody }));
+app.use(express.urlencoded({ extended: true, limit: '10mb', verify: captureRawBody }));
 
 // Enhanced error logging middleware
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {

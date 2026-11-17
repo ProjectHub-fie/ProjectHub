@@ -54,6 +54,7 @@ import {
 import { getBotSettings, getAlertState, recordAlertTimes, recordBotHeartbeat } from './lib/bot-store.js';
 import { fetchUsage, fetchProjectNames, projectScopeFromEnv, orgIdFromEnv, isNeonConfigured } from './lib/neon-usage.js';
 import { attachBotEvents, attachGatewayLogging as attachEventGatewayLogging } from './events/index.js';
+import { startWorker } from './lib/github-forum-worker.js';
 
 /* ---------------------------------------------------------------- logging */
 
@@ -67,6 +68,7 @@ const logMessage = debug('bot:message');
 const logCommand = debug('bot:command');
 const logInvite = debug('bot:invite');
 const logAlert = debug('bot:alert');
+const logForum = debug('bot:forum');
 
 // A Discord token is three base64url parts joined by dots. The third character
 // class includes `*` so this also matches the form discord.js prints itself:
@@ -91,11 +93,12 @@ export function redactToken(text, token = '') {
 }
 
 /** Prints the startup banner: what was resolved, and what is being requested. */
-function logStartup({ tokenSource, intents, pollMinutes, heartbeatSeconds }) {
+function logStartup({ tokenSource, intents, pollMinutes, heartbeatSeconds, forumSeconds }) {
   console.log('[bot] ---- startup ----');
   console.log(`[bot] token source: ${tokenSource}`);
   console.log(`[bot] intents: ${intents.join(', ')}`);
   console.log(`[bot] usage poll every ${pollMinutes}m, heartbeat every ${heartbeatSeconds}s`);
+  console.log(`[bot] forum↔GitHub sync worker every ${forumSeconds}s`);
   logBoot('token source %s, intents %o', tokenSource, intents);
 }
 
@@ -104,6 +107,9 @@ const POLL_INTERVAL_MS = Number(process.env.BOT_POLL_INTERVAL_MINUTES || 15) * 6
 // dashboard to "not running".
 const HEARTBEAT_INTERVAL_MS = 60 * 1000;
 const SETTINGS_REFRESH_MS = 60 * 1000;
+// How often the Forum ↔ GitHub worker looks for queued jobs. Short enough that a
+// post becomes an issue quickly, long enough to stay cheap on a small host.
+const FORUM_WORKER_INTERVAL_MS = Number(process.env.BOT_FORUM_SYNC_INTERVAL_SECONDS || 15) * 1000;
 
 let settings = null;
 let settingsLoadedAt = 0;
@@ -416,6 +422,7 @@ export async function main() {
     intents: intentNames(intents),
     pollMinutes: POLL_INTERVAL_MS / 60_000,
     heartbeatSeconds: HEARTBEAT_INTERVAL_MS / 1000,
+    forumSeconds: FORUM_WORKER_INTERVAL_MS / 1000,
   });
 
   // Before anything touches Discord: the token is in this process now, so no
@@ -431,6 +438,7 @@ export async function main() {
     logInvite,
     logBoot,
     logGateway,
+    logForum,
     redactToken,
   });
 
@@ -463,11 +471,20 @@ export async function main() {
   setTimeout(tick, 10_000);
   setInterval(tick, POLL_INTERVAL_MS);
 
+  // The Forum ↔ GitHub synchronization worker. It runs inside this process (not
+  // a second one) on a short interval, claiming persisted jobs from the database
+  // and performing the GitHub calls. The gateway handlers only enqueue, so a slow
+  // or failing GitHub API never blocks message handling, and a restart resumes
+  // the queue — a job that was mid-flight is recovered from `processing`.
+  const stopWorker = startWorker({ client, log: logForum, intervalMs: FORUM_WORKER_INTERVAL_MS });
+  console.log(`[bot] forum sync worker every ${FORUM_WORKER_INTERVAL_MS / 1000}s`);
+
   await beat();
   setInterval(beat, HEARTBEAT_INTERVAL_MS);
 
   const shutdown = async () => {
     console.log('[bot] shutting down');
+    stopWorker();
     await client.destroy();
     process.exit(0);
   };

@@ -69,6 +69,17 @@ that a helper under `api/` must not be named `test*` whatever the ignore file sa
   gone, the link-status words, the date/age formatting, and the profile embed
   shape (static author icon, real avatar as the image, relative footer
   timestamp, no `undefined`/`null`/`NaN`).
+- `github-forum.test.mjs` — the Forum↔GitHub pure rules and the GitHub App
+  client: tag resolution (none, one, many, disabled, invalid), the issue and
+  comment bodies, the embeds, the loop guards, the retry policy, the webhook
+  decision, and the client's JWT/token cache/API calls/`Retry-After` handling via
+  `globalThis.__testFetcher`. No database, no token, no network.
+- `github-forum-flow.test.mjs` — the webhook receiver (signature, delivery
+  dedupe, 401/400 paths), the admin router (401 anonymous, 403 moderator, mapping
+  CRUD, validation), the worker (claim once, backoff, park, recover, manual
+  retry), the DB-backed idempotency constraints, and a stubbed end-to-end sync
+  (post → issue, reply → comment, GitHub comment → Discord reply, redelivery →
+  nothing). Skipped, not failed, without `DATABASE_URL`.
 
 ### The test-runner console
 
@@ -633,6 +644,84 @@ genuinely low" from the deployment that is actually running.
 
 The alert is best-effort, the same as Mailjet and push: a failed read or send is
 logged and the poll moves on.
+
+## Discord Forum ↔ GitHub Issues
+
+One Discord Forum channel is the single intake for every repository, and each
+repository-denoting tag maps to exactly one GitHub repository. A Forum post
+becomes an issue, thread replies become issue comments, and GitHub comments and
+issue close/reopen events are mirrored back into the thread. There are no status
+or category tags: an issue's state is reported in the thread, never with a tag.
+
+### The wiring is split along the deployment boundary
+
+The bot process (long-lived) and the web deployment (Vercel) each own one half,
+and they meet at the database queue:
+
+- `bot/lib/github-forum-logic.js` — the pure rules: tag resolution, the issue and
+  comment bodies, the embeds, the loop guards, the retry policy. No imports
+  beyond `node:crypto`-free helpers, so `node:test` loads it directly.
+- `bot/lib/github-forum-client.js` — the GitHub App client. Mints a short-lived
+  installation token with an RS256 JWT (`node:crypto`), caches it until shortly
+  before it expires, retries a 401 once with a fresh token and a 429/5xx with
+  GitHub's own `Retry-After`. `githubFetch` defers to `globalThis.__testFetcher`,
+  which is how the whole client is tested with no App key and no network.
+- `bot/lib/github-forum-store.js` — the lazy schema and every query. It imports
+  `postgres`, so it lives under `bot/lib` (the bot host installs only `bot/`),
+  and the serverless function reaches it through `bot/lib`, exactly as it does
+  `roblox-store.js`.
+- `bot/lib/github-forum-service.js` — the decision (`planForumPost`,
+  `planThreadReply`, `planWebhookEvent`) and the execution (`performIssueCreate`,
+  `performCommentCreate`, `performDiscordReply`, `performStateNotify`).
+- `bot/lib/github-forum-worker.js` — the queue drain. Claimed with a single
+  `UPDATE ... FOR UPDATE SKIP LOCKED`, so two ticks (or two bot processes) can
+  never handle one job twice.
+- `bot/lib/github-forum-webhook.js` — HMAC-SHA256 verification over the raw body,
+  delivery deduplication, then an enqueue. It never posts to Discord itself.
+- `api/_lib/github-forum-routes.js` — the admin router and the receiver wiring.
+  Mounted by **both** `api/admin/index.js` and `server/admin-routes.ts`, the same
+  way `buildBotRouter` and `buildRobloxRouter` are.
+- `bot/events/forumPost.js`, `bot/events/forumReply.js` — the bot listeners.
+  They only enqueue; the gateway is never blocked by a GitHub call.
+
+### The bot and the web receiver meet at the queue
+
+The bot enqueues `issue_create` / `comment_create`; the webhook receiver
+enqueues `discord_reply` / `state_notify`; the bot's worker drains all four. A
+restart resumes an unprocessed job, and a job whose dependency is not ready yet
+(a reply whose issue is still being created) is retried rather than dropped.
+
+### Idempotency is a database constraint, not a cache
+
+Four unique constraints are what make duplicates impossible across a reconnect, a
+redelivery or a restart: one thread ↔ one issue, one Discord message ↔ one
+comment, one GitHub comment ↔ one reply, and one webhook delivery id. There is no
+in-memory dedupe anywhere in the path.
+
+### The webhook reads the action from the parsed body
+
+A delivery arrives as bytes, and the `action` lives inside them. `handleGithubWebhook`
+deduplicates on the delivery id first, then parses, then reads the action — an
+`action` read from the wrong place silently ignores every event as
+`issue_comment.unknown`, which is exactly the bug the flow test pins.
+
+### The webhook receiver must not sit behind the admin session
+
+It is called by GitHub, not an administrator, so it authenticates with the HMAC
+signature and is registered on the app **before** the admin router, like the mail
+inbound webhook. The raw bytes are captured with `express.json({ verify })` in
+both `api/admin/index.js` and `server/index.ts`; a re-serialized body would not
+match the digest.
+
+### Test seam
+
+`tests/github-forum.test.mjs` drives the pure rules and the GitHub client (via
+`globalThis.__testFetcher`) with no database, no token and no network.
+`tests/github-forum-flow.test.mjs` drives the webhook receiver, the admin routes,
+the worker and the end-to-end sync path against a real database when
+`DATABASE_URL` is set, and is skipped, not failed, when it is absent. The end-to-end
+case generates a throwaway RSA key so the App JWT really signs, and stubs the
+GitHub API, so no live issue is ever created.
 
 ## Roblox integration (Bloxlink is the verifier)
 

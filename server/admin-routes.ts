@@ -8,6 +8,7 @@ import { buildMailRouter, handleInboundMessage } from "../api/_lib/mail-routes.j
 import { buildBotRouter } from "../api/_lib/bot-routes.js";
 import { buildRobloxRouter } from "../api/_lib/roblox-routes.js";
 import { buildTestRouter } from "../api/_lib/suite-runner.js";
+import { buildGithubForumRouter, handleGithubWebhookRequest } from "../api/_lib/github-forum-routes.js";
 import { createMailNotifications } from "../api/_lib/mail-store.js";
 import { validateDownloadFields } from "../api/_lib/download-links.js";
 
@@ -660,6 +661,13 @@ export async function registerAdminRoutes(app: Express): Promise<Server> {
 
   // The Roblox / Bloxlink integration, same shared router and guards.
   app.use(buildRobloxRouter({ requireAuth, requireRole }));
+
+  // The Discord Forum ↔ GitHub Issues integration. The webhook receiver is
+  // registered first because it is called by GitHub, not by an administrator,
+  // and authenticates with its HMAC signature over the raw body rather than a
+  // session; the configuration router below is the guarded half.
+  app.post('/api/admin/github/webhook', handleGithubWebhookRequest());
+  app.use(buildGithubForumRouter({ requireAuth, requireRole }));
 
   // The test-runner console, owner only, shared with the serverless backend.
   app.use(buildTestRouter({ requireAuth, requireRole }));

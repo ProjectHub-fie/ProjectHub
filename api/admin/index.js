@@ -24,6 +24,7 @@ import { buildMailRouter, handleInboundMessage } from '../_lib/mail-routes.js';
 import { buildBotRouter } from '../_lib/bot-routes.js';
 import { buildRobloxRouter } from '../_lib/roblox-routes.js';
 import { buildTestRouter } from '../_lib/suite-runner.js';
+import { buildGithubForumRouter, handleGithubWebhookRequest } from '../_lib/github-forum-routes.js';
 import { ingestMessage, createMailNotifications, ensureMailSchema, purgeAdminMailData } from '../_lib/mail-store.js';
 import { validateDownloadFields } from '../_lib/download-links.js';
 
@@ -844,6 +845,10 @@ function buildAdminRouter() {
   // Bloxlink lookup and gate channels behind verification.
   router.use(buildRobloxRouter({ requireAuth, requireRole }));
 
+  // The Discord Forum ↔ GitHub Issues integration. Owner/admin only: it can add
+  // a repository mapping and trigger a live GitHub call.
+  router.use(buildGithubForumRouter({ requireAuth, requireRole }));
+
   // The test-runner console. Owner only: it is the one route that starts a
   // process, so it is held to the tighter role the admin-management routes use.
   router.use(buildTestRouter({ requireAuth, requireRole }));
@@ -929,8 +934,15 @@ async function handleInboundWebhook(req, res) {
 function buildAdminApp() {
   const app = express();
   app.set('trust proxy', 1);
-  app.use(express.json({ limit: '2mb' }));
-  app.use(express.urlencoded({ extended: true, limit: '2mb' }));
+  // The raw bytes are captured alongside the parsed body so the GitHub webhook
+  // receiver can verify its HMAC signature over exactly what GitHub sent. A
+  // re-serialized body would not match the digest, so the capture is mandatory
+  // for that route and harmless for the rest.
+  const captureRaw = (req, _res, buf) => {
+    if (buf?.length) req.rawBody = buf;
+  };
+  app.use(express.json({ limit: '2mb', verify: captureRaw }));
+  app.use(express.urlencoded({ extended: true, limit: '2mb', verify: captureRaw }));
 
   // Never fall back to a literal secret. The previous default
   // ('fallback-secret-key-for-vercel') is in this public repository, so any
@@ -966,6 +978,12 @@ function buildAdminApp() {
   // called by Resend, not by an administrator, so it authenticates with its own
   // shared secret instead of the dashboard session.
   app.post('/api/admin/mail/inbound', handleInboundWebhook);
+
+  // GitHub webhook receiver. Also called by an external service (GitHub), not by
+  // an administrator, so it authenticates with the HMAC-SHA256 signature over
+  // the raw body instead of a session. It verifies, deduplicates by delivery id
+  // and enqueues a job — it never posts to Discord itself.
+  app.post('/api/admin/github/webhook', handleGithubWebhookRequest());
 
   const router = buildAdminRouter();
   // The rewrite may hand us either the full path or one with the /api/admin

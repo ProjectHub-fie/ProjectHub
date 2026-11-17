@@ -30,6 +30,11 @@ halves is in `api/_lib`, so there is one definition of the alert rules.
 | `MAIL_DATABASE_URL` | no | Only if the mailbox was split onto its own database. |
 | `BLOXLINK_API_KEY` | for Roblox verification | The Bloxlink **server** API key for this guild (from `blox.link/dashboard/user/developer`). Unset, Roblox checks resolve to *verification unavailable*, never to *not linked*. |
 | `BLOXLINK_GUILD_ID` | for Roblox verification | The guild the key is scoped to. A server key only answers for its own guild. |
+| `GITHUB_APP_ID` | for the Forum sync | The GitHub App's numeric id. Environment-only; never stored or returned. |
+| `GITHUB_APP_PRIVATE_KEY` | for the Forum sync | The App's PEM private key (RS256). A single line with `\n` is accepted. Never logged or returned. |
+| `GITHUB_APP_INSTALLATION_ID` | for the Forum sync | The installation to act as. Restricted to the repositories the administrator selected. |
+| `GITHUB_WEBHOOK_SECRET` | for the Forum sync | The App's webhook secret, used to verify inbound deliveries. Read only by the web receiver. |
+| `BOT_FORUM_SYNC_INTERVAL_SECONDS` | no | How often the Forum↔GitHub worker drains the queue. Default `15`. |
 
 The token is read from the first of these that is set, in this order:
 `DISCORD_BOT_TOKEN`, `BOT_TOKEN`, `DISCORD_TOKEN`, `TOKEN`, `CLIENT_TOKEN`. The
@@ -356,3 +361,88 @@ Usage is summed across every project in the organization by default, so these ar
 **organization-wide ceilings**, not per-project ones — which matches how Neon's
 usage-based plans bill. Set `NEON_PROJECT_IDS` to measure a subset instead. A
 limit of `0` means "unknown" for that metric and it never alerts.
+
+## Discord Forum ↔ GitHub Issues
+
+One Discord Forum channel is the single intake for every repository. A Forum post
+becomes a GitHub issue, thread replies become issue comments, and GitHub comments
+and issue state changes are mirrored back into the thread. It is off until an
+administrator turns it on and maps at least one tag.
+
+### The shape of it
+
+- **One Forum channel, repository tags only.** Each tag maps to exactly one
+  GitHub repository. There are no status or category tags: an issue's state is
+  reported in the thread, not with a tag.
+- **Tags are stored by id, not name.** Renaming a tag in Discord does not break
+  the mapping; the tag name is only a snapshot for the dashboard.
+- **Exactly one tag is required.** No tag, or more than one, is refused and the
+  author is told why. The integration never guesses a repository.
+- **Both directions run through the database.** The bot enqueues work; the web
+  app's webhook receiver enqueues work. Neither posts to the other side inline,
+  so a slow GitHub call never stalls the gateway and a restart resumes an
+  unprocessed job.
+- **Idempotency is persistent, not in-memory.** A thread links to one issue, a
+  Discord message to one comment, a GitHub comment to one reply, and a webhook
+  delivery is processed once. All four are unique constraints in Postgres, so a
+  reconnect, a redelivery or a restart cannot duplicate anything.
+
+### GitHub App, not a personal token
+
+Authentication is a GitHub App installation, restricted to the repositories the
+administrator selected. Installation tokens are short-lived (one hour), minted
+with a JWT signed by the App's private key, cached in-process until shortly before
+they expire, and refreshed on a 401. The App needs only:
+
+- **Issues: Read and write** — create issues and comments, read state.
+- **Metadata: Read** — resolve repositories.
+- **Webhooks: receive** the `issue_comment` and `issues` events.
+
+The private key and the webhook secret are environment-only. They are never
+stored in the database, never returned to the browser and never written to a log.
+If the App is not installed on a mapped repository, the dashboard's **Validate**
+action reports an actionable message instead of failing silently later.
+
+### Setup
+
+1. **Create the App** (Settings → Developer settings → GitHub Apps → New). Grant
+   the three permissions above, and set a webhook URL and secret.
+2. **Webhook URL** — the web app's receiver, which is *not* the bot:
+   `https://<your-app-origin>/api/admin/github/webhook`. Subscribe to **Issue
+   comments** and **Issues**.
+3. **Install the App** on the repositories that will receive issues, then copy
+   the **App ID**, the **installation id** and the **private key** into the bot
+   host's environment as `GITHUB_APP_ID`, `GITHUB_APP_INSTALLATION_ID` and
+   `GITHUB_APP_PRIVATE_KEY`. Put the webhook secret in **both** the bot host and
+   the web app as `GITHUB_WEBHOOK_SECRET` (the bot only needs it if you also run
+   the receiver there; the web app is what GitHub calls).
+4. **Discord permissions** — the bot needs, in the Forum channel: View Channel,
+   Read Message History, Send Messages in Threads, Embed Links and Attach Files.
+   `Manage Threads` is not required and is not requested. The existing intents
+   (`Guilds`, `GuildMessages`, `MessageContent`) already cover Forum posts and
+   replies; no new privileged intent is needed.
+5. **Configure it** at **`/pbad/github`** (owner and admin only): enable the
+   integration, set the Forum channel id and guild id, add one mapping per
+   repository tag, and choose which directions to sync.
+
+### Where it lives
+
+| Piece | File | Runs on |
+| --- | --- | --- |
+| Pure rules (tags, embed/body shapes, retry policy) | `bot/lib/github-forum-logic.js` | both |
+| GitHub App client (JWT, token cache, API calls) | `bot/lib/github-forum-client.js` | bot + web |
+| Storage (lazy schema, all tables) | `bot/lib/github-forum-store.js` | bot + web |
+| Service (plan + perform each sync step) | `bot/lib/github-forum-service.js` | bot + web |
+| Worker (queue drain, retries) | `bot/lib/github-forum-worker.js` | bot |
+| Webhook receiver (HMAC verify, dedupe, enqueue) | `bot/lib/github-forum-webhook.js` | web |
+| Admin routes + receiver wiring | `api/_lib/github-forum-routes.js` | web |
+| Bot listeners | `bot/events/forumPost.js`, `bot/events/forumReply.js` | bot |
+| Dashboard page | `client/src/pages/admin-github.tsx` | web |
+
+The tables (`github_forum_settings`, `github_forum_repository_mappings`,
+`github_forum_issue_links`, `github_forum_message_links`,
+`github_forum_sync_queue`, `github_forum_sync_logs`,
+`github_forum_webhook_deliveries`) are created lazily on first use, the same way
+the bot, mail and Roblox schemas are — there is no separate migration to run and
+no second database.
+
