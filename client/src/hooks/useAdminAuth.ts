@@ -62,6 +62,10 @@ export function useAdminAuth() {
   // Bloxlink lookup and gate channels behind verification. Mirrors
   // `requireRole('admin')` on every /api/admin/roblox route.
   const canManageRoblox = adminRole === 'owner' || adminRole === 'admin';
+  // The GitHub Forum integration is owner/admin only: it adds repository
+  // mappings and can trigger a live GitHub call. Mirrors `requireRole('admin')`
+  // on every /api/admin/github-forum route.
+  const canManageGithub = adminRole === 'owner' || adminRole === 'admin';
   // The test runner is owner only. It is the only action that starts a process
   // on the host, so it is held to the same role as admin management. Mirrors
   // `requireRole('owner')` on every /api/admin/tests route.
@@ -82,6 +86,7 @@ export function useAdminAuth() {
     canUseMail,
     canManageBot,
     canManageRoblox,
+    canManageGithub,
     canRunTests,
   };
 }

@@ -24,6 +24,7 @@ const AdminMail = lazy(() => import("@/pages/mail-page"));
 const AdminIntegrations = lazy(() => import("@/pages/admin-integrations"));
 const AdminBot = lazy(() => import("@/pages/admin-bot"));
 const AdminRoblox = lazy(() => import("@/pages/admin-roblox"));
+const AdminGithub = lazy(() => import("@/pages/admin-github"));
 const AdminTests = lazy(() => import("@/pages/admin-tests"));
 
 /**
@@ -41,7 +42,7 @@ function registerMailServiceWorker() {
   });
 }
 
-type AdminPermission = "viewUsers" | "manageProjects" | "manageAdmins" | "mail" | "bot" | "roblox" | "tests";
+type AdminPermission = "viewUsers" | "manageProjects" | "manageAdmins" | "mail" | "bot" | "roblox" | "github" | "tests";
 
 function AdminLoading() {
   return (
@@ -92,7 +93,7 @@ function AdminNotFound() {
  * the URL staying secret or on this component running.
  */
 function AdminGuard({ permission, children }: { permission?: AdminPermission; children: React.ReactNode }) {
-  const { isLoading, isAuthenticated, canViewUsers, canManageProjects, canManageAdmins, canUseMail, canManageBot, canManageRoblox, canRunTests } = useAdminAuth();
+  const { isLoading, isAuthenticated, canViewUsers, canManageProjects, canManageAdmins, canUseMail, canManageBot, canManageRoblox, canManageGithub, canRunTests } = useAdminAuth();
   const [, setLocation] = useLocation();
 
   React.useEffect(() => {
@@ -113,6 +114,9 @@ function AdminGuard({ permission, children }: { permission?: AdminPermission; ch
   if (permission === "bot" && !canManageBot) return <AdminAccessDenied />;
   // The Roblox console is owner/admin only, same as the bot console.
   if (permission === "roblox" && !canManageRoblox) return <AdminAccessDenied />;
+  // The GitHub Forum integration is owner/admin only: it adds repository
+  // mappings and can trigger a live GitHub call. Mirrors requireRole('admin').
+  if (permission === "github" && !canManageGithub) return <AdminAccessDenied />;
   // The test runner is owner only: it executes code on the host. Mirrors
   // requireRole('owner') on /api/admin/tests.
   if (permission === "tests" && !canRunTests) return <AdminAccessDenied />;
@@ -217,6 +221,9 @@ export default function AdminApp() {
                   </Route>
                   <Route path="/roblox">
                     <AdminPage permission="roblox"><AdminRoblox /></AdminPage>
+                  </Route>
+                  <Route path="/github">
+                    <AdminPage permission="github"><AdminGithub /></AdminPage>
                   </Route>
                   <Route path="/tests">
                     <AdminPage permission="tests"><AdminTests /></AdminPage>

@@ -15,6 +15,7 @@ import {
   Trash2,
   Users,
 } from "lucide-react";
+import { FaGithub } from "react-icons/fa";
 import { Link, useLocation, useSearch } from "wouter";
 import {
   Sidebar,
@@ -70,9 +71,10 @@ export function AdminSidebar() {
   // Shared notification poll: this is what makes the unread badge update without
   // a full page reload. It returns no counts for a non-owner/admin session.
   const { counts } = useMailNotifications();
-  const { canManageBot, canManageRoblox, canRunTests } = useAdminAuth();
+  const { canManageBot, canManageRoblox, canManageGithub, canRunTests } = useAdminAuth();
   const onBot = location === "/bot" || location.startsWith("/bot/");
   const onRoblox = location === "/roblox" || location.startsWith("/roblox/");
+  const onGithub = location === "/github" || location.startsWith("/github/");
   const onTests = location === "/tests" || location.startsWith("/tests/");
   const onIntegrations = location === "/integrations" || location === "/settings";
 
@@ -193,6 +195,23 @@ export function AdminSidebar() {
                       <span className="truncate flex items-center gap-2">
                         <Gamepad2 className="h-4 w-4" />
                         Roblox
+                      </span>
+                    </Link>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
+              {/* Owner/admin only, matching the server guard on /api/admin/github-forum. */}
+              {canManageGithub && (
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    asChild
+                    isActive={onGithub}
+                    className={`rounded-lg px-3 py-2 cursor-pointer ${onGithub ? "sidebar-nav-active" : ""}`}
+                  >
+                    <Link href="/github" onClick={closeMobileSidebar}>
+                      <span className="truncate flex items-center gap-2">
+                        <FaGithub className="h-4 w-4" />
+                        GitHub
                       </span>
                     </Link>
                   </SidebarMenuButton>

@@ -5,6 +5,8 @@ import { createMessageCreateHandler } from './messageCreate.js';
 import { createGuildMemberAddHandler } from './guildMemberAdd.js';
 import { createRobloxJoinHandler } from './robloxJoin.js';
 import { notifyLinkChange } from './roblox.js';
+import { createForumPostHandler } from './forumPost.js';
+import { createForumReplyHandler } from './forumReply.js';
 import { createReadyHandler } from './ready.js';
 import { handleShardDisconnect } from './shardDisconnect.js';
 import { handleShardError } from './shardError.js';
@@ -33,10 +35,18 @@ export function attachGatewayLogging(client, { logGateway, redactToken }) {
 }
 
 /** Registers every event used by the bot process. */
-export function attachBotEvents(client, { getConfig, prefix, logMessage, logCommand, logInvite, logBoot, logGateway, redactToken }) {
+export function attachBotEvents(client, { getConfig, prefix, logMessage, logCommand, logInvite, logBoot, logGateway, logForum = null, redactToken }) {
   attachGatewayLogging(client, { logGateway, redactToken });
   // Message handling lives entirely in messageCreate.js; this only binds it.
   client.on(Events.MessageCreate, createMessageCreateHandler({ getConfig, logMessage, logCommand }));
+  // Forum replies are a separate listener on the same event: the command
+  // handler only answers `&`-commands, and this one only looks at messages
+  // inside a Forum thread, so the two never interfere. It only enqueues work.
+  client.on(Events.MessageCreate, createForumReplyHandler({ log: logForum }));
+  // A new Forum post is a thread whose parent is the configured Forum channel.
+  // Like the reply handler, this only enqueues the GitHub work — it never makes
+  // the call inline, so the gateway is never blocked.
+  client.on(Events.ThreadCreate, createForumPostHandler({ log: logForum }));
   // Join attribution is a side effect, so it is wired separately from the
   // request/response path and never blocks a message reply.
   client.on(Events.GuildMemberAdd, createGuildMemberAddHandler({ logInvite }));
